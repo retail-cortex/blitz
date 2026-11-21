@@ -65,10 +65,18 @@ func TestSecurityCommand(t *testing.T) {
 
 	// Where AppArmor doesn't restrict bubblewrap, fix-apparmor says how
 	// things stand and changes nothing.
-	if runtime.GOOS != "linux" {
+	out.Reset()
+	cmd.SetArgs([]string{"fix-apparmor"})
+	_ = cmd.Execute()
+	assert.NotEmpty(t, out.String())
+
+	// Without bubblewrap on Linux, fix-apparmor reports it cannot fix.
+	if runtime.GOOS == "linux" {
+		t.Setenv("PATH", t.TempDir())
 		out.Reset()
 		cmd.SetArgs([]string{"fix-apparmor"})
-		_ = cmd.Execute()
+		err = cmd.Execute()
+		assert.Error(t, err)
 		assert.NotEmpty(t, out.String())
 	}
 }

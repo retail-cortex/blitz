@@ -15,6 +15,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,4 +127,18 @@ func TestExportData(t *testing.T) {
 	doc, err := exportData("# Chat", "out/Chat.DOCX")
 	require.NoError(t, err)
 	assert.Equal(t, "PK", string(doc[:2]), "a Word document is a zip")
+}
+
+func TestSessionsServiceDown(t *testing.T) {
+	isolate(t)
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service down") }
+	t.Cleanup(func() { startShared = inner })
+	for _, args := range [][]string{
+		{"sessions", "export", "s1"},
+		{"sessions", "usage", "s1"},
+	} {
+		_, err := runCLI(t, args...)
+		assert.ErrorContains(t, err, "service down")
+	}
 }

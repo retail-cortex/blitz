@@ -99,3 +99,28 @@ func TestAgentScope(t *testing.T) {
 	assert.Empty(t, OpenConnectorScope(settings).Off(a), "the connections' store is another file")
 	assert.FileExists(t, filepath.Join(settings, "agent-scope.json"))
 }
+
+func TestConnectorScopeDamaged(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "{damaged"},
+		{name: "wrong type", raw: `{"workspaces": "bad"}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			settings, ws := t.TempDir(), t.TempDir()
+			p := filepath.Join(settings, "connector-scope.json")
+			require.NoError(t, os.WriteFile(p, []byte(tc.raw), 0o600))
+
+			s := OpenConnectorScope(settings)
+			assert.Empty(t, s.Off(ws))
+			assert.NoFileExists(t, p)
+			assert.FileExists(t, p+".damaged")
+
+			require.NoError(t, s.Set(ws, "global/databases/shop", false))
+			assert.Equal(t, map[string]bool{"global/databases/shop": true}, s.Off(ws))
+		})
+	}
+}

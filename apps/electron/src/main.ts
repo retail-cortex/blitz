@@ -78,6 +78,7 @@ import {
   printLoadScript,
   printOptions,
   text,
+  withTimeout,
   theme,
   unsaved,
   waitForPrint,
@@ -532,16 +533,20 @@ async function printPDF(html: string, pageSize: unknown): Promise<string> {
   const file = path.join(dir, "page.html");
   const printer = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
   try {
-    await writeFile(file, html);
-    const loaded = printer.loadURL(pathToFileURL(file).href);
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("printing took longer than a minute")), 60_000));
-    await Promise.race([loaded, timeout]);
-    // Fonts and pictures may not be ready to draw yet: wait for them.
-    const wc = printer.webContents;
-    await wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printLoadScript }]).catch(() => {});
-    await waitForPrint(() => wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printCheckScript }]));
-    const pdf = await Promise.race([printer.webContents.printToPDF(printOptions(pageSize)), timeout]);
-    return pdf.toString("base64"); // as Go's []byte reaches the page
+    return await withTimeout(
+      (async () => {
+        await writeFile(file, html);
+        await printer.loadURL(pathToFileURL(file).href);
+        // Fonts and pictures may not be ready to draw yet: wait for them.
+        const wc = printer.webContents;
+        await wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printLoadScript }]).catch(() => {});
+        await waitForPrint(() => wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printCheckScript }]));
+        const pdf = await printer.webContents.printToPDF(printOptions(pageSize));
+        return pdf.toString("base64"); // as Go's []byte reaches the page
+      })(),
+      60_000,
+      "printing took longer than a minute",
+    );
   } finally {
     printer.destroy();
     await rm(dir, { recursive: true, force: true });

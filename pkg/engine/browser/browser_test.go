@@ -28,6 +28,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -814,4 +815,258 @@ func TestProxyRequests(t *testing.T) {
 			assert.Equal(t, "ping", string(got), "sent with the CONNECT, echoed back")
 		})
 	}
+}
+
+type hijackWriter struct {
+	header http.Header
+	code   int
+	conn   net.Conn
+	buf    *bufio.ReadWriter
+}
+
+func (w *hijackWriter) Header() http.Header         { return w.header }
+func (w *hijackWriter) Write(p []byte) (int, error) { return len(p), nil }
+func (w *hijackWriter) WriteHeader(code int)        { w.code = code }
+func (w *hijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return w.conn, w.buf, nil
+}
+
+type failingWriteConn struct {
+	net.Conn
+	writeErr error
+	mu       sync.Mutex
+	closed   bool
+}
+
+func (c *failingWriteConn) Write(p []byte) (int, error) {
+	return 0, c.writeErr
+}
+
+func (c *failingWriteConn) Close() error {
+	c.mu.Lock()
+	c.closed = true
+	c.mu.Unlock()
+	return c.Conn.Close()
+}
+
+func (c *failingWriteConn) isClosed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closed
+}
+
+func TestProxyTrackAfterClose(t *testing.T) {
+	p, err := startProxy(func(string, netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+	require.NoError(t, err)
+	p.close()
+
+	c1, peer1 := net.Pipe()
+	defer peer1.Close()
+	c2, peer2 := net.Pipe()
+	defer peer2.Close()
+
+	assert.False(t, p.track(c1, c2), "track after close must return false")
+	_, err = c1.Write([]byte("a"))
+	assert.ErrorIs(t, err, io.ErrClosedPipe)
+	_, err = c2.Write([]byte("b"))
+	assert.ErrorIs(t, err, io.ErrClosedPipe)
+}
+
+func TestProxyTunnelErrorsAndBuffering(t *testing.T) {
+	echo, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer echo.Close()
+	go func() {
+		for {
+			c, err := echo.Accept()
+			if err != nil {
+				return
+			}
+			go func() { io.Copy(c, c); c.Close() }()
+		}
+	}()
+
+	t.Run("tunnel after close returns without writing 200", func(t *testing.T) {
+		p, err := startProxy(func(string, netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+		require.NoError(t, err)
+		p.close()
+
+		client, peer := net.Pipe()
+		defer peer.Close()
+		hw := &hijackWriter{
+			header: http.Header{},
+			conn:   client,
+			buf:    bufio.NewReadWriter(bufio.NewReader(strings.NewReader("")), bufio.NewWriter(io.Discard)),
+		}
+		req := httptest.NewRequest(http.MethodConnect, "http://"+echo.Addr().String(), nil)
+		req.Host = echo.Addr().String()
+		p.tunnel(hw, req)
+
+		_, err = peer.Read(make([]byte, 1))
+		assert.ErrorIs(t, err, io.EOF, "peer should see EOF with no 200 response written")
+	})
+
+	t.Run("client write failure closes and untracks connections", func(t *testing.T) {
+		p, err := startProxy(func(string, netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+		require.NoError(t, err)
+		defer p.close()
+
+		rawClient, peer := net.Pipe()
+		defer peer.Close()
+		client := &failingWriteConn{Conn: rawClient, writeErr: errors.New("write broken")}
+		hw := &hijackWriter{
+			header: http.Header{},
+			conn:   client,
+			buf:    bufio.NewReadWriter(bufio.NewReader(strings.NewReader("")), bufio.NewWriter(io.Discard)),
+		}
+		req := httptest.NewRequest(http.MethodConnect, "http://"+echo.Addr().String(), nil)
+		req.Host = echo.Addr().String()
+		p.tunnel(hw, req)
+
+		assert.True(t, client.isClosed(), "client should be closed on write failure")
+		p.mu.Lock()
+		assert.Empty(t, p.conns, "connections should be untracked on write failure")
+		p.mu.Unlock()
+	})
+
+	t.Run("buffered bytes flushed on tunnel", func(t *testing.T) {
+		p, err := startProxy(func(string, netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+		require.NoError(t, err)
+		defer p.close()
+
+		client, peer := net.Pipe()
+		br := bufio.NewReader(strings.NewReader("hello"))
+		_, err = br.Peek(1) // ensure bytes are buffered in br
+		require.NoError(t, err)
+		require.Equal(t, 5, br.Buffered())
+
+		hw := &hijackWriter{
+			header: http.Header{},
+			conn:   client,
+			buf:    bufio.NewReadWriter(br, bufio.NewWriter(io.Discard)),
+		}
+		req := httptest.NewRequest(http.MethodConnect, "http://"+echo.Addr().String(), nil)
+		req.Host = echo.Addr().String()
+
+		done := make(chan struct{})
+		go func() {
+			p.tunnel(hw, req)
+			close(done)
+		}()
+
+		peer.SetDeadline(time.Now().Add(5 * time.Second))
+		pr := bufio.NewReader(peer)
+		line, err := pr.ReadString('\n')
+		require.NoError(t, err)
+		assert.Equal(t, "HTTP/1.1 200 Connection Established\r\n", line)
+		_, err = pr.ReadString('\n')
+		require.NoError(t, err)
+		got := make([]byte, 5)
+		_, err = io.ReadFull(pr, got)
+		require.NoError(t, err)
+		assert.Equal(t, "hello", string(got))
+		peer.Close()
+		<-done
+	})
+}
+
+func TestProxyTunnelConcurrentClose(t *testing.T) {
+	echo, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer echo.Close()
+	go func() {
+		for {
+			c, err := echo.Accept()
+			if err != nil {
+				return
+			}
+			go func() { io.Copy(c, c); c.Close() }()
+		}
+	}()
+
+	for range 10 {
+		p, err := startProxy(func(string, netip.Addr) bool { return true }, func(string) error { return nil }, func(string, error) {})
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				raw, err := net.Dial("tcp", p.addr())
+				if err != nil {
+					return
+				}
+				defer raw.Close()
+				raw.SetDeadline(time.Now().Add(2 * time.Second))
+				target := echo.Addr().String()
+				fmt.Fprintf(raw, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+				io.Copy(io.Discard, raw)
+			}()
+		}
+		time.Sleep(time.Millisecond)
+		p.close()
+		wg.Wait()
+
+		p.mu.Lock()
+		assert.Empty(t, p.conns, "no tracked connections should remain after close")
+		assert.True(t, p.closed)
+		p.mu.Unlock()
+	}
+}
+
+func TestBrowserConnect(t *testing.T) {
+	t.Run("recovers from malformed json list", func(t *testing.T) {
+		ws := fakeDevTools(t, func(method string, _ json.RawMessage) (any, string) {
+			if method == "Page.getFrameTree" {
+				return map[string]any{"frameTree": map[string]any{"frame": map[string]any{"id": "main"}}}, ""
+			}
+			return map[string]any{}, ""
+		})
+
+		var mu sync.Mutex
+		calls := 0
+		devSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			calls++
+			n := calls
+			mu.Unlock()
+			if n <= 2 {
+				w.Write([]byte("{not valid json"))
+				return
+			}
+			json.NewEncoder(w).Encode([]map[string]string{
+				{"type": "service_worker", "webSocketDebuggerUrl": "ws://127.0.0.1:1/bad"},
+				{"type": "page", "webSocketDebuggerUrl": ws},
+			})
+		}))
+		defer devSrv.Close()
+
+		_, port, err := net.SplitHostPort(strings.TrimPrefix(devSrv.URL, "http://"))
+		require.NoError(t, err)
+
+		profile := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(profile, "DevToolsActivePort"), []byte(port+"\n"), 0o600))
+
+		b := newBrowser(Options{})
+		b.profile = profile
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		require.NoError(t, b.connect(ctx))
+		defer b.Close()
+		assert.NotNil(t, b.conn)
+	})
+
+	t.Run("invalid port returns wrapped request error", func(t *testing.T) {
+		profile := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(profile, "DevToolsActivePort"), []byte("1234\x7f\n"), 0o600))
+
+		b := newBrowser(Options{})
+		b.profile = profile
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := b.connect(ctx)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "building DevTools request")
+	})
 }

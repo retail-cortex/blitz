@@ -136,3 +136,29 @@ func TestBrowserProfilesAnonymous(t *testing.T) {
 	require.NoError(t, store.SetWorkspace(ws, ""))
 	assert.Empty(t, store.ForWorkspace(ws), "forgotten")
 }
+
+func TestBrowserProfilesDamaged(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "{damaged"},
+		{name: "wrong type", raw: `{"profiles": "bad"}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, "browser-profiles.json")
+			require.NoError(t, os.WriteFile(p, []byte(tc.raw), 0o600))
+
+			s := OpenBrowserProfiles(dir)
+			assert.Empty(t, s.List())
+			assert.NoFileExists(t, p)
+			assert.FileExists(t, p+".damaged")
+
+			_, err := s.Create("work", time.Now())
+			require.NoError(t, err)
+			assert.Len(t, s.List(), 1)
+		})
+	}
+}

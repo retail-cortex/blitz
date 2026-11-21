@@ -41,8 +41,8 @@ go_library(
         "//pkg/pageserver:__pkg__",
     ],
     deps = [
+        "//pkg/atomicfile",
         "//pkg/config",
-        "//pkg/engine/atomicfile",
         "//pkg/engine/frontmatter",
         "//pkg/engine/skills/builtin",
         "@com_github_burntsushi_toml//:toml",

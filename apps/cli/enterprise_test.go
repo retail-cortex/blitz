@@ -16,6 +16,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -810,4 +812,81 @@ func TestEnterpriseOwnItemsCommands(t *testing.T) {
 	org.Mu.Unlock()
 	_, err = runCLI(t, "enterprise", "items", "share", "skill/tone")
 	assert.ErrorContains(t, err, "no_evaluator")
+}
+
+func TestEnterpriseServiceStartErrorsAndWatch(t *testing.T) {
+	t.Run("service unavailable across enterprise commands", func(t *testing.T) {
+		isolate(t)
+		inner := startShared
+		startShared = func(context.Context, string) error { return errors.New("service down") }
+		t.Cleanup(func() { startShared = inner })
+
+		ws := t.TempDir()
+		cmds := [][]string{
+			{"enterprise", "status"},
+			{"enterprise", "connect", "https://blitz.acme.com"},
+			{"enterprise", "disconnect"},
+			{"enterprise", "login"},
+			{"enterprise", "logout"},
+			{"enterprise", "terms"},
+			{"enterprise", "about"},
+			{"enterprise", "workspaces"},
+			{"enterprise", "open", "eng/app"},
+			{"enterprise", "create", "App"},
+			{"enterprise", "share", ws},
+			{"enterprise", "jobs"},
+			{"enterprise", "jobs", "runs", "tidy"},
+			{"enterprise", "jobs", "push", "tidy"},
+			{"enterprise", "jobs", "run", "tidy"},
+			{"enterprise", "jobs", "take", "tidy"},
+			{"enterprise", "jobs", "on", "tidy"},
+			{"enterprise", "jobs", "off", "tidy"},
+			{"enterprise", "jobs", "files", "run-1"},
+			{"enterprise", "jobs", "pending"},
+			{"enterprise", "jobs", "approve", "run-1"},
+			{"enterprise", "jobs", "reject", "run-1"},
+			{"enterprise", "jobs", "watch"},
+			{"enterprise", "usage"},
+			{"enterprise", "policy", "-d", ws},
+			{"enterprise", "items"},
+			{"enterprise", "items", "on", "rule/style"},
+			{"enterprise", "items", "off", "rule/style"},
+			{"enterprise", "items", "sync"},
+			{"enterprise", "items", "share", "skill/tone"},
+			{"enterprise", "items", "submissions"},
+			{"enterprise", "refresh"},
+			{"enterprise", "consent"},
+			{"enterprise", "notices"},
+			{"enterprise", "notices", "dismiss", "n1"},
+			{"enterprise", "sync", "-d", ws},
+			{"git-credential", "get"},
+		}
+		for _, args := range cmds {
+			t.Run(strings.Join(args, "_"), func(t *testing.T) {
+				_, err := runCLIWithInput(t, "protocol=https\nhost=blitz.acme.com\n\n", args...)
+				assert.Error(t, err)
+			})
+		}
+	})
+
+	t.Run("jobs watch stops cleanly on context cancel", func(t *testing.T) {
+		t.Cleanup(http.DefaultClient.CloseIdleConnections)
+		isolate(t)
+		secrets.SetDefault(&secrets.Memory{})
+		idp := enterprisetest.NewProvider(t)
+		org := enterprisetest.NewService(t, idp.URL)
+		_, err := runCLI(t, "enterprise", "connect", org.URL)
+		require.NoError(t, err)
+		_, err = runCLI(t, "enterprise", "login")
+		require.NoError(t, err)
+
+		cmd := newRootCommand()
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs([]string{"enterprise", "jobs", "watch"})
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+		_ = cmd.ExecuteContext(ctx)
+	})
 }

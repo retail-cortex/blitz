@@ -16,9 +16,11 @@ package enterprise
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"testing"
 	"time"
 
@@ -205,3 +207,86 @@ func TestRunsAndShares(t *testing.T) {
 }
 
 func errorsAs(err error) (*Refusal, bool) { return errors.AsType[*Refusal](err) }
+
+// EN-93: a damaged personal-sync state file is quarantined aside and
+// recovered atomically; unreadable or unwritable state files fail clearly.
+func TestSyncPersonalStateRecoveryAndErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T, state string)
+		wantErr string
+		check   func(t *testing.T, state string, rep SyncReport)
+	}{
+		{
+			name: "corrupt JSON is quarantined and recovered atomically",
+			setup: func(t *testing.T, state string) {
+				require.NoError(t, os.WriteFile(state, []byte("{damaged"), 0o600))
+			},
+			check: func(t *testing.T, state string, rep SyncReport) {
+				assert.Equal(t, []string{"agent/a"}, rep.Sent)
+				assert.FileExists(t, state+".damaged")
+				damaged, err := os.ReadFile(state + ".damaged")
+				require.NoError(t, err)
+				assert.Equal(t, "{damaged", string(damaged))
+
+				raw, err := os.ReadFile(state)
+				require.NoError(t, err)
+				var st syncState
+				require.NoError(t, json.Unmarshal(raw, &st))
+				assert.Contains(t, st.Items, "agent/a")
+				if goruntime.GOOS != "windows" {
+					info, err := os.Stat(state)
+					require.NoError(t, err)
+					assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+				}
+			},
+		},
+		{
+			name: "unreadable state file fails clearly",
+			setup: func(t *testing.T, state string) {
+				require.NoError(t, os.Mkdir(state, 0o700))
+			},
+			wantErr: "reading sync state",
+		},
+		{
+			name: "unwritable state directory fails clearly",
+			setup: func(t *testing.T, state string) {
+				if os.Geteuid() == 0 {
+					t.Skip("root writes to read-only directories")
+				}
+				parent := filepath.Dir(state)
+				require.NoError(t, os.Chmod(parent, 0o500))
+				t.Cleanup(func() { _ = os.Chmod(parent, 0o700) })
+			},
+			wantErr: "saving sync state",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, s, c, _, _ := setup(t)
+			ctx := context.Background()
+			require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+			s.Mu.Lock()
+			s.Personal = map[string]*enterprisetest.PersonalAsset{}
+			s.PersonalAllowed = map[string]bool{"agent": true}
+			s.Mu.Unlock()
+
+			root := t.TempDir()
+			write(t, root, "agents/a.md", "---\nname: a\n---\nA.\n")
+			state := filepath.Join(t.TempDir(), "nested", "personal.json")
+			require.NoError(t, os.MkdirAll(filepath.Dir(state), 0o700))
+			tc.setup(t, state)
+
+			rep, err := SyncPersonal(ctx, c, root, state)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tc.check != nil {
+				tc.check(t, state, rep)
+			}
+		})
+	}
+}

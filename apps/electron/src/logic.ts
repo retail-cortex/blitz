@@ -618,6 +618,20 @@ export async function waitForPrint(check: () => Promise<unknown>, sleep = (ms: n
   await sleep(printWait.settleMs);
 }
 
+/**
+ * Races work against an ms timeout, rejecting with message if it expires,
+ * and always clears the timer when work settles.
+ */
+export function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 /** The largest picture Save to workspace downloads (EL-106). */
 export const maxPictureBytes = 10 << 20;
 

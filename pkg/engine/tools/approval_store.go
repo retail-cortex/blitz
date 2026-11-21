@@ -19,10 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // ApprovalRule is a persisted "always allow" decision.
@@ -156,12 +157,5 @@ func (s *ApprovalStore) saveLocked() error {
 		f.Rules = append(f.Rules, r)
 	}
 	sort.Slice(f.Rules, func(i, j int) bool { return f.Rules[i].Key < f.Rules[j].Key })
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return err
-	}
-	return writePrivate(s.path, data)
+	return atomicfile.WriteJSON(s.path, f, 0o600)
 }

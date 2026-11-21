@@ -14,153 +14,46 @@
  * limitations under the License.
  */
 
-import { useSecretSuggest } from "./SecretSuggest";
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { timestampDate } from "@bufbuild/protobuf/wkt";
-import type { JsonObject } from "@bufbuild/protobuf";
-import {
-  mdiAlertCircleOutline,
-  mdiArrowUp,
-  mdiMicrophoneOutline,
-  mdiWaveform,
-  mdiCheck,
-  mdiCheckboxBlankOutline,
-  mdiCheckboxMarked,
-  mdiDeleteOutline,
-  mdiChevronDown,
-  mdiChevronRight,
-  mdiChevronUp,
-  mdiInformationOutline,
-  mdiClipboardCheckOutline,
-  mdiClose,
-  mdiConsole,
-  mdiContentCopy,
-  mdiLanguageMarkdownOutline,
-  mdiTextBoxMultipleOutline,
-  mdiDotsHorizontal,
-  mdiFileDocumentOutline,
-  mdiFileEditOutline,
-  mdiFormatListChecks,
-  mdiHelpCircleOutline,
-  mdiFolderOutline,
-  mdiFileMusicOutline,
-  mdiFilePdfBox,
-  mdiFileWordBoxOutline,
-  mdiFileVideoOutline,
-  mdiImageOutline,
-  mdiVolumeHigh,
-  mdiDatabaseOutline,
-  mdiTableSearch,
-  mdiImagePlusOutline,
-  mdiMagnify,
-  mdiMessageReplyTextOutline,
-  mdiPencilOutline,
-  mdiPlaylistEdit,
-  mdiPlus,
-  mdiProgressClock,
-  mdiRobotOutline,
-  mdiCalendarClock,
-  mdiHeadLightbulbOutline,
-  mdiShieldAlertOutline,
-  mdiStop,
-  mdiUndoVariant,
-  mdiWeb,
-  mdiWrenchOutline,
-  mdiFileCompare,
-  mdiKeyboardOutline,
-  mdiConsoleLine,
-  mdiArrowExpand,
-  mdiArrowCollapse,
-  mdiPuzzleOutline,
-  mdiLoading,
-  mdiBrushVariant,
-} from "@mdi/js";
-import { files, serviceLost, sessions, workers, workspaces } from "./api";
-import { ModelFile } from "./ModelFile";
-import { WorkerState, type Worker } from "./gen/blitz/v1/worker_pb";
-import { editorConfig, toEditor } from "./host";
-import { dragType, treeDrag } from "./files/tree";
-import { DiffView } from "./Changes";
-import { chatTitle, HistoryMenu } from "./HistoryMenu";
+import { mdiAlertCircleOutline, mdiClose, mdiImagePlusOutline, mdiProgressClock } from "@mdi/js";
+import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
+import { serviceLost, sessions, workspaces } from "./api";
+import { acceptAttribute, webBlocks } from "./attachments";
+import { allCommands, listedCommands, parseCommand, type CommandSpec } from "./commands";
+import { ComposerDock } from "./composerDock";
+import { ApprovalCard, QuestionCard } from "./conversation/ApprovalCards";
+import { Composer } from "./conversation/Composer";
+import { executeSlashCommand } from "./conversation/executeSlashCommand";
+import { DeleteSessionsDialog, EmptyState, ForceRewindDialog, SessionBar } from "./conversation/SessionChrome";
+import { TaskList } from "./conversation/StatusCards";
+import { useAttachments } from "./conversation/useAttachments";
+import { useBackgroundTasks } from "./conversation/useBackgroundTasks";
+import { useConversationEvents } from "./conversation/useConversationEvents";
+import { ConversationStream } from "./conversation/ConversationStream";
+import { useConversationRun } from "./conversation/useConversationRun";
+import { useConversationShell } from "./conversation/useConversationShell";
+import { useConversationVoice } from "./conversation/useConversationVoice";
+import { useSessionOps } from "./conversation/useSessionOps";
 import { isUnavailable, message, reason } from "./errors";
+import { openSettings, takePendingLoad } from "./events";
+import { dragType, treeDrag } from "./files/tree";
 import type { SessionInfo } from "./gen/blitz/v1/session_pb";
-import { Decision, type ApprovalRequest, type Question, type QuestionChoice, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
-import type { BackgroundTask, GetSettingsResponse, GetSuggestionsResponse } from "./gen/blitz/v1/workspace_pb";
-import { addWait, dropWait, type Pending } from "./waits";
-import { withTools } from "./turns";
-import { allCommands, helpText, knownCommand, listedCommands, matchCommands, parseCommand, type CommandSpec } from "./commands";
-import { builtin, type CommandContext } from "./slashCommands";
-import {
-  addToContextEvent,
-  addWebEvent,
-  composeEvent,
-  setupCommand,
-  configChanged,
-  filesTouched,
-  loadSessionEvent,
-  openSettings,
-  searchWorkspace,
-  showPendingEvent,
-  showView,
-  startReflect,
-  takePendingCompose,
-  takePendingLoad,
-  type AddToContextDetail,
-  type AddWebDetail,
-  type ComposeDetail,
-  type LoadSessionDetail,
-  talkEvent,
-} from "./events";
-import { appendMention, insertMention, isAttachablePath, mentionAt } from "./mentions";
-import { insertSkill, skillAt, skillOptions, skillsFor } from "./skillMention";
-import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "./suggestions";
+import { Decision, type Task, type Usage } from "./gen/blitz/v1/turn_pb";
+import type { GetSettingsResponse } from "./gen/blitz/v1/workspace_pb";
+import { t, tn } from "./i18n";
+import { useLoopsEndWith } from "./loops";
+import { notify, shouldNotify, type NotifyKind } from "./notify";
 import { plainReason } from "./providerStatus";
 import { ShellRunContext, shellLine } from "./shellRun";
-import { ShellCard } from "./ShellCard";
-import { ComposerDock, focusComposerEvent } from "./composerDock";
-import { refreshRuns, runInSession } from "./backgroundRuns";
-import { fileIcon } from "./files/icons";
-import { taskTimes, useNow, type TaskTime } from "./taskTimes";
-import { chatConnections, DataMenu, DataResultDialog } from "./DataContext";
-import { dbOptions, wantsDb, type DbConnection } from "./dbMentions";
-import { acceptAttribute, acceptedAs, clock, describeImage, failedUpload, isDocument, readyIds, rejectReason, uploading, webBlocks, type Accepted, type Attachment, type WebBlock } from "./attachments";
-import { Markdown } from "./Markdown";
-import { t, tn, useLanguage } from "./i18n";
-import { notify, shouldNotify, type NotifyKind } from "./notify";
-import { effortIcon } from "./options";
-import { useAdvanced, useApp } from "./state";
+import type { CommandContext } from "./slashCommands";
+import { useApp } from "./state";
 import { publishStatus } from "./status";
-import { useOpenPath } from "./files/links";
-import { applyEvent, assignPromptIndices, failed, fromMessages, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Citation, type Entry, type UserEntry, groupTools, latestTurn, type ToolEntry } from "./turns";
-import { copyRendered, copyText } from "./clipboard";
-import { useLoopsEndWith } from "./loops";
-import { Button, Dialog, Icon, IconButton, Menu, useSnackbar } from "@blitz/webui";
-import { speakSummary, useVoice, useVoiceSetup } from "./voice/useVoice";
+import { fromMessages, latestTurn, turnAnswers, withTools, type Entry } from "./turns";
 import { VoiceBar, VoiceButton } from "./voice/VoiceControls";
-import { buttonState, useConversation, waitingOf, type ButtonState } from "./voice/voice";
+import { dropWait, type Pending } from "./waits";
 
-/** A background task's approval request or question, waiting for an answer. */
-type TaskRequest = { id: string; who: string; approval?: ApprovalRequest; question?: Question };
-
-
-/** How a turn is sent (see Turn in the API). */
-interface TurnOptions {
-  accepted?: boolean;
-  plan?: boolean;
-  aside?: boolean;
-  command?: boolean;
-  readOnly?: string;
-  prompt?: string;
-  fetchGrants?: string[];
-  images?: Attachment[];
-  /** Content added from web pages (EL-104), sent as the turn's context. */
-  context?: WebBlock[];
-  /** The prompt as shown, when it differs from the text sent. */
-  shown?: string;
-  /** Follow this background run instead of sending text (blitz --bg). */
-  follow?: string;
-}
+export { ApprovalCard };
 
 /** One workspace's conversation: its sessions, the chat and the composer. */
 export function Conversation({
@@ -193,12 +86,6 @@ export function Conversation({
   // The pinned bar the composer renders into (composerDock.ts), and ⌘L.
   const dockEl = useContext(ComposerDock);
   const dockRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!visible) return;
-    const focus = () => dockRef.current?.querySelector("textarea")?.focus();
-    window.addEventListener(focusComposerEvent, focus);
-    return () => window.removeEventListener(focusComposerEvent, focus);
-  }, [visible]);
   const { prefs, update, setActivity, registerStop } = useApp();
   const snack = useSnackbar();
   const [list, setList] = useState<SessionInfo[]>([]);
@@ -210,8 +97,6 @@ export function Conversation({
   // a time (waits.ts).
   const [waits, setWaits] = useState<Pending[]>([]);
   const pending = waits[0] ?? null;
-  // Background tasks' approval requests and questions, waiting.
-  const [taskRequests, setTaskRequests] = useState<TaskRequest[]>([]);
   const [turnUsage, setTurnUsage] = useState("");
   const [total, setTotal] = useState<Usage>();
   // The status bar shows the session's usage, and the last turn's.
@@ -219,7 +104,6 @@ export function Conversation({
   useEffect(() => publishStatus(dir, { conversationModel: session?.model || undefined, sessionId: session?.id }), [dir, session?.model, session?.id]);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [customCommands, setCustomCommands] = useState<CommandSpec[]>([]);
   useEffect(() => {
     workspaces
@@ -231,11 +115,6 @@ export function Conversation({
   const [dragging, setDragging] = useState(false);
   const [deleting, setDeleting] = useState<SessionInfo[] | null>(null);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
-  const abort = useRef<AbortController | null>(null);
-  const following = useRef(""); // the background run the turn view follows
-  const late = useRef<string[]>([]); // steer messages the turn was too late for
-  const latestRunning = useRef(false);
-  const finished = useRef<Promise<void>>(Promise.resolve());
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -311,7 +190,6 @@ export function Conversation({
   useLoopsEndWith(dir);
 
   // Tell the user, when they're looking elsewhere, that the agent waits or is done.
-  const started = useRef(0);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const tell = useCallback(
@@ -325,6 +203,7 @@ export function Conversation({
     if (pending?.kind === "approval") tell("waiting", t("desktop.notify.approval", { name }), t("desktop.notify.approval_body", { tool: pending.req.tool, detail: pending.req.detail }));
     if (pending?.kind === "question") tell("waiting", t("desktop.notify.asks", { name }), pending.q.question.replace(/[#*`_>]/g, "").trim());
   }, [pending, name, tell]);
+
   // What waits for the user is brought into view as it comes, and when the
   // status bar's "Waiting for you" is clicked.
   const pendingRef = useRef<HTMLDivElement>(null);
@@ -333,14 +212,6 @@ export function Conversation({
     el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     el?.querySelector<HTMLElement>("button, textarea, input")?.focus({ preventScroll: true });
   }, []);
-  useEffect(() => {
-    if (pending || taskRequests.length) requestAnimationFrame(() => pendingRef.current?.firstElementChild?.scrollIntoView({ block: "nearest" }));
-  }, [pending, taskRequests.length]);
-  useEffect(() => {
-    const f = (e: Event) => (e as CustomEvent<{ dir: string }>).detail.dir === dir && showWaiting();
-    window.addEventListener(showPendingEvent, f);
-    return () => window.removeEventListener(showPendingEvent, f);
-  }, [dir, showWaiting]);
 
   // Follow new output, unless the user scrolled up to read.
   useEffect(() => {
@@ -352,205 +223,39 @@ export function Conversation({
     if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
-  const run = useCallback(
-    async (text: string, opts: TurnOptions = {}) => {
-      if (!session) return;
-      const images = opts.images ?? [];
-      const context = opts.context ?? [];
-      if (!opts.accepted && !opts.follow)
-        setEntries((e) => [
-          ...e,
-          {
-            kind: "user",
-            text: opts.shown ?? (opts.plan ? `/plan ${text}` : text),
-            sub: opts.aside ? "aside" : undefined,
-            images: images.length || context.length ? [...images.map((a) => ({ url: a.url, name: a.name })), ...context.map((b) => ({ url: "", name: b.title || b.url, web: b.kind }))] : undefined,
-          },
-        ]);
-      setRunning(true);
-      latestRunning.current = true;
-      started.current = Date.now();
-      setError("");
-      setTurnUsage("");
-      stick.current = true;
-      const ctl = new AbortController();
-      abort.current = ctl;
-      following.current = opts.follow ?? "";
-      let done!: () => void;
-      finished.current = new Promise((r) => (done = r));
-      let leftover: string[] = [];
-      try {
-        const stream = opts.follow
-          ? sessions.watchBackground({ id: opts.follow, follow: true }, { signal: ctl.signal })
-          : sessions.runTurn(
-          {
-            workspace: dir,
-            sessionId: session.id,
-            turn: {
-              text,
-              accepted: !!opts.accepted,
-              plan: !!opts.plan,
-              imageIds: readyIds(images),
-              aside: !!opts.aside,
-              readOnly: opts.readOnly ?? "",
-              prompt: opts.prompt ?? "",
-              fetchGrants: opts.fetchGrants ?? [],
-              command: !!opts.command,
-              context,
-            },
-          },
-          { signal: ctl.signal },
-        );
-        for await (const res of stream) {
-          // The page's server keeps a quiet stream moving with empty
-          // messages (pkg/pageserver proxy.go), which carry no event.
-          const ev = res.event;
-          if (!ev) continue;
-          const taskList = tasksOf(ev);
-          if (taskList) setTasks(taskList);
-          else if (ev.kind.case === "approvalRequest") {
-            const req = ev.kind.value;
-            setWaits((w) => addWait(w, { kind: "approval", req }));
-          } else if (ev.kind.case === "question") {
-            const q = ev.kind.value;
-            setWaits((w) => addWait(w, { kind: "question", q }));
-          }
-          // A passing status (the model's connection being retried) is
-          // said in a snackbar, not kept in the chat.
-          else if (ev.kind.case === "notice" && ev.kind.value.transient) snack(ev.kind.value.text);
-          else setEntries((e) => applyEvent(e, ev));
-          if (ev.kind.case === "toolResult" || ev.kind.case === "finished") filesTouched({ dir });
-          if (ev.kind.case === "finished") {
-            setTurnUsage(usageLine(ev.kind.value.before, ev.kind.value.after));
-            setTotal(ev.kind.value.after);
-            void refreshTotal(); // and its cost by model
-            leftover = ev.kind.value.leftover;
-            const f = ev.kind.value;
-            tell("finished", f.error ? t("desktop.notify.failed", { name }) : t("desktop.notify.done", { name }), f.error ? f.error.message : f.output || t("desktop.notify.finished"));
-          }
-        }
-      } catch (e) {
-        if (!ctl.signal.aborted) fail(e);
-        else setEntries((e) => [...e, { kind: "notice", text: t("desktop.stopped"), tone: "info" }]);
-      } finally {
-        setRunning(false);
-        setWaits([]);
-        abort.current = null;
-        following.current = "";
-        done();
-        if (opts.follow) refreshRuns();
-      }
-      // Prompts learn their place in the transcript, for rewinding.
-      try {
-        const s = (await sessions.getActiveSession({ workspace: dir })).session;
-        if (s?.id === session.id) setEntries((e) => assignPromptIndices(e, s.messages));
-      } catch {
-        // only the rewind actions need it
-      }
-      refreshList();
-      onSettingsChanged(); // an approved plan may have left plan mode
-      // Steer messages sent after the agent's last tool call were never
-      // read: they are the next turn (unless the turn was stopped).
-      leftover = [...leftover, ...late.current.splice(0)];
-      latestRunning.current = false;
-      if (leftover.length > 0 && !ctl.signal.aborted) run(leftover.join("\n\n"), { accepted: true });
-    },
-    [dir, session, refreshList, refreshTotal, fail, onSettingsChanged, tell, name, snack],
-  );
+  const { run, stop, latestRunning, late, started } = useConversationRun({
+    dir,
+    name,
+    session,
+    running,
+    setRunning,
+    setEntries,
+    setTasks,
+    setWaits,
+    setTurnUsage,
+    setTotal,
+    setError,
+    refreshList,
+    refreshTotal,
+    fail,
+    onSettingsChanged,
+    tell,
+    snack,
+    stick,
+    registerStop,
+  });
 
-  // Stopping a followed background run stops the run, whose stream then
-  // ends; a turn's stream is cut.
-  const stop = useCallback(async () => {
-    if (following.current) await sessions.stopBackground({ id: following.current }).catch(() => abort.current?.abort());
-    else abort.current?.abort();
-    await finished.current;
+  const { attachments, setAttachments, imagesOn, accepted, addFiles, addImagePath, removeAttachment, addData, addWebDetail, clearAttachments } = useAttachments({ dir, settings, snack });
+
+  // A line of notice text in the conversation (command results).
+  const say = useCallback((text: string, tone: "info" | "error" = "info", markdown = false) => {
+    stick.current = true;
+    setEntries((e) => [...e, { kind: "notice", text, tone, markdown }]);
   }, []);
-  useEffect(() => {
-    registerStop(dir, stop);
-    return () => registerStop(dir, null);
-  }, [dir, stop, registerStop]);
-
-  // Images for the next prompt: each uploads as soon as it's added.
-  const imagesOn = settings?.imagesEnabled ?? true;
-  // What the active agent's model takes (GetSettings accepted_media).
-  const accepted: Accepted[] = settings?.acceptedMedia ?? [];
-  const addFiles = useCallback(
-    (files: File[]) => {
-      if (!imagesOn) {
-        snack(t("desktop.images.off"), { error: true });
-        return;
-      }
-      for (const f of files) {
-        const why = rejectReason(f, accepted, settings?.model ?? "");
-        if (why) {
-          snack(why, { error: true });
-          continue;
-        }
-        const doc = isDocument(f);
-        const kind = acceptedAs(accepted, f)?.kind ?? "image";
-        const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name: f.name || t("desktop.attach.pasted"), url: kind === "image" ? URL.createObjectURL(f) : "", document: doc, kind };
-        setAttachments((list) => [...list, a]);
-        (async () => {
-          try {
-            const res = await workspaces.addImage({ workspace: dir, name: a.name, data: new Uint8Array(await f.arrayBuffer()) });
-            const img = res.image!;
-            setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, id: img.id, detail: describeImage(img) } : x)));
-          } catch (e) {
-            setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, error: message(e) } : x)));
-          }
-        })();
-      }
-    },
-    [dir, imagesOn, snack, accepted, settings?.model],
-  );
-  // An image or PDF in the workspace (an @mention of one, or Add to context).
-  const addImagePath = useCallback(
-    (path: string) => {
-      if (!imagesOn) return;
-      const name = path.slice(path.lastIndexOf("/") + 1);
-      const a: Attachment = { key: `${Date.now()}-${Math.random()}`, name, url: "", document: /\.pdf$/i.test(path), kind: acceptedAs(accepted, { name, type: "" })?.kind };
-      setAttachments((list) => [...list, a]);
-      workspaces.loadImage({ workspace: dir, path }).then(
-        (res) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, id: res.image!.id, detail: describeImage(res.image!) } : x))),
-        (e) => setAttachments((list) => list.map((x) => (x.key === a.key ? { ...x, error: message(e) } : x))),
-      );
-    },
-    [dir, imagesOn, accepted],
-  );
-  const removeAttachment = (key: string) =>
-    setAttachments((list) => {
-      const gone = list.find((a) => a.key === key);
-      if (gone) URL.revokeObjectURL(gone.url);
-      return list.filter((a) => a.key !== key);
-    });
 
   // ! commands run as the user's own (WorkspaceService.RunShell), each a
   // card in the chat with Stop while it runs; the agent never sees them.
-  const shellRuns = useRef(new Map<string, AbortController>());
-  useEffect(() => () => shellRuns.current.forEach((c) => c.abort()), []);
-  const runShell = async (command: string) => {
-    if (!command) return say(t("desktop.shell.usage"), "error");
-    const id = `sh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const ctl = new AbortController();
-    shellRuns.current.set(id, ctl);
-    const patch = (f: (e: Extract<Entry, { kind: "shell" }>) => Extract<Entry, { kind: "shell" }>) =>
-      setEntries((all) => all.map((e) => (e.kind === "shell" && e.id === id ? f(e) : e)));
-    setEntries((all) => [...all, { kind: "shell", id, command, output: "", running: true }]);
-    try {
-      for await (const m of workspaces.runShell({ workspace: dir, command }, { signal: ctl.signal })) {
-        if (m.done) patch((e) => ({ ...e, running: false, code: m.exitCode, error: m.error, elapsedMs: Number(m.elapsedMs), truncated: m.truncated }));
-        else if (m.output) patch((e) => ({ ...e, output: e.output + m.output }));
-      }
-    } catch (err) {
-      patch((e) => ({ ...e, running: false, code: ctl.signal.aborted ? -1 : e.code, error: ctl.signal.aborted ? "" : message(err) }));
-    } finally {
-      shellRuns.current.delete(id);
-      patch((e) => (e.running ? { ...e, running: false, code: -1 } : e));
-    }
-  };
-  const stopShell = (id: string) => shellRuns.current.get(id)?.abort();
-  // A code block's Run: its command in the composer, as !command, to check and send.
-  const putShell = useCallback((command: string) => setDraft(`!${command}`), []);
+  const { runShell, stopShell, putShell } = useConversationShell({ dir, say, setEntries, setDraft });
 
   const submit = async (text: string) => {
     const sh = shellLine(text);
@@ -576,85 +281,22 @@ export function Conversation({
     }
   };
 
-  // Background tasks of this session, followed while it's open
-  // (spec_032_background_agents BGA-41): their requests wait here, and
-  // one that ends while nothing runs says so, and may start a turn.
-  const latest = useRef({ running, run, continueOn: prefs.task_continue });
-  latest.current = { running, run, continueOn: prefs.task_continue };
-  const sessionId = session?.id;
-  // A background run going on in this session (blitz --bg, the inbox;
-  // spec_027_parity PAR-PAR-20) shows as a turn from its start: its
-  // requests wait here, and Stop stops it.
-  useEffect(() => {
-    if (!sessionId) return;
-    let gone = false;
-    sessions
-      .listBackground({})
-      .then((r) => {
-        const bg = runInSession(r.runs, sessionId);
-        if (bg && !gone && !latest.current.running) latest.current.run("", { follow: bg.id });
-      })
-      .catch(() => {});
-    return () => {
-      gone = true;
-    };
-  }, [sessionId]);
-  useEffect(() => {
-    if (!sessionId) return;
-    setTaskRequests([]);
-    const ctl = new AbortController();
-    (async () => {
-      while (!ctl.signal.aborted) {
-        try {
-          for await (const res of workspaces.watchTasks({ workspace: dir, sessionIds: [sessionId] }, { signal: ctl.signal })) {
-            const k = res.event?.kind;
-            if (k?.case === "approvalRequest" || k?.case === "question") {
-              const r: TaskRequest = k.case === "approvalRequest" ? { id: k.value.requestId, who: `${k.value.agent} · ${k.value.taskId}`, approval: k.value } : { id: k.value.requestId, who: `${k.value.agent} · ${k.value.taskId}`, question: k.value };
-              setTaskRequests((list) => (list.some((x) => x.id === r.id) ? list : [...list, r]));
-            } else if (k?.case === "settingsChanged") {
-              configChanged({ dir }); // rules or approvals changed on disk: views refresh
-            } else if (k?.case === "resolved") {
-              setTaskRequests((list) => list.filter((x) => x.id !== k.value));
-            } else if (k?.case === "task" && ["done", "failed", "stopped"].includes(k.value.state)) {
-              const task = k.value;
-              setEntries((e) => [...e, { kind: "notice", text: t("desktop.task.ended", { id: task.id, agent: task.agent, state: t(`tasks.state.${task.state}`) }), tone: task.state === "failed" ? "error" : "info" }]);
-              // The ref, not the rendered state: run sets it at once, so two
-              // tasks ending together start one turn, not two.
-              const { run: go, continueOn } = latest.current;
-              if (continueOn && !latestRunning.current) go(t("desktop.task.continue_prompt", { id: task.id }));
-            }
-          }
-        } catch {
-          // The service went away, or the stream broke: follow again soon.
-        }
-        if (!ctl.signal.aborted) await new Promise((r) => setTimeout(r, 3000));
-      }
-    })();
-    return () => ctl.abort();
-  }, [dir, sessionId]);
+  const { taskRequests, answerTask } = useBackgroundTasks({
+    dir,
+    sessionId: session?.id,
+    visible,
+    running,
+    continueOn: prefs.task_continue,
+    latestRunning,
+    run,
+    setEntries,
+    scroller,
+    fail,
+  });
 
-  const answerTask = async (r: TaskRequest, reply: { decision?: Decision; text?: string }) => {
-    setTaskRequests((list) => list.filter((x) => x.id !== r.id));
-    const call = reply.text !== undefined ? sessions.answer({ workspace: dir, requestId: r.id, answer: reply.text }) : sessions.approve({ workspace: dir, requestId: r.id, decision: reply.decision! });
-    await call.catch(fail);
-  };
-
-  // Ctrl+J: the next background task's request.
   useEffect(() => {
-    if (!visible) return;
-    const key = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.metaKey || e.key.toLowerCase() !== "j") return;
-      const cards = [...(scroller.current?.querySelectorAll<HTMLElement>(".task-request") ?? [])];
-      if (!cards.length) return;
-      e.preventDefault();
-      const at = cards.findIndex((c) => c.contains(document.activeElement));
-      const next = cards[(at + 1) % cards.length];
-      next.scrollIntoView({ block: "center" });
-      next.querySelector<HTMLElement>("button, input")?.focus();
-    };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, [visible]);
+    if (pending || taskRequests.length) requestAnimationFrame(() => pendingRef.current?.firstElementChild?.scrollIntoView({ block: "nearest" }));
+  }, [pending, taskRequests.length]);
 
   const decide = async (decision: Decision) => {
     if (pending?.kind !== "approval") return;
@@ -670,197 +312,43 @@ export function Conversation({
     await sessions.answer({ workspace: dir, requestId, answer: text }).catch(fail);
   };
 
-  // Talking to Blitz (spec_063_voice): the voice hands the work to this
-  // conversation, which runs it as typed; its lines join the conversation.
-  const voiceSetup = useVoiceSetup(dir);
-  const conversationNow = useConversation();
-  const myVoice = conversationNow?.dir === dir ? conversationNow : null;
-  const voice = useVoice(
+  const { newSession, load, remove, rename, rewind } = useSessionOps({
     dir,
-    session?.id ?? "",
-    prefs.voice_mic,
-    {
-      send: (text) => void submitRef.current(text),
-      stop: () => void stop(),
-      // The conversation's own request first, else a background task's or
-      // a sub-agent's (spec_063_voice VOX-13).
-      answer: (text) => {
-        if (pending?.kind === "question") return void answer(text);
-        const r = taskRequests.find((x) => x.question);
-        if (r) void answerTask(r, { text });
-      },
-      approve: (id, decision) => {
-        const d = decision === "once" ? Decision.ONCE : Decision.DENY;
-        if (pending?.kind === "approval" && pending.req.requestId === id) return void decide(d);
-        const r = taskRequests.find((x) => x.id === id && x.approval);
-        if (r) void answerTask(r, { decision: d });
-      },
-      spoken: (who, text) => setEntries((e) => [...e, { kind: "spoken", who, text }]),
-      error: (text) => snack(text, { error: true }),
-    },
-    waitingOf(pending, taskRequests[0]),
-  );
-  const voiceState: ButtonState = conversationNow && !myVoice ? "hidden" : buttonState(voiceSetup, myVoice);
-  const toggleVoice = () => (myVoice ? voice.end() : void voice.start());
-  // With summaries = "always", a turn that ends with no conversation open
-  // is summarised aloud, while this workspace is the one showing (VOX-17).
-  const wasRunning = useRef(false);
-  useEffect(() => {
-    const ended = wasRunning.current && !running;
-    wasRunning.current = running;
-    if (ended && visible && voiceSetup.enabled && voiceSetup.summaries === "always" && !conversationNow && session?.id && !document.hidden) void speakSummary(dir, session.id);
-  }, [running, visible, voiceSetup.enabled, voiceSetup.summaries, conversationNow, session?.id, dir]);
-  // The command palette's Talk to Blitz (VOX-21).
-  useEffect(() => {
-    const f = (e: Event) => {
-      if ((e as CustomEvent<{ dir: string }>).detail.dir === dir && !myVoice && voiceState === "ready") void voice.start();
-    };
-    window.addEventListener(talkEvent, f);
-    return () => window.removeEventListener(talkEvent, f);
-  });
-  // ⌥⌘V starts and ends it; with hold to talk, holding it talks (VOX-21).
-  useEffect(() => {
-    if (!visible || voiceState === "hidden") return;
-    const isKey = (e: KeyboardEvent) => e.altKey && e.metaKey && e.code === "KeyV";
-    const down = (e: KeyboardEvent) => {
-      if (!isKey(e)) return;
-      e.preventDefault();
-      if (e.repeat) return;
-      if (myVoice?.listen === "hold" && myVoice.phase === "open") voice.hold(true);
-      else if (voiceState !== "not_set_up" && voiceState !== "no_mic") toggleVoice();
-    };
-    // Released when any of its keys comes up: macOS sends no key-up for V
-    // while ⌘ is held, so ⌘'s or ⌥'s ends it too; and when the window
-    // loses the keys.
-    const up = (e: KeyboardEvent) => {
-      if (["KeyV", "MetaLeft", "MetaRight", "AltLeft", "AltRight"].includes(e.code) && myVoice?.listen === "hold") voice.hold(false);
-    };
-    const blur = () => myVoice?.listen === "hold" && voice.hold(false);
-    document.addEventListener("keydown", down);
-    document.addEventListener("keyup", up);
-    window.addEventListener("blur", blur);
-    return () => {
-      document.removeEventListener("keydown", down);
-      document.removeEventListener("keyup", up);
-      window.removeEventListener("blur", blur);
-    };
+    show,
+    reload,
+    refreshList,
+    refreshTotal,
+    fail,
+    snack,
+    setDeleting,
+    setForceRewind,
+    setSession,
+    setDraft,
   });
 
-  const newSession = async () => {
-    try {
-      show((await sessions.newSession({ workspace: dir })).session!);
-      await refreshList();
-    } catch (e) {
-      fail(e);
-    }
-  };
-  const load = async (id: string) => {
-    try {
-      show((await sessions.loadSession({ workspace: dir, ref: id })).session!);
-      await refreshList();
-    } catch (e) {
-      fail(e);
-    }
-  };
-  // Deletes the chats one by one; those that can't go (a worker's run
-  // still going, say) are reported, and the rest still deleted.
-  const remove = async (list: SessionInfo[]) => {
-    setDeleting(null);
-    let done = 0;
-    const failed: string[] = [];
-    for (const s of list) {
-      try {
-        await sessions.deleteSession({ workspace: dir, sessionId: s.id });
-        done++;
-      } catch (e) {
-        failed.push(`${chatTitle(s)}: ${message(e)}`);
-      }
-    }
-    // One snackbar: what was deleted, and what couldn't be and why.
-    const deleted = done === 0 ? "" : done === 1 && list.length === 1 ? t("desktop.chat.deleted", { title: chatTitle(list[0]) }) : tn("desktop.chat.deleted_n", done);
-    if (failed.length) snack([deleted, tn("desktop.chat.delete_failed", failed.length, { reason: failed.join("; ") })].filter(Boolean).join(". "), { error: true });
-    else snack(deleted);
-    await refreshList();
-  };
-  const rename = async (title: string) => {
-    try {
-      setSession((await sessions.renameSession({ workspace: dir, title })).session);
-      await refreshList();
-    } catch (e) {
-      fail(e);
-    }
-  };
-
-  const rewind = async (index: number, mode: string, force = false) => {
-    try {
-      const res = await sessions.rewind({ workspace: dir, index, mode, force });
-      if (mode === "both" || mode === "conversation") {
-        await reload();
-        setDraft(res.prompt); // to change and send again
-      }
-      const files = res.restored.length ? tn("desktop.rewind.restored", res.restored.length) : "";
-      if (mode.startsWith("summarize")) {
-        const c = res.compacted;
-        snack(t("desktop.compacted", { events: c?.eventsCompacted ?? 0, chars: c?.summaryChars ?? 0 }));
-        refreshTotal();
-      } else snack(mode === "code" ? t("desktop.rewind.code_done", { files }) : t("desktop.rewind.done", { files }));
-    } catch (e) {
-      if (reason(e) === "UNDO_CONFLICT") setForceRewind({ index, mode, error: message(e) });
-      else snack(message(e), { error: true });
-    }
-  };
-
-  // A line of notice text in the conversation (command results).
-  const say = useCallback((text: string, tone: "info" | "error" = "info", markdown = false) => {
-    stick.current = true;
-    setEntries((e) => [...e, { kind: "notice", text, tone, markdown }]);
-  }, []);
-
-  /**
-   * Runs a slash command; false when the line isn't one (a path, say) and
-   * should go to the agent. Unknown commands are refused, never sent.
-   */
-  const execute = async (line: string): Promise<boolean> => {
-    const c = parseCommand(line);
-    if (!c) return false;
-    const spec = commands.find((x) => x.name === c.name);
-    if (!spec) {
-      // One of the engine's own, before the service's list has come.
-      if (knownCommand(c.name, commands)) {
-        if (running) say(t("desktop.cmd.wait", { name: c.name }), "error");
-        else run(line.trim(), { command: true });
-      } else say(t("desktop.cmd.unknown", { name: c.name }), "error");
-      return true;
-    }
-    const own = spec.source === "builtin" ? builtin(c.name) : undefined;
-    const startsTurn = spec.source !== "builtin" || !!own?.turn;
-    if (running && startsTurn) {
-      say(t("desktop.cmd.wait", { name: c.name }), "error");
-      return true;
-    }
-    if (!own) {
-      run(line.trim(), { command: true });
-      return true;
-    }
-    const ctx: CommandContext = {
+  // A /loop's firing: a command runs as typed, anything else is sent (the
+  // loop skips a firing while a turn runs).
+  const sendRef = useRef<(text: string) => void>(() => {});
+  const execute = (line: string) =>
+    executeSlashCommand(line, {
       dir,
-      args: c.args,
-      line,
+      commands,
+      running,
+      latestRunning,
       settings,
       sessionId: session?.id,
       sessionTitle: session?.title,
       projectWaiting,
+      entries,
+      prefs,
+      updatePrefs: update,
       say,
-      run: (text, opts) => void run(text, opts),
-      send: (text) => sendRef.current(text),
+      run,
+      sendRef,
       snack,
-      usage: () => say(t("desktop.cmd.usage", { usage: `/${spec.name}${spec.args ? " " + spec.args : ""}` }), "error"),
-      busy: () => latestRunning.current,
-      settingsChanged: onSettingsChanged,
-      openView: onOpenView ?? (() => say(t("desktop.cmd.no_view"), "error")),
-      openSearch: searchWorkspace,
-      openSettings: (section, scope, connect) => openSettings({ section, scope, connect }),
-      reviewProject: onReviewProject,
+      onSettingsChanged,
+      onOpenView,
+      onReviewProject,
       reload,
       refreshTotal,
       refreshList,
@@ -868,130 +356,54 @@ export function Conversation({
       rename,
       rewind,
       addImagePath,
-      clearAttachments: () => {
-        const n = attachments.length;
-        attachments.forEach((a) => URL.revokeObjectURL(a.url));
-        setAttachments([]);
-        return n;
-      },
-      answers: () => entries.filter((e): e is Extract<Entry, { kind: "model" }> => e.kind === "model" && !!e.text.trim()).map((e) => e.text),
-      theme: () => prefs.theme,
-      setTheme: (theme) => update((p) => ({ ...p, theme })),
-      help: () => helpText(commands),
-    };
-    try {
-      await own.run(ctx);
-    } catch (e) {
-      if (isUnavailable(e)) serviceLost();
-      say(message(e), "error");
-    }
-    return true;
-  };
-  useEffect(() => {
-    const f = (e: Event) => {
-      const d = (e as CustomEvent<LoadSessionDetail>).detail;
-      if (d.dir !== dir) return;
-      e.preventDefault(); // taken
-      if (!running) load(d.id);
-    };
-    window.addEventListener(loadSessionEvent, f);
-    return () => window.removeEventListener(loadSessionEvent, f);
-  });
-  const executeRef = useRef(execute);
-  executeRef.current = execute;
-  const submitRef = useRef(submit);
-  submitRef.current = submit;
-  // A /loop's firing: a command runs as typed, anything else is sent (the
-  // loop skips a firing while a turn runs).
-  const sendRef = useRef<(text: string) => void>(() => {});
+      clearAttachments,
+    });
   sendRef.current = (text: string) => {
     if (text.startsWith("/")) void execute(text);
     else void run(text);
   };
 
-  // The Files view adds a file or folder to the next prompt, or starts a
-  // conversation about it.
-  const addToContextRef = useRef<(d: AddToContextDetail) => void>(() => {});
-  addToContextRef.current = async (d) => {
-    if (d.fresh && !running) await newSession();
-    setDraft((draft) => appendMention(d.fresh ? "" : draft, d.path));
-    if (isAttachablePath(d.path)) addImagePath(d.path);
-  };
-  useEffect(() => {
-    const f = (e: Event) => {
-      const d = (e as CustomEvent<AddToContextDetail>).detail;
-      if (d.dir === dir) addToContextRef.current(d);
-    };
-    window.addEventListener(addToContextEvent, f);
-    return () => window.removeEventListener(addToContextEvent, f);
-  }, [dir]);
+  const executeRef = useRef(execute);
+  executeRef.current = execute;
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
 
-  // A database, or a query's result, from the chat box's database menu: a
-  // chip, read when it was added (spec_059_data DAT-43).
-  const addData = useCallback((b: WebBlock) => {
-    const detail = b.kind === "database" ? t("desktop.data.chip_database") : t("desktop.data.chip_read", { time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
-    setAttachments((list) => (b.kind === "database" && list.some((a) => a.web?.kind === "database" && a.web.connection === b.connection) ? list : [...list, { key: `${Date.now()}-${Math.random()}`, name: b.title, url: "", web: b, detail }]));
-  }, []);
-  // A web page in the editor adds its content (a chip of its own, sent as
-  // the turn's context) or a screenshot (an image, as a pasted one).
-  const addWebRef = useRef<(d: AddWebDetail) => void>(() => {});
-  addWebRef.current = (d) => {
-    if (d.image) addFiles([new File([d.image.data as BlobPart], d.image.name, { type: "image/png" })]);
-    const b = d.block;
-    if (!b) return;
-    const name = b.title || b.url;
-    setAttachments((list) => [...list, { key: `${Date.now()}-${Math.random()}`, name, url: "", web: b, detail: t(`desktop.web.added.${b.kind}`, { url: b.url }) }]);
-  };
-  useEffect(() => {
-    const f = (e: Event) => {
-      const d = (e as CustomEvent<AddWebDetail>).detail;
-      if (d.dir === dir) addWebRef.current(d);
-    };
-    window.addEventListener(addWebEvent, f);
-    return () => window.removeEventListener(addWebEvent, f);
-  }, [dir]);
+  const { myVoice, voice, voiceState, toggleVoice } = useConversationVoice({
+    dir,
+    sessionId: session?.id ?? "",
+    visible,
+    running,
+    micId: prefs.voice_mic,
+    pending,
+    taskRequests,
+    submitRef,
+    stop,
+    decide,
+    answer,
+    answerTask,
+    setEntries,
+    snack,
+  });
 
-  // A command to run in a new chat (the setup), once that chat is shown.
-  const runFresh = useRef<string | null>(null);
-  const startFreshRef = useRef<(text: string) => void>(() => {});
-  startFreshRef.current = async (text) => {
-    if (running) return say(t("desktop.cmd.wait", { name: parseCommand(text)?.name ?? text }), "error");
-    try {
-      const s = (await sessions.newSession({ workspace: dir })).session!;
-      runFresh.current = text;
-      show(s);
-      await refreshList();
-    } catch (e) {
-      fail(e);
-    }
-  };
-  useEffect(() => {
-    const text = runFresh.current;
-    if (!session || text === null) return;
-    runFresh.current = null;
-    void executeRef.current(text); // the new chat's own execute, by now
-  }, [session]);
-
-  // The command palette and other windows parts send text here.
-  useEffect(() => {
-    const f = (e: Event) => {
-      const d = (e as CustomEvent<ComposeDetail>).detail;
-      if (d.dir !== dir) return;
-      e.preventDefault(); // taken
-      if (d.run && d.fresh) startFreshRef.current(d.text);
-      // A prompt rather than a command is sent as typed (Ask the agent to resolve).
-      else if (d.run)
-        void executeRef.current(d.text).then(async (done) => {
-          if (!done) await submitRef.current(d.text);
-        });
-      else if (d.append) setDraft((draft) => (draft.trim() ? `${draft.trimEnd()}\n\n${d.text}` : d.text));
-      else setDraft(d.text);
-    };
-    const waiting = takePendingCompose(dir);
-    if (waiting) setDraft(waiting.text);
-    window.addEventListener(composeEvent, f);
-    return () => window.removeEventListener(composeEvent, f);
-  }, [dir]);
+  const { addToContextRef } = useConversationEvents({
+    dir,
+    visible,
+    session,
+    running,
+    dockRef,
+    showWaiting,
+    load,
+    newSession,
+    show,
+    refreshList,
+    addImagePath,
+    addWebDetail,
+    setDraft,
+    say,
+    fail,
+    executeRef,
+    submitRef,
+  });
 
   const shown = prefs.show_thoughts ? entries : entries.filter((e) => e.kind !== "thought");
   const answers = useMemo(() => turnAnswers(shown), [shown]);
@@ -1062,1363 +474,79 @@ export function Conversation({
       <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} expand={expand} />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <ShellRunContext.Provider value={putShell}>
-        <div className="chat-column">
-          {modelProblem && (
-            <div className="card warn row">
-              <Icon path={mdiAlertCircleOutline} />
-              <span style={{ flex: 1 }}>{t("desktop.model_unavailable", { reason: plainReason(modelProblem) })}</span>
-              <Button small onClick={onSettingsChanged}>
-                {t("desktop.model_check_again")}
-              </Button>
-              <Button small variant="tonal" onClick={() => openSettings({ section: "providers" })}>
-                {t("desktop.model_set_up")}
-              </Button>
-            </div>
-          )}
-          {projectWaiting > 0 && (
-            <div className="card warn row">
-              <Icon path={mdiAlertCircleOutline} />
-              <span style={{ flex: 1 }}>{tn("desktop.project.bar", projectWaiting)}</span>
-              <Button small onClick={onReviewProject}>
-                {t("desktop.project.review")}
-              </Button>
-            </div>
-          )}
-          {empty && <EmptyState dir={dir} name={name} onDraft={setDraft} onSend={(text) => void submit(text)} onOpen={(id) => void load(id)} />}
-          {groupTools(shown).map((g) =>
-            g.kind === "tools" ? (
-              <div key={g.at}>
-                <ToolGroup tools={g.tools} live={running && g.at >= turnStart} />
-                {g.tools.map((x) =>
-                  x.name === "invoke_agent" && typeof x.result?.task_id === "string" ? (
-                    <TaskCard key={x.result.task_id} dir={dir} sessionId={session?.id ?? ""} id={x.result.task_id} />
-                  ) : x.name === "create_job" && typeof x.result?.name === "string" && x.result.paused === true ? (
-                    <JobCard key={`job-${x.result.name}`} dir={dir} name={x.result.name} />
-                  ) : x.name === "generate_image" && typeof x.result?.image_uri === "string" && typeof x.result.path === "string" ? (
-                    // The picture it drew, shown where it was made (FS-80).
-                    <ModelFile
-                      key={x.result.image_uri}
-                      dir={dir}
-                      entry={{ kind: "file", uri: x.result.image_uri, name: x.result.path, mime: String(x.result.mime_type ?? "image/png"), size: Number(x.result.bytes ?? 0) }}
-                      onPictures={typeof x.result.picture_session === "string" ? () => showView({ dir, view: "pictures", picture: { session: String(x.result?.picture_session) } }) : undefined}
-                    />
-                  ) : null,
-                )}
+          <div className="chat-column">
+            {modelProblem && (
+              <div className="card warn row">
+                <Icon path={mdiAlertCircleOutline} />
+                <span style={{ flex: 1 }}>{t("desktop.model_unavailable", { reason: plainReason(modelProblem) })}</span>
+                <Button small onClick={onSettingsChanged}>
+                  {t("desktop.model_check_again")}
+                </Button>
+                <Button small variant="tonal" onClick={() => openSettings({ section: "providers" })}>
+                  {t("desktop.model_set_up")}
+                </Button>
               </div>
-            ) : (
-              g.entry.kind === "reflect" ? (
-                <ReflectCard key={g.at} dir={dir} patterns={g.entry.patterns} />
-              ) : g.entry.kind === "file" ? (
-                <ModelFile key={g.at} dir={dir} entry={g.entry} />
-              ) : g.entry.kind === "shell" ? (
-                <ShellCard key={g.entry.id} entry={g.entry} onStop={stopShell} />
-              ) : (
-                <EntryView key={g.at} entry={g.entry} turn={answers.get(g.at)} running={running} onRewind={rewind} onEdit={setDraft} />
-              )
-            ),
-          )}
-          {running && !pending && (
-            <div className="working">
-              <Icon path={mdiProgressClock} className="pulse" />
-              <span className="muted">{t("desktop.working")}</span>
+            )}
+            {projectWaiting > 0 && (
+              <div className="card warn row">
+                <Icon path={mdiAlertCircleOutline} />
+                <span style={{ flex: 1 }}>{tn("desktop.project.bar", projectWaiting)}</span>
+                <Button small onClick={onReviewProject}>
+                  {t("desktop.project.review")}
+                </Button>
+              </div>
+            )}
+            {empty && <EmptyState dir={dir} name={name} onDraft={setDraft} onSend={(text) => void submit(text)} onOpen={(id) => void load(id)} />}
+            <ConversationStream
+              shown={shown}
+              running={running}
+              turnStart={turnStart}
+              dir={dir}
+              sessionId={session?.id ?? ""}
+              answers={answers}
+              stopShell={stopShell}
+              rewind={rewind}
+              setDraft={setDraft}
+            />
+            {running && !pending && (
+              <div className="working">
+                <Icon path={mdiProgressClock} className="pulse" />
+                <span className="muted">{t("desktop.working")}</span>
+              </div>
+            )}
+            <div className="pending" ref={pendingRef}>
+              {pending?.kind === "approval" && <ApprovalCard req={pending.req} onDecide={decide} />}
+              {pending?.kind === "question" && <QuestionCard q={pending.q} onAnswer={answer} />}
+              {taskRequests.map((r) =>
+                r.approval ? (
+                  <ApprovalCard key={r.id} who={r.who} req={r.approval} autoFocus={false} onDecide={(decision) => answerTask(r, { decision })} />
+                ) : (
+                  <QuestionCard key={r.id} who={r.who} q={r.question!} autoFocus={false} onAnswer={(text) => answerTask(r, { text })} />
+                ),
+              )}
             </div>
-          )}
-          <div className="pending" ref={pendingRef}>
-            {pending?.kind === "approval" && <ApprovalCard req={pending.req} onDecide={decide} />}
-            {pending?.kind === "question" && <QuestionCard q={pending.q} onAnswer={answer} />}
-            {taskRequests.map((r) =>
-              r.approval ? (
-                <ApprovalCard key={r.id} who={r.who} req={r.approval} autoFocus={false} onDecide={(decision) => answerTask(r, { decision })} />
-              ) : (
-                <QuestionCard key={r.id} who={r.who} q={r.question!} autoFocus={false} onAnswer={(text) => answerTask(r, { text })} />
-              ),
+            {error && (
+              <div className="card error row">
+                <Icon path={mdiAlertCircleOutline} />
+                <span className="spacer">{error}</span>
+                <IconButton icon={mdiClose} label={t("desktop.dismiss")} small onClick={() => setError("")} />
+              </div>
             )}
           </div>
-          {error && (
-            <div className="card error row">
-              <Icon path={mdiAlertCircleOutline} />
-              <span className="spacer">{error}</span>
-              <IconButton icon={mdiClose} label={t("desktop.dismiss")} small onClick={() => setError("")} />
-            </div>
-          )}
-        </div>
         </ShellRunContext.Provider>
       </div>
       {dockEl && visible ? createPortal(dock, dockEl) : dock}
-      {deleting && (
-        <Dialog
-          title={deleting.length === 1 ? t("desktop.chat.delete_title", { title: chatTitle(deleting[0]) }) : tn("desktop.chat.delete_n_title", deleting.length)}
-          icon={mdiDeleteOutline}
-          onClose={() => setDeleting(null)}
-          footer={
-            <>
-              <Button onClick={() => setDeleting(null)}>{t("desktop.cancel")}</Button>
-              <Button variant="filled" danger onClick={() => void remove(deleting)}>
-                {deleting.length === 1 ? t("desktop.chat.delete") : tn("desktop.chat.delete_n", deleting.length)}
-              </Button>
-            </>
-          }
-        >
-          <p>{deleting.length === 1 ? t("desktop.chat.delete_body") : tn("desktop.chat.delete_n_body", deleting.length)}</p>
-          {deleting.length > 1 && (
-            <ul className="delete-list t-body-sm">
-              {deleting.map((s) => (
-                <li key={s.id}>{chatTitle(s)}</li>
-              ))}
-            </ul>
-          )}
-        </Dialog>
-      )}
+      {deleting && <DeleteSessionsDialog deleting={deleting} onCancel={() => setDeleting(null)} onConfirm={(l) => void remove(l)} />}
       {forceRewind && (
-        <Dialog
-          title={t("desktop.conflict.title")}
-          icon={mdiAlertCircleOutline}
-          onClose={() => setForceRewind(null)}
-          footer={
-            <>
-              <Button onClick={() => setForceRewind(null)}>{t("desktop.conflict.keep")}</Button>
-              <Button
-                variant="filled"
-                danger
-                onClick={() => {
-                  const f = forceRewind;
-                  setForceRewind(null);
-                  rewind(f.index, f.mode, true);
-                }}
-              >
-                {t("desktop.overwrite")}
-              </Button>
-            </>
-          }
-        >
-          <p className="muted">{forceRewind.error}</p>
-          <p className="muted">{t("desktop.rewind.overwrite_body")}</p>
-        </Dialog>
-      )}
-    </div>
-  );
-}
-
-/** The chat's bar: its title (renamed in place), History, New chat and, when set, expand. */
-function SessionBar({
-  session,
-  list,
-  running,
-  onNew,
-  onLoad,
-  onRename,
-  onDelete,
-  expand,
-}: {
-  session?: SessionInfo;
-  list: SessionInfo[];
-  running: boolean;
-  onNew: () => void;
-  onLoad: (id: string) => void;
-  onRename: (t: string) => void;
-  onDelete: (s: SessionInfo[]) => void;
-  expand?: { expanded: boolean; toggle: () => void };
-}) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState("");
-  const untitled = session?.title ? "" : t("desktop.chat.new");
-  const commit = () => {
-    setEditing(false);
-    const next = title.trim();
-    if (next && next !== session?.title) onRename(next);
-  };
-  return (
-    <div className="session-bar chat-column">
-      {editing ? (
-        <input
-          className="input session-title-input"
-          autoFocus
-          value={title}
-          maxLength={80}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape") setEditing(false);
+        <ForceRewindDialog
+          conflict={forceRewind}
+          onCancel={() => setForceRewind(null)}
+          onForce={(index, mode) => {
+            setForceRewind(null);
+            void rewind(index, mode, true);
           }}
         />
-      ) : (
-        <button
-          className="session-title"
-          title={t("desktop.chat.rename")}
-          onClick={() => {
-            setTitle(session?.title ?? "");
-            setEditing(true);
-          }}
-        >
-          <span className="t-title ellipsis">{session?.title || untitled}</span>
-          <Icon path={mdiPencilOutline} size="sm" className="title-edit" />
-        </button>
-      )}
-      <span className="spacer" />
-      {expand && (
-        <IconButton
-          icon={expand.expanded ? mdiArrowCollapse : mdiArrowExpand}
-          label={t(expand.expanded ? "desktop.chat.shrink" : "desktop.chat.expand")}
-          selected={expand.expanded}
-          onClick={expand.toggle}
-        />
-      )}
-      <HistoryMenu list={list} current={session?.id} disabled={running} onLoad={onLoad} onDelete={onDelete} />
-      <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="filled" onClick={onNew} disabled={running} />
-    </div>
-  );
-}
-
-/**
- * The welcome screen: the workspace's suggestions (GetSuggestions), asked
- * for again while a model writes ideas from the recent conversations, or
- * the canned tiles when there are none.
- */
-function EmptyState({ dir, name, onDraft, onSend, onOpen }: { dir: string; name: string; onDraft: (t: string) => void; onSend: (t: string) => void; onOpen: (id: string) => void }) {
-  const [res, setRes] = useState<{ r?: GetSuggestionsResponse; learning: boolean } | null>(null);
-  useEffect(() => {
-    let attempts = 0;
-    let timer = 0;
-    let gone = false;
-    const ask = async () => {
-      let r: GetSuggestionsResponse | undefined;
-      try {
-        r = await workspaces.getSuggestions({ workspace: dir });
-      } catch {
-        // the canned tiles, or what came before, will do
-        if (!gone) setRes((was) => ({ r: was?.r, learning: false }));
-        return;
-      }
-      if (gone) return;
-      const again = shouldPoll(r, attempts);
-      setRes({ r, learning: again });
-      if (again) {
-        attempts++;
-        timer = window.setTimeout(ask, pollMs);
-      }
-    };
-    setRes(null);
-    void ask();
-    return () => {
-      gone = true;
-      window.clearTimeout(timer);
-    };
-  }, [dir]);
-  const choose = (a: TileAction) => {
-    if (a.type === "setup") onSend(setupCommand);
-    else if (a.type === "session") onOpen(a.id);
-    else if (a.type === "send") onSend(a.prompt);
-    else onDraft(a.text);
-  };
-  return (
-    <div className="empty">
-      <h2 className="t-display gradient-text">{t("desktop.empty.title", { name })}</h2>
-      {res && (
-        <div className="suggestions">
-          {welcomeTiles(res.r).map((s) => (
-            <button key={s.key} className={`suggestion ${s.highlight ? "highlight" : ""}`} title={s.detail} onClick={() => choose(s.action)}>
-              <Icon path={s.icon} />
-              <span>{s.text}</span>
-              {s.highlight && s.detail && <span className="t-body-sm suggestion-detail">{s.detail}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-      {res?.learning && <p className="t-body-sm muted suggestions-learning">{t("desktop.suggest.learning")}</p>}
-    </div>
-  );
-}
-
-const EntryView = memo(function EntryView({
-  entry,
-  turn,
-  running,
-  onRewind,
-  onEdit,
-}: {
-  entry: Entry;
-  /** The whole turn's answer, when it has more than one part. */
-  turn?: string;
-  running: boolean;
-  onRewind: (index: number, mode: string) => void;
-  onEdit: (text: string) => void;
-}) {
-  useLanguage();
-  switch (entry.kind) {
-    case "user":
-      return <UserBubble entry={entry} running={running} onRewind={onRewind} onEdit={onEdit} />;
-    case "model":
-      return <ModelAnswer entry={entry} turn={turn} />;
-    case "thought":
-      return <Thought text={entry.text} open={entry.open} />;
-    case "tool":
-      return <ToolRow name={entry.name} args={entry.args} result={entry.result} />;
-    case "spoken":
-      return (
-        <div className="notice info row spoken-line">
-          <Icon path={entry.who === "person" ? mdiMicrophoneOutline : mdiWaveform} size="sm" />
-          <span>
-            <strong>{t(entry.who === "person" ? "desktop.voice.bar.you" : "desktop.voice.bar.voice")}: </strong>
-            {entry.text}
-          </span>
-        </div>
-      );
-    case "reflect":
-    case "shell":
-    case "file":
-      return null; // a ReflectCard, a ShellCard or a ModelFile, drawn with the workspace
-    case "notice":
-      return entry.markdown ? (
-        <div className={`notice card ${entry.tone}`}>
-          <Markdown text={entry.text} />
-        </div>
-      ) : (
-        <div className={`notice ${entry.tone}`}>{entry.text}</div>
-      );
-  }
-});
-
-/**
- * Model text, with actions to copy it as shown or as its Markdown, and the
- * whole turn's answer when it came in parts. They show once it's complete.
- */
-/** The sources an answer cites, as a numbered list of links (spec_056 CA-84). */
-function sourcesMarkdown(cites: Citation[]): string {
-  const label = (s: string) => s.replace(/[[\]\\]/g, "\\$&");
-  return `${t("desktop.sources")}\n\n${cites.map((c, i) => `${i + 1}. [${label(c.title || c.url)}](<${c.url}>)`).join("\n")}`;
-}
-
-function ModelAnswer({ entry, turn }: { entry: Extract<Entry, { kind: "model" }>; turn?: string }) {
-  const advanced = useAdvanced(); // copy as Markdown and the whole turn: advanced
-  const snack = useSnackbar();
-  const body = useRef<HTMLDivElement>(null);
-  const copy = (f: () => Promise<void>, done: string) =>
-    f().then(
-      () => snack(done),
-      (e) => snack(t("desktop.copy_failed", { error: message(e) }), { error: true }),
-    );
-  return (
-    <div className="turn-model">
-      {entry.author && entry.author !== "blitz" && (
-        <span className="author">
-          <Icon path={mdiRobotOutline} size="sm" /> {entry.author}
-        </span>
-      )}
-      <div ref={body}>
-        <Markdown text={entry.text} />
-      </div>
-      {!!entry.citations?.length && (
-        <div className="t-body-sm muted">
-          <Markdown text={sourcesMarkdown(entry.citations)} />
-        </div>
-      )}
-      {!entry.open && entry.text.trim() && (
-        <div className="bubble-actions answer-actions">
-          <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => body.current && copy(() => copyRendered(body.current!), t("desktop.copied"))} />
-          {advanced && <IconButton icon={mdiLanguageMarkdownOutline} label={t("desktop.copy_markdown")} small onClick={() => copy(() => copyText(entry.text), t("desktop.copied_markdown"))} />}
-          {advanced && turn && <IconButton icon={mdiTextBoxMultipleOutline} label={t("desktop.copy_turn")} small onClick={() => copy(() => copyText(turn), t("desktop.copied_turn"))} />}
-        </div>
       )}
     </div>
   );
-}
-
-function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; running: boolean; onRewind: (index: number, mode: string) => void; onEdit: (text: string) => void }) {
-  const snack = useSnackbar();
-  // The rewind menu's finer choices are advanced; Edit goes back as it says.
-  const advanced = useAdvanced();
-  if (entry.sub === "hook" || entry.sub === "plan") {
-    return (
-      <div className="notice info row">
-        <Icon path={entry.sub === "plan" ? mdiClipboardCheckOutline : mdiMessageReplyTextOutline} size="sm" />
-        <span>{entry.sub === "plan" ? t("desktop.plan_approved") : t("desktop.stop_hook", { text: entry.text.replace(/^\(stop hook\) /, "") })}</span>
-      </div>
-    );
-  }
-  const canRewind = entry.index !== undefined && !running;
-  return (
-    <div className={`turn-user ${entry.sub === "steer" ? "steer" : ""}`}>
-      <div className="bubble-actions">
-        <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => navigator.clipboard?.writeText(entry.text).then(() => snack(t("desktop.copied")))} />
-        {canRewind && (
-          <>
-            <IconButton icon={mdiPencilOutline} label={t("desktop.prompt.edit")} small onClick={() => onRewind(entry.index!, "both")} />
-            {advanced && (
-            <Menu
-              placement="down end"
-              trigger={(p) => <IconButton icon={mdiDotsHorizontal} label={t("desktop.prompt.rewind")} small {...p} />}
-              items={[
-                { heading: t("desktop.rewind.heading") },
-                { label: t("desktop.rewind.both"), detail: t("desktop.rewind.both.detail"), icon: mdiUndoVariant, onSelect: () => onRewind(entry.index!, "both") },
-                { label: t("desktop.rewind.conversation"), detail: t("desktop.rewind.conversation.detail"), icon: mdiMessageReplyTextOutline, onSelect: () => onRewind(entry.index!, "conversation") },
-                { label: t("desktop.rewind.code"), detail: t("desktop.rewind.code.detail"), icon: mdiFileEditOutline, onSelect: () => onRewind(entry.index!, "code") },
-                "divider",
-                { label: t("desktop.rewind.from"), detail: t("desktop.rewind.from.detail"), icon: mdiPlaylistEdit, onSelect: () => onRewind(entry.index!, "summarize_from") },
-                { label: t("desktop.rewind.upto"), detail: t("desktop.rewind.upto.detail"), icon: mdiPlaylistEdit, onSelect: () => onRewind(entry.index!, "summarize_up_to") },
-                "divider",
-                { label: t("desktop.rewind.copy"), icon: mdiContentCopy, onSelect: () => onEdit(entry.text) },
-              ]}
-            />
-            )}
-          </>
-        )}
-      </div>
-      <div className="bubble">
-        {entry.sub === "steer" && <span className="t-label muted">{t("desktop.bubble.steer")}</span>}
-        {entry.sub === "aside" && <span className="t-label muted">{t("desktop.bubble.aside")}</span>}
-        {entry.images && (
-          <div className="bubble-images">
-            {entry.images.map((img, i) =>
-              img.url ? (
-                <img key={img.url} src={img.url} alt={img.name} title={img.name} />
-              ) : (
-                <span key={`${i}-${img.name}`} className="bubble-doc t-body-sm" title={img.name}>
-                  <Icon path={img.web ? webIcon(img.web) : kindIcon(kindOfName(img.name))} size="sm" />
-                  <span className="ellipsis">{img.name}</span>
-                </span>
-              ),
-            )}
-          </div>
-        )}
-        <div className="bubble-text">{entry.text}</div>
-      </div>
-    </div>
-  );
-}
-
-function Thought({ text, open }: { text: string; open: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="thought">
-      <button className="thought-head" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
-        <Icon path={effortIcon} size="sm" className={open ? "pulse" : ""} />
-        <span>{open ? t("desktop.thinking") : t("desktop.thoughts")}</span>
-        <Icon path={expanded ? mdiChevronDown : mdiChevronRight} size="sm" />
-      </button>
-      {expanded && (
-        <div className="thought-body">
-          <Markdown text={text} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** A web content chip's icon: the console's, or a page's. */
-const webIcon = (kind: string) => (kind === "console" ? mdiConsoleLine : kind === "database" ? mdiDatabaseOutline : kind === "data_query" ? mdiTableSearch : mdiWeb);
-
-/** An attachment's icon by its kind. */
-function kindIcon(kind: string): string {
-  return { document: mdiFilePdfBox, text: mdiFileDocumentOutline, audio: mdiFileMusicOutline, video: mdiFileVideoOutline }[kind] ?? mdiImageOutline;
-}
-
-/** A sent attachment's kind, by its name (a sent prompt keeps only names). */
-function kindOfName(name: string): string {
-  if (/\.pdf$/i.test(name)) return "document";
-  if (/\.(mp3|wav|aac|flac|ogg|oga|opus|m4a|weba)$/i.test(name)) return "audio";
-  if (/\.(mp4|m4v|mov|mpe?g|webm|avi|wmv|flv|3gp)$/i.test(name)) return "video";
-  if (/\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(name)) return "image";
-  return "text";
-}
-
-function toolIcon(name: string): string {
-  if (name === "export_pdf") return mdiFilePdfBox;
-  if (name === "export_docx") return mdiFileWordBoxOutline;
-  if (name === "generate_audio") return mdiVolumeHigh;
-  if (name === "generate_image") return mdiImageOutline;
-  if (name === "view_media") return mdiFileVideoOutline;
-  if (/^(read_file|list_files|view_image|view_document)$/.test(name)) return mdiFileDocumentOutline;
-  if (/^(glob|grep|list_or_search_skills)$/.test(name)) return mdiMagnify;
-  if (/(create|replace|delete|edit|patch|notebook)/.test(name)) return mdiFileEditOutline;
-  if (/shell|process/.test(name)) return mdiConsole;
-  if (/^web_/.test(name)) return mdiWeb;
-  if (/agent/.test(name)) return mdiRobotOutline;
-  if (name === "todo") return mdiFormatListChecks;
-  if (name === "ask_user_question") return mdiHelpCircleOutline;
-  if (/plan_mode/.test(name)) return mdiClipboardCheckOutline;
-  return mdiWrenchOutline;
-}
-
-/**
- * A run of tool calls. One call is just its row; from two, a head says how
- * many, open while the turn runs (or when one failed) and folded after.
- * Either way the rows stay mounted as calls arrive, so nothing redraws.
- */
-function ToolGroup({ tools, live }: { tools: ToolEntry[]; live: boolean }) {
-  const busy = tools.some((x) => x.result === undefined);
-  const failures = tools.filter((x) => failed(x.result)).length;
-  const [open, setOpen] = useState<boolean | null>(null);
-  const single = tools.length === 1;
-  const shown = single || (open ?? (live || busy || failures > 0));
-  return (
-    <div className={`tool-group ${shown ? "open" : ""} ${single ? "single" : ""}`}>
-      {!single && (
-        <button className="tool-group-head" onClick={() => setOpen(!shown)} aria-expanded={shown}>
-          <span className="tool-icons">
-            {[...new Set(tools.map((x) => toolIcon(x.name)))].slice(0, 4).map((p) => (
-              <Icon key={p} path={p} size="sm" />
-            ))}
-          </span>
-          <span>
-            {tn("desktop.tools.used", tools.length)}
-            {failures > 0 ? t("desktop.tools.failed", { count: failures }) : ""}
-          </span>
-          {busy && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
-          <span className="spacer" />
-          <Icon path={shown ? mdiChevronDown : mdiChevronRight} size="sm" />
-        </button>
-      )}
-      {shown && (
-        <div className="tool-group-body">
-          {tools.map((x, i) => (
-            <ToolRow key={x.id || i} name={x.name} args={x.args} result={x.result} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ToolRow({ name, args, result }: { name: string; args?: JsonObject; result?: JsonObject }) {
-  // A tool's arguments and result open with advanced settings; simple mode
-  // shows what it did and on which file.
-  const advanced = useAdvanced();
-  const [opened, setOpen] = useState(false);
-  const open = advanced && opened;
-  const openPath = useOpenPath();
-  const bad = failed(result);
-  // Working: a spinner, and for a skill's script (which can take a while) the word.
-  const status =
-    result === undefined ? (
-      <span className="row tool-running" style={{ gap: 6 }}>
-        {name === "run_skill_script" && <span className="t-body-sm muted">{t("desktop.tool.running")}</span>}
-        <Icon path={mdiLoading} size="sm" spin />
-      </span>
-    ) : bad ? (
-      <Icon path={mdiClose} size="sm" />
-    ) : (
-      <Icon path={mdiCheck} size="sm" />
-    );
-  return (
-    <div className={`tool ${bad ? "failed" : ""} ${open ? "open" : ""}`}>
-      <button className="tool-head" onClick={() => advanced && setOpen((o) => !o)} aria-expanded={advanced ? open : undefined}>
-        <Icon path={toolIcon(name)} size="sm" />
-        <code>{name}</code>
-        {openPath && typeof args?.path === "string" && args.path ? (
-          <span
-            role="link"
-            tabIndex={0}
-            className="ellipsis muted file-link"
-            title={t("desktop.files.open_path", { path: args.path })}
-            onClick={(e) => {
-              e.stopPropagation();
-              openPath(args.path as string);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.stopPropagation();
-                openPath(args.path as string);
-              }
-            }}
-          >
-            {summarizeArgs(args)}
-          </span>
-        ) : (
-          <span className="ellipsis muted">{summarizeArgs(args)}</span>
-        )}
-        <span className="spacer" />
-        {bad && <span className="ellipsis tool-error">{String(result!.error)}</span>}
-        {status}
-      </button>
-      {open && (
-        <div className="tool-body">
-          {args && <JsonBlock label={t("desktop.tool.args")} value={args} />}
-          {result && <JsonBlock label={t("desktop.tool.result")} value={result} />}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * A background task (invoke_agent with background: true): its agent,
- * state, runtime and cost, followed until it ends, with Show (its latest
- * events and result) and Stop (spec_032_background_agents BGA-33).
- */
-function TaskCard({ dir, sessionId, id }: { dir: string; sessionId: string; id: string }) {
-  const snack = useSnackbar();
-  const [task, setTask] = useState<BackgroundTask>();
-  const [events, setEvents] = useState<string[]>([]);
-  const [open, setOpen] = useState(false);
-  const [gone, setGone] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      const r = await workspaces.getTask({ workspace: dir, sessionIds: [sessionId], id });
-      setTask(r.task);
-      setEvents(r.events);
-    } catch {
-      setGone(true); // the service restarted, or it's another client's
-    }
-  }, [dir, sessionId, id]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  const runningNow = !task || task.state === "running" || task.state === "waiting";
-  useEffect(() => {
-    if (!runningNow || gone) return;
-    const timer = setInterval(load, 2000);
-    return () => clearInterval(timer);
-  }, [runningNow, gone, load]);
-  const now = useNow(runningNow && !gone);
-  if (gone) return null;
-  const stop = async () => {
-    try {
-      const r = await workspaces.stopTask({ workspace: dir, sessionIds: [sessionId], id });
-      setTask(r.task);
-    } catch (e) {
-      snack(message(e));
-    }
-  };
-  const started = task?.started ? timestampDate(task.started).getTime() : now;
-  const ended = task?.ended ? timestampDate(task.ended).getTime() : now;
-  const seconds = Math.max(0, (ended - started) / 1000);
-  return (
-    <div className={`card task-card ${task?.state ?? "running"}`}>
-      <div className="row">
-        <Icon path={mdiRobotOutline} size="sm" />
-        <span className="ellipsis" style={{ flex: 1 }}>
-          <b>{task?.agent}</b> · {id} · {t(`tasks.state.${task?.state ?? "running"}`)} · <span className="mono">{clock(seconds)}</span>
-          {task?.usage?.costUsd ? ` · $${task.usage.costUsd.toFixed(2)}` : ""}
-        </span>
-        {runningNow && <Icon path={mdiProgressClock} size="sm" className="pulse" />}
-        <Button small onClick={() => setOpen((o) => !o)}>
-          {open ? t("desktop.task.hide") : t("desktop.task.show")}
-        </Button>
-        {runningNow && (
-          <Button small onClick={stop}>
-            {t("desktop.task.stop")}
-          </Button>
-        )}
-      </div>
-      {task?.prompt && <div className="muted ellipsis">{task.prompt}</div>}
-      {task?.branch && <div className="muted ellipsis mono">{t("tasks.worktree", { path: task.worktree, branch: task.branch })}</div>}
-      {open && (
-        <div className="task-body">
-          {events.length > 0 && <pre className="json">{events.join("\n")}</pre>}
-          {task?.result && <Markdown text={task.result} />}
-          {task?.error && <p className="error-text">{task.error}</p>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * The chat's suggestion to reflect (spec_048_harness_learning HE-63): the
- * runs since the last reflection hit the same problems. Reflect runs
- * /reflect in a new chat; Not now holds the suggestion off for a week.
- */
-function ReflectCard({ dir, patterns }: { dir: string; patterns: number }) {
-  const snack = useSnackbar();
-  const [done, setDone] = useState(false);
-  if (done) return null;
-  const later = async () => {
-    try {
-      await workspaces.snoozeReflection({ workspace: dir });
-      setDone(true);
-      snack(t("desktop.reflectcard.snoozed"));
-    } catch (e) {
-      snack(message(e), { error: true });
-    }
-  };
-  return (
-    <div className="card task-card">
-      <div className="row">
-        <Icon path={mdiHeadLightbulbOutline} size="sm" />
-        <span style={{ flex: 1 }}>
-          <b>{t("desktop.suggest.reflect")}</b>
-          <span className="t-body-sm muted"> · {tn("desktop.suggest.reflect_detail", patterns)}</span>
-        </span>
-        <Button small onClick={() => void later()}>
-          {t("desktop.reflectcard.not_now")}
-        </Button>
-        <Button
-          small
-          variant="filled"
-          onClick={() => {
-            setDone(true);
-            startReflect(dir);
-          }}
-        >
-          {t("desktop.reflectcard.reflect")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * A job the agent made from the chat (create_job, spec_023_workers WK-70):
- * paused until it's reviewed, with Review (Studio › Jobs, its details) and
- * Enable here; once enabled, when it next runs.
- */
-function JobCard({ dir, name }: { dir: string; name: string }) {
-  const snack = useSnackbar();
-  const [job, setJob] = useState<Worker>();
-  const [gone, setGone] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      const r = await workers.listWorkers({ workspace: dir });
-      const w = r.workers.find((x) => x.name === name);
-      if (w) setJob(w);
-      else setGone(true); // deleted since
-    } catch {
-      setGone(true);
-    }
-  }, [dir, name]);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  if (gone || !job) return null;
-  const enabled = job.state === WorkerState.ENABLED;
-  const enable = async () => {
-    try {
-      const r = await workers.enableWorker({ workspace: dir, name, hash: job.hash });
-      if (r.worker) setJob(r.worker);
-      snack(t("desktop.jobcard.enabled", { name }));
-    } catch (e) {
-      snack(message(e), { error: true });
-    }
-  };
-  return (
-    <div className="card task-card">
-      <div className="row">
-        <Icon path={mdiCalendarClock} size="sm" />
-        <span className="ellipsis" style={{ flex: 1 }}>
-          <b>{name}</b> · {job.schedule}
-          {" · "}
-          {enabled && job.nextRun ? t("desktop.jobcard.next", { when: timestampDate(job.nextRun).toLocaleString() }) : t(enabled ? "desktop.jobcard.on" : "desktop.jobcard.paused")}
-        </span>
-        <Button small onClick={() => showView({ dir, view: "workers", worker: name })}>
-          {t("desktop.jobcard.review")}
-        </Button>
-        {!enabled && job.state !== WorkerState.INVALID && (
-          <Button small variant="tonal" onClick={() => void enable()}>
-            {t("desktop.jobcard.enable")}
-          </Button>
-        )}
-      </div>
-      {job.permissions.length > 0 && <div className="muted ellipsis mono">{job.permissions.join("  ·  ")}</div>}
-      {job.problems.length > 0 && <div className="error-text t-body-sm">{job.problems.join("; ")}</div>}
-    </div>
-  );
-}
-
-function JsonBlock({ label, value }: { label: string; value: JsonObject }) {
-  let text = JSON.stringify(value, null, 2);
-  if (text.length > 20000) text = text.slice(0, 20000) + "\n…";
-  return (
-    <div>
-      <div className="t-label muted">{label}</div>
-      <pre className="json">{text}</pre>
-    </div>
-  );
-}
-
-/** An approval request, with its decisions (the canvas shows one too). */
-export function ApprovalCard({ req, onDecide, who, autoFocus = true }: { req: ApprovalRequest; onDecide: (d: Decision) => void; who?: string; autoFocus?: boolean }) {
-  const files = req.diff ? parseDiff(req.diff) : [];
-  const advanced = useAdvanced(); // Always allow: advanced
-  // Auto mode's reviewer denied it: its reason, and the person may allow
-  // it anyway with a click, Deny focused (spec_005 APR-14d).
-  const denied = !!req.reviewerDenied;
-  return (
-    <div className={`card approval ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.approval.label")}>
-      <div className="row">
-        <Icon path={mdiShieldAlertOutline} size="lg" />
-        <div className="stack" style={{ gap: 2 }}>
-          {who && <span className="t-label muted">{t("desktop.task.asks", { who })}</span>}
-          <span className="t-title">{t("desktop.approval.title")}</span>
-          <span className="muted">
-            {t("desktop.approval.wants", { tool: req.tool, detail: req.detail })}
-          </span>
-          {denied && <span className="approval-reviewer">{t("desktop.approval.reviewer_denied", { reason: req.reviewerDenied })}</span>}
-        </div>
-      </div>
-      {files.length > 0 && <DiffView files={files} compact />}
-      <div className="row wrap">
-        {files.length > 0 && editorConfig() && (
-          <Button variant="outlined" icon={mdiFileCompare} onClick={() => toEditor({ type: "diff", diff: req.diff, title: req.detail })}>
-            {t("desktop.approval.in_editor")}
-          </Button>
-        )}
-        <Button variant="filled" onClick={() => onDecide(Decision.ONCE)} autoFocus={autoFocus && !denied}>
-          {t(denied ? "desktop.approval.anyway" : "desktop.approval.once")}
-        </Button>
-        {req.scopeLabel && (
-          <Button variant="tonal" onClick={() => onDecide(Decision.SESSION)}>
-            {t("desktop.approval.session", { scope: req.scopeLabel })}
-          </Button>
-        )}
-        {advanced && req.scopeLabel && <Button onClick={() => onDecide(Decision.ALWAYS)}>{t("desktop.approval.always", { scope: req.scopeLabel })}</Button>}
-        <Button variant="outlined" danger onClick={() => onDecide(Decision.DENY)} autoFocus={autoFocus && denied}>
-          {t("desktop.approval.deny")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function QuestionCard({ q, onAnswer, who, autoFocus = true }: { q: Question; onAnswer: (a: string) => void; who?: string; autoFocus?: boolean }) {
-  const [text, setText] = useState("");
-  // A multi-select question: the options chosen, sent together (one per line).
-  const [chosen, setChosen] = useState<string[]>([]);
-  const toggle = (o: string) => setChosen((c) => (c.includes(o) ? c.filter((x) => x !== o) : [...c, o]));
-  // A plan review lists "carry it out" first: make that the primary choice.
-  return (
-    <div className={`card question ${who ? "task-request" : ""}`} role="alertdialog" aria-label={t("desktop.question.title")}>
-      <div className="row">
-        <Icon path={mdiHelpCircleOutline} size="lg" />
-        <div className="stack" style={{ gap: 2 }}>
-          {who && <span className="t-label muted">{t("desktop.task.asks", { who })}</span>}
-          <span className="t-title">{t("desktop.question.title")}</span>
-        </div>
-      </div>
-      <div className="question-text">
-        <Markdown text={q.question} />
-      </div>
-      {q.order && <span className="t-body-sm muted question-order">{t("desktop.question.order", { why: q.order })}</span>}
-      {q.options.length > 0 && q.multiSelect && (
-        <div className="stack" role="group" aria-label={t("desktop.question.choose_several")}>
-          <span className="t-label muted">{t("desktop.question.choose_several")}</span>
-          {q.options.map((o, i) => (
-            <ChoiceRow key={o} choice={choiceOf(q, o)} recommended={i === 0 && q.choices.length > 0}>
-              <label className="row check choice-tip" data-tip={choiceOf(q, o)?.summary || undefined}>
-                <input type="checkbox" checked={chosen.includes(o)} onChange={() => toggle(o)} />
-                <span>{o}</span>
-              </label>
-            </ChoiceRow>
-          ))}
-          <div className="row">
-            <Button variant="filled" disabled={chosen.length === 0} onClick={() => onAnswer(q.options.filter((o) => chosen.includes(o)).join("\n"))}>
-              {t("desktop.send")}
-            </Button>
-          </div>
-        </div>
-      )}
-      {q.options.length > 0 && !q.multiSelect && q.choices.length === 0 && (
-        <div className="row wrap answer-options">
-          {q.options.map((o, i) => (
-            <Button key={o} variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
-              {o}
-            </Button>
-          ))}
-        </div>
-      )}
-      {q.options.length > 0 && !q.multiSelect && q.choices.length > 0 && (
-        <div className="stack question-choices">
-          {q.options.map((o, i) => (
-            <ChoiceRow key={o} choice={choiceOf(q, o)} recommended={i === 0}>
-              <span className="choice-tip" data-tip={choiceOf(q, o)?.summary || undefined}>
-                <Button variant={i === 0 ? "filled" : "tonal"} onClick={() => onAnswer(o)}>
-                  {o}
-                </Button>
-              </span>
-            </ChoiceRow>
-          ))}
-        </div>
-      )}
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (text.trim()) onAnswer(text.trim());
-        }}
-      >
-        {/* A secret's value: typed hidden, sent to Blitz's secret store, never shown or given to the model (spec_060 DRV-05). */}
-        <input
-          className="input"
-          type={q.secret ? "password" : "text"}
-          autoComplete={q.secret ? "off" : undefined}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={q.secret ? t("desktop.question.secret") : q.options.length ? t("desktop.question.other") : t("desktop.question.answer")}
-          autoFocus={autoFocus && q.options.length === 0}
-        />
-        <Button variant="text" type="submit" disabled={!text.trim()}>
-          {t(q.secret ? "desktop.question.secret_save" : "desktop.send")}
-        </Button>
-      </form>
-      {q.secret && <span className="t-body-sm muted">{t("desktop.question.secret_hint")}</span>}
-    </div>
-  );
-}
-
-/** The explanation of a question's option, when the agent gave one (APR-40b). */
-const choiceOf = (q: Question, label: string) => q.choices.find((c) => c.label === label);
-
-/**
- * One of a question's options, explained (spec_005_approvals APR-40b): the
- * button (its summary its tooltip), Recommended on the first, and a toggle
- * that opens what choosing it means and why it's ranked there.
- */
-function ChoiceRow({ choice, recommended, children }: { choice?: QuestionChoice; recommended: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const more = !!choice && (!!choice.details || !!choice.why);
-  return (
-    <div className="question-choice">
-      <div className="row" style={{ gap: 8 }}>
-        {children}
-        {recommended && <span className="chip static">{t("desktop.question.recommended")}</span>}
-        {more && <IconButton icon={open ? mdiChevronUp : mdiInformationOutline} label={t("desktop.question.details", { label: choice!.label })} small aria-expanded={open} onClick={() => setOpen((o) => !o)} />}
-      </div>
-      {open && choice && (
-        <div className="question-choice-details t-body-sm">
-          {choice.summary && <strong>{choice.summary}</strong>}
-          {choice.details && <Markdown text={choice.details} />}
-          {choice.why && <span className="muted">{t("desktop.question.why", { why: choice.why })}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// How long a task list item has run, or ran, as m:ss.
-const ranFor = (time: TaskTime, now: number) => clock(((time.end ?? now) - time.start) / 1000);
-
-function TaskList({ tasks, onDismiss }: { tasks: Task[]; onDismiss?: () => void }) {
-  const done = tasks.filter((x) => x.status === "done").length;
-  const allDone = done === tasks.length;
-  const [open, setOpen] = useState(true);
-  useEffect(() => setOpen(!allDone), [allDone]); // folds itself once every task is done
-  // How long each item has run (in progress, ticking) or ran (done).
-  const [times, setTimes] = useState<Map<string, TaskTime>>(new Map());
-  useEffect(() => setTimes((prev) => taskTimes(prev, tasks, Date.now())), [tasks]);
-  const now = useNow(tasks.some((x) => x.status === "in_progress"));
-  return (
-    <div className="tasks card outlined">
-      <div className="row">
-        <button className="tasks-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          <Icon path={mdiFormatListChecks} size="sm" />
-          <span className="t-title-sm">{t("desktop.tasks.title")}</span>
-          <span className="muted t-body-sm">
-            {t("desktop.tasks.progress", { done, total: tasks.length })}
-          </span>
-          <Icon path={open ? mdiChevronDown : mdiChevronRight} size="sm" />
-        </button>
-        <span className="spacer" />
-        {onDismiss && <IconButton icon={mdiClose} label={t("desktop.tasks.hide")} small onClick={onDismiss} />}
-      </div>
-      <div className="progress-bar">
-        <span style={{ width: `${(done / tasks.length) * 100}%` }} />
-      </div>
-      {open && (
-        <ul className="task-items">
-          {tasks.map((task, i) => (
-            <li key={i} className={task.status}>
-              <Icon path={task.status === "done" ? mdiCheckboxMarked : task.status === "in_progress" ? mdiProgressClock : mdiCheckboxBlankOutline} size="sm" className={task.status === "in_progress" ? "pulse" : ""} />
-              <span>{task.content}</span>
-              {times.has(task.content) && <span className="muted mono task-time">{ranFor(times.get(task.content)!, now)}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// The composer's keys, as a keyboard icon whose tooltip lists them (on
-// hover, and on focus for the keyboard).
-function KeyHint() {
-  const text = `${t("desktop.keys.enter")} ${t("desktop.keys.to_send")} · ${t("desktop.keys.shift")}+${t("desktop.keys.enter")} ${t("desktop.keys.new_line")} · ${t("desktop.composer.plan_hint")}`;
-  return (
-    <span className="key-hint" tabIndex={0} role="note" aria-label={text} data-tip={text}>
-      <Icon path={mdiKeyboardOutline} size="sm" />
-    </span>
-  );
-}
-
-function Composer({
-  commands,
-  attachments,
-  onAddFiles,
-  onAddImagePath,
-  onRemoveAttachment,
-  onAddData,
-  imagesOn,
-  accept,
-  draft,
-  setDraft,
-  running,
-  dir,
-  onSubmit,
-  onStop,
-  voice,
-}: {
-  commands: CommandSpec[];
-  attachments: Attachment[];
-  onAddFiles: (files: File[]) => void;
-  onAddImagePath: (path: string) => void;
-  onRemoveAttachment: (key: string) => void;
-  /** Adds a database, or a query's result, to the next message (spec_059_data DAT-41, DAT-42). */
-  onAddData: (b: WebBlock) => void;
-  imagesOn: boolean;
-  accept: string; // the file picker's: what the model takes
-  draft: string;
-  setDraft: (t: string) => void;
-  running: boolean;
-  dir: string;
-  onSubmit: (t: string) => void;
-  onStop: () => void;
-  /** The microphone, beside Send (spec_063_voice VOX-20). */
-  voice?: ReactNode;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const picker = useRef<HTMLInputElement>(null);
-  const [viewing, setViewing] = useState<WebBlock | null>(null);
-  const busy = uploading(attachments);
-  // An attachment that didn't upload is removed before sending, not left out.
-  const failed = failedUpload(attachments);
-  // Completing a command's name as it's typed.
-  const matches = matchCommands(draft, commands);
-  const [pick, setPick] = useState(0);
-  // The draft Escape closed the menus on: forgotten once the draft
-  // changes, so the same text typed again (a "/" in an emptied box) opens
-  // them again.
-  const [dismissed, setDismissed] = useState("");
-  const menuOpen = matches.length > 0 && dismissed !== draft;
-  useEffect(() => {
-    setPick(0);
-    setDismissed((d) => (d === draft ? d : ""));
-  }, [draft]);
-  const complete = (c: CommandSpec) => setDraft(`/${c.name}${c.args ? " " : ""}`);
-  // Completing an @mention: the workspace's files and folders.
-  const [caret, setCaret] = useState(0);
-  const mention = menuOpen ? null : mentionAt(draft, caret);
-  const [found, setFound] = useState<{ query: string; paths: string[] }>({ query: "", paths: [] });
-  useEffect(() => {
-    if (!mention) return;
-    const query = mention.query;
-    let live = true;
-    const timer = setTimeout(() => {
-      files.findFiles({ workspace: dir, query, limit: 12, folders: true }).then(
-        (r) => live && setFound({ query, paths: r.paths }),
-        () => live && setFound({ query, paths: [] }),
-      );
-    }, 120);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [mention?.query, dir]); // eslint-disable-line react-hooks/exhaustive-deps
-  // @db: completes the workspace's databases and their saved queries
-  // (spec_059_data DAT-40), above the files.
-  const dbWanted = !!mention && wantsDb(mention.query);
-  const [dbConns, setDbConns] = useState<DbConnection[]>([]);
-  useEffect(() => {
-    if (!dbWanted) return;
-    let live = true;
-    workspaces.listConnectors({ workspace: dir }).then(
-      (r) => live && setDbConns(chatConnections(r.connections)),
-      () => live && setDbConns([]),
-    );
-    return () => {
-      live = false;
-    };
-  }, [dbWanted, dir]);
-  const dbFound = mention && dbWanted ? dbOptions(mention.query, dbConns) : [];
-  const paths = mention && found.query === mention.query ? found.paths : [];
-  const mentionCount = dbFound.length + paths.length;
-  const mentionOpen = !!mention && mentionCount > 0 && dismissed !== draft;
-  const choosePath = (path: string) => {
-    if (!mention) return;
-    const r = insertMention(draft, mention, path);
-    setDraft(r.text);
-    setCaret(r.caret);
-    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
-    if (isAttachablePath(path)) onAddImagePath(path);
-  };
-  const chooseDb = (m: string) => {
-    if (!mention) return;
-    const r = insertMention(draft, mention, m);
-    setDraft(r.text);
-    setCaret(r.caret);
-    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
-  };
-  const chooseMention = (i: number) => (i < dbFound.length ? chooseDb(dbFound[i].mention) : choosePath(paths[i - dbFound.length]));
-  // Completing \skill-name: the skills the workspace sees.
-  const skillToken = menuOpen || mention ? null : skillAt(draft, caret);
-  const [skillList, setSkillList] = useState<{ name: string; description: string }[]>([]);
-  useEffect(() => {
-    if (skillToken) void skillsFor(dir).then(setSkillList);
-  }, [!!skillToken, dir]); // eslint-disable-line react-hooks/exhaustive-deps
-  const skillFound = skillToken ? skillOptions(skillToken.query, skillList) : [];
-  const skillOpen = !!skillToken && skillFound.length > 0 && dismissed !== draft;
-  const chooseSkill = (name: string) => {
-    if (!skillToken) return;
-    const r = insertSkill(draft, skillToken, name);
-    setDraft(r.text);
-    setCaret(r.caret);
-    requestAnimationFrame(() => ref.current?.setSelectionRange(r.caret, r.caret));
-  };
-  // Completing {secrets:…}: the workspace's and the global names.
-  const secretSuggest = useSecretSuggest(draft, setDraft, ref, dir);
-  const trackCaret = (e: { currentTarget: HTMLTextAreaElement }) => {
-    setCaret(e.currentTarget.selectionStart ?? 0);
-    secretSuggest.trackCaret(e);
-  };
-  // Grow with the text, up to a limit.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
-  }, [draft]);
-  useEffect(() => {
-    if (draft) ref.current?.focus();
-  }, [draft]);
-  const send = () => {
-    const text = draft.trim();
-    if (!text || busy || failed) return;
-    setDraft("");
-    onSubmit(text);
-  };
-  return (
-    <div className={`composer ${running ? "running" : ""}`}>
-      {menuOpen && (
-        <div className="command-menu" role="listbox" aria-label={t("desktop.commands")}>
-          {matches.map((c, i) => (
-            <button
-              key={c.name}
-              role="option"
-              aria-selected={i === pick}
-              className={`command-option ${i === pick ? "on" : ""}`}
-              onMouseDown={(e) => {
-                e.preventDefault(); // keep the focus in the field
-                complete(c);
-              }}
-            >
-              <code>/{c.name}</code>
-              {c.args && <span className="muted mono t-body-sm">{c.args}</span>}
-              <span className="spacer ellipsis muted t-body-sm">{c.description}</span>
-              {c.source !== "builtin" && <span className="chip static command-source">{c.source}</span>}
-            </button>
-          ))}
-          <div className="command-hint t-body-sm muted">
-            <kbd>↑</kbd>
-            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.keys.complete")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
-          </div>
-        </div>
-      )}
-      {!menuOpen && !mentionOpen && !skillOpen && secretSuggest.menu}
-      {skillOpen && (
-        <div className="command-menu" role="listbox" aria-label={t("desktop.skills.mention")}>
-          {skillFound.map((s, i) => (
-            <button
-              key={s.name}
-              role="option"
-              aria-selected={i === pick}
-              className={`command-option ${i === pick ? "on" : ""}`}
-              onMouseDown={(e) => {
-                e.preventDefault(); // keep the focus in the field
-                chooseSkill(s.name);
-              }}
-            >
-              <Icon path={mdiPuzzleOutline} size="sm" />
-              <code>\{s.name}</code>
-              <span className="spacer ellipsis muted t-body-sm">{s.description}</span>
-            </button>
-          ))}
-          <div className="command-hint t-body-sm muted">
-            <kbd>↑</kbd>
-            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.skills.mention_add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
-          </div>
-        </div>
-      )}
-      {mentionOpen && (
-        <div className="command-menu" role="listbox" aria-label={t("desktop.mention.files")}>
-          {dbFound.map((o, i) => (
-            <button
-              key={o.mention}
-              role="option"
-              aria-selected={i === pick}
-              className={`command-option ${i === pick ? "on" : ""}`}
-              onMouseDown={(e) => {
-                e.preventDefault(); // keep the focus in the field
-                chooseDb(o.mention);
-              }}
-            >
-              <Icon path={o.query ? mdiTableSearch : mdiDatabaseOutline} size="sm" />
-              <code>@{o.mention}</code>
-              <span className="spacer ellipsis muted t-body-sm">{o.detail}</span>
-            </button>
-          ))}
-          {paths.map((p, j) => {
-            const i = j + dbFound.length;
-            return (
-            <button
-              key={p}
-              role="option"
-              aria-selected={i === pick}
-              className={`command-option ${i === pick ? "on" : ""}`}
-              onMouseDown={(e) => {
-                e.preventDefault(); // keep the focus in the field
-                choosePath(p);
-              }}
-            >
-              <Icon path={p.endsWith("/") ? mdiFolderOutline : fileIcon(p.slice(p.lastIndexOf("/", p.length - 2) + 1))} size="sm" />
-              <span className="mono ellipsis">{p}</span>
-            </button>
-            );
-          })}
-          <div className="command-hint t-body-sm muted">
-            <kbd>↑</kbd>
-            <kbd>↓</kbd> {t("desktop.keys.choose")} · <kbd>{t("desktop.keys.tab")}</kbd> {t("desktop.mention.add")} · <kbd>{t("desktop.keys.esc")}</kbd> {t("desktop.keys.close")}
-          </div>
-        </div>
-      )}
-      {attachments.length > 0 && (
-        <div className="attachments">
-          {attachments.map((a) => (
-            <div
-              key={a.key}
-              className={`attachment ${a.error ? "failed" : ""} ${a.web?.table ? "clickable" : ""}`}
-              title={a.error || `${a.name}${a.detail ? ` · ${a.detail}` : ""}`}
-              onClick={a.web?.table ? () => setViewing(a.web!) : undefined}
-            >
-              {a.url ? <img src={a.url} alt="" /> : <Icon path={a.web ? webIcon(a.web.kind) : kindIcon(a.kind ?? (a.document ? "document" : "image"))} />}
-              <span className="attachment-text">
-                <span className="ellipsis">{a.name}</span>
-                <small className={a.error ? "error-text ellipsis" : "muted ellipsis"}>{a.error || a.detail || t("desktop.attach.uploading")}</small>
-              </span>
-              <IconButton icon={mdiClose} label={t("desktop.attach.remove", { name: a.name })} small onClick={() => onRemoveAttachment(a.key)} />
-            </div>
-          ))}
-        </div>
-      )}
-      {viewing && <DataResultDialog block={viewing} onClose={() => setViewing(null)} />}
-      {/* The prompt mark: shown only when pinned (composerDock.ts). */}
-      <span className="composer-mark" aria-hidden="true">
-        ›
-      </span>
-      <textarea
-        ref={ref}
-        value={draft}
-        rows={1}
-        className={shellLine(draft).shell ? "shell-mode" : undefined}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          trackCaret(e);
-        }}
-        onSelect={trackCaret}
-        onPaste={(e) => {
-          const files = Array.from(e.clipboardData.files);
-          if (files.length) {
-            e.preventDefault();
-            onAddFiles(files);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (!menuOpen && !mentionOpen && !skillOpen && secretSuggest.onKeyDown(e)) return;
-          if (skillOpen && !e.nativeEvent.isComposing) {
-            const n = skillFound.length;
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-              e.preventDefault();
-              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
-              return;
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              setDismissed(draft);
-              return;
-            }
-            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-              e.preventDefault();
-              chooseSkill(skillFound[Math.min(pick, n - 1)].name);
-              return;
-            }
-          }
-          if (mentionOpen && !e.nativeEvent.isComposing) {
-            const n = mentionCount;
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-              e.preventDefault();
-              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
-              return;
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              setDismissed(draft);
-              return;
-            }
-            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-              e.preventDefault();
-              chooseMention(Math.min(pick, n - 1));
-              return;
-            }
-          }
-          if (menuOpen && !e.nativeEvent.isComposing) {
-            const chosen = matches[Math.min(pick, matches.length - 1)];
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-              e.preventDefault();
-              setPick((p) => (p + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
-              return;
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              setDismissed(draft);
-              return;
-            }
-            // Tab completes; Enter completes too, unless the name is already whole.
-            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && draft.trim() !== `/${chosen.name}`)) {
-              e.preventDefault();
-              complete(chosen);
-              return;
-            }
-          }
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            send();
-          }
-        }}
-        placeholder={running ? t("desktop.composer.steer") : t("desktop.composer.ask")}
-        aria-label={t("desktop.composer.message")}
-      />
-      <div className="composer-bar">
-        {!running && imagesOn && (
-          <>
-            <IconButton title="" icon={mdiImagePlusOutline} label={t("desktop.attach")} small onClick={() => picker.current?.click()} />
-            <input
-              ref={picker}
-              type="file"
-              accept={accept}
-              multiple
-              hidden
-              onChange={(e) => {
-                onAddFiles(Array.from(e.target.files ?? []));
-                e.target.value = "";
-              }}
-            />
-          </>
-        )}
-        {!running && <IconButton title="" icon={mdiBrushVariant} label={t("desktop.composer.make_picture")} small onClick={() => showView({ dir, view: "pictures" })} />}
-        {!running && <DataMenu dir={dir} onAdd={onAddData} onConnect={() => openSettings({ section: "connectors" })} />}
-        {shellLine(draft).shell && <span className="t-body-sm shell-text ellipsis">{t("desktop.shell.hint")}</span>}
-        <span className="spacer" />
-        <KeyHint />
-        {voice}
-        {running && <IconButton title="" icon={mdiStop} label={t("desktop.stop")} variant="tonal" onClick={onStop} />}
-        <IconButton title="" icon={mdiArrowUp} label={busy ? t("desktop.uploading") : failed ? t("desktop.attach.failed") : running ? t("desktop.steer") : t("desktop.send")} variant="filled" disabled={!draft.trim() || busy || failed} onClick={send} />
-      </div>
-    </div>
-  );
-}
-
-const k = (n: bigint) => (n >= 1_000_000n ? `${(Number(n) / 1e6).toFixed(1)}M` : n >= 1000n ? `${(Number(n) / 1000).toFixed(1)}k` : String(n));
-
-function usageLine(before?: Usage, after?: Usage): string {
-  if (!after || !before || after.calls === before.calls) return "";
-  let s = t("desktop.usage.turn", { in: k(after.input - before.input), out: k(after.output - before.output), context: k(after.lastPrompt) });
-  if (after.priced) s += ` · $${(after.costUsd - before.costUsd).toFixed(4)}`;
-  return s;
 }

@@ -17,6 +17,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/mcpauth"
@@ -118,11 +119,32 @@ func TestMCPBrokenSettings(t *testing.T) {
 	home := isolate(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".blitz"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte("[mcp\n"), 0o600))
-	for _, args := range [][]string{{"mcp", "list"}, {"mcp", "get", "x"}, {"mcp", "remove", "x"}} {
+	for _, args := range [][]string{
+		{"mcp", "list"},
+		{"mcp", "list", "-w"},
+		{"mcp", "get", "x"},
+		{"mcp", "remove", "x"},
+		{"mcp", "enable", "x"},
+		{"mcp", "disable", "x"},
+		{"mcp", "login", "x"},
+	} {
 		_, err := runCLI(t, args...)
 		assert.Error(t, err, "%v", args)
 		assert.NotEqual(t, exitUsage, exitCodeFor(err), "%v: not a usage error", args)
 	}
+	_, err := runCLI(t, "mcp", "make-global", "x")
+	assert.Error(t, err)
+}
+
+func TestOpenBrowser(t *testing.T) {
+	bin := t.TempDir()
+	name := "xdg-open"
+	if goruntime.GOOS == "darwin" {
+		name = "open"
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	t.Setenv("PATH", bin)
+	openBrowser("https://example.com")
 }
 
 // blitz mcp --workspace: a workspace's own servers, beside the global

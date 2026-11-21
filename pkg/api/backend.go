@@ -22,10 +22,8 @@ import (
 	"github.com/retail-cortex/blitz/pkg/images"
 )
 
-// Backend is what a front end drives: a *Workspace in this process, or a
-// workspace held by the Blitz service (through the client). Front ends
-// use nothing else, so they work the same either way.
-type Backend interface {
+// Lifecycle covers workspace opening, UI routing, background processes and teardown.
+type Lifecycle interface {
 	// Dir is the workspace directory.
 	Dir() string
 	// ModelErr is why the configured model couldn't be built (nil if it
@@ -43,7 +41,10 @@ type Backend interface {
 	// ImagesEnabled reports whether images can be attached.
 	ImagesEnabled() bool
 	Close() error
+}
 
+// TaskBackend covers background task tracking and approval/question handling.
+type TaskBackend interface {
 	// Background tasks (invoke_agent with background: true) of the
 	// sessions this front end ran turns in, oldest first; Task adds its
 	// latest events, in words.
@@ -55,13 +56,19 @@ type Backend interface {
 	// for an approval, text for a question).
 	PendingTaskRequests() []TaskRequest
 	AnswerTaskRequest(id string, decision Decision, answer string) error
+}
 
+// GoalBackend manages turn goals for a session.
+type GoalBackend interface {
 	// The active session's goal: SetGoal sets it (the next turns work
 	// toward it), Goal returns it (ErrNoGoal), ClearGoal removes it.
 	SetGoal(condition string) (Goal, error)
 	Goal() (Goal, error)
 	ClearGoal() error
+}
 
+// StyleBackend handles workspace styles, personalities, hooks, notes, and project settings.
+type StyleBackend interface {
 	// TakeProcessNotices removes and returns what watched background
 	// processes reported while session was idle (the REPL starts a turn).
 	TakeProcessNotices(session string) []string
@@ -81,6 +88,20 @@ type Backend interface {
 	ListNotes() ([]Note, error)
 	ForgetNote(name string) error
 
+	// Reflection is what the harness has to learn from the workspace's
+	// runs, for the welcome (/reflect).
+	Reflection() (Reflection, error)
+
+	// Project settings.
+	ProjectSettings() ProjectSettings
+	// TrustProject records trusting (or declining) the project settings
+	// whose hash is given (ErrProjectChanged if they have changed since).
+	// They load when the workspace next opens.
+	TrustProject(hash string, trusted bool) error
+}
+
+// SpecBackend handles specification review, tracing, verification, and planning.
+type SpecBackend interface {
 	// The project's specification (spec_057_spec_driven): its files in
 	// order, and a review of one (path, its text as edited; judge asks
 	// the model too, which costs).
@@ -103,22 +124,17 @@ type Backend interface {
 	// PlanSpec is how the spec at path would be implemented: what's left,
 	// what it waits for, and the prompt for an agent.
 	PlanSpec(path string) (SpecPlan, error)
+}
 
-	// Reflection is what the harness has to learn from the workspace's
-	// runs, for the welcome (/reflect).
-	Reflection() (Reflection, error)
-
-	// Project settings.
-	ProjectSettings() ProjectSettings
-	// TrustProject records trusting (or declining) the project settings
-	// whose hash is given (ErrProjectChanged if they have changed since).
-	// They load when the workspace next opens.
-	TrustProject(hash string, trusted bool) error
-
+// TurnBackend handles executing turns and steering active turns.
+type TurnBackend interface {
 	// Turns.
 	Run(ctx context.Context, sessionID string, t Turn, on func(Event)) (TurnResult, error)
 	Steer(ctx context.Context, sessionID, text string) error
+}
 
+// SessionBackend manages conversation sessions and snapshots.
+type SessionBackend interface {
 	// Sessions.
 	OpenSession(resume string, cont bool) (SessionInfo, bool, error)
 	ActiveSession() (SessionInfo, bool)
@@ -136,7 +152,10 @@ type Backend interface {
 	// MoveSession carries session id into this workspace from the one it
 	// was in, and makes it active (/cd).
 	MoveSession(id string) (SessionInfo, error)
+}
 
+// AgentModelBackend manages agent definitions, models, model settings, and permission rules.
+type AgentModelBackend interface {
 	// Agents, models and settings.
 	ListAgents() []AgentInfo
 	ActiveAgent() AgentInfo
@@ -162,7 +181,10 @@ type Backend interface {
 	ListPermissionRules() []PermissionRule
 	AddPermissionRule(effect, rule string, save Scope) (PermissionChange, error)
 	RemovePermissionRule(rule string, save Scope) (PermissionChange, error)
+}
 
+// ExtensionBackend manages skills, environments, MCP servers, commands, evals, and git hooks.
+type ExtensionBackend interface {
 	// Skills, environments, MCP and tools.
 	ListSkills() []SkillInfo
 	SearchSkills(query string) []SkillInfo
@@ -182,7 +204,10 @@ type Backend interface {
 	// ValidateAssets checks the workspace's assets (.agents) as Blitz reads
 	// them, and what's worth fixing (spec_065 PK-14).
 	ValidateAssets(ctx context.Context) ([]AssetFinding, error)
+}
 
+// ContextMemoryBackend manages usage, ledger, compaction, memory files, locales, and sandbox status.
+type ContextMemoryBackend interface {
 	// Context, memory and language.
 	SessionUsage() (Usage, error)
 	// SessionLedger is the active session's calls, oldest first, and their
@@ -201,7 +226,10 @@ type Backend interface {
 	AvailableLocales() ([]LocaleInfo, string)
 	SetLocale(ctx context.Context, input string) (LocaleChange, error)
 	SandboxSummary() []string
+}
 
+// ChangeBackend manages checkpoints, undo, rewind, diffs, and approvals.
+type ChangeBackend interface {
 	// Checkpoints and approvals.
 	ListCheckpoints() []Checkpoint
 	// Undo restores the files session's latest turn changed ("": the
@@ -212,28 +240,57 @@ type Backend interface {
 	SessionDiff() string
 	GitDiff(ctx context.Context, color bool) (string, error)
 	ListApprovals() []Approval
+	RevokeApprovals(keys ...string) (int, error)
+	ClearApprovals() (int, error)
+}
 
+// SearchBackend handles workspace and web search.
+type SearchBackend interface {
 	// Workspace search (spec_035_search).
 	Search(ctx context.Context, q SearchQuery) (SearchResult, error)
 	SearchStatus() SearchStatus
 	// Reindex starts a scan of the workspace for search and returns at once.
 	Reindex() error
+	SearchProvider() (string, error)
+	SearchWeb(ctx context.Context, terms string) (WebSearch, error)
+	SearchSession(terms string) (int, string)
+}
 
+// DataBackend manages database connections and read-only data queries.
+type DataBackend interface {
 	// Data (spec_059_data DAT-45): the workspace's database connections
 	// and their saved queries, and a query run read-only on one of them
 	// by name (on, trusted and readable, as a chat's @db: finds it).
 	DataConnections(ctx context.Context) ([]DataConnection, error)
 	RunDataQuery(ctx context.Context, q DataQuery) (DataTable, error)
-	RevokeApprovals(keys ...string) (int, error)
-	ClearApprovals() (int, error)
+}
 
+// ImageBackend manages loading and preparing image attachments.
+type ImageBackend interface {
 	// Images and search.
 	LoadImage(path string) (*images.Image, error)
 	AddImage(name string, data []byte) (*images.Image, error)
 	LoadAttachments(paths []string, prompt string, warn func(string)) ([]*images.Image, error)
-	SearchProvider() (string, error)
-	SearchWeb(ctx context.Context, terms string) (WebSearch, error)
-	SearchSession(terms string) (int, string)
+}
+
+// Backend is what a front end drives: a *Workspace in this process, or a
+// workspace held by the Blitz service (through the client). Front ends
+// use nothing else, so they work the same either way. Composed of domain sub-interfaces (ISP).
+type Backend interface {
+	Lifecycle
+	TaskBackend
+	GoalBackend
+	StyleBackend
+	SpecBackend
+	TurnBackend
+	SessionBackend
+	AgentModelBackend
+	ExtensionBackend
+	ContextMemoryBackend
+	ChangeBackend
+	SearchBackend
+	DataBackend
+	ImageBackend
 }
 
 // Processes are a workspace's background processes, as a front end sees

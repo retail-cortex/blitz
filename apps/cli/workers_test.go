@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -294,4 +295,84 @@ func TestLimitsText(t *testing.T) {
 			assert.Equal(t, c.want, limitsText(c.l))
 		})
 	}
+}
+
+func TestWorkersStopActiveAndServiceErrors(t *testing.T) {
+	t.Run("stop running worker by name", func(t *testing.T) {
+		home := isolate(t)
+		started := make(chan struct{}, 1)
+		release := make(chan struct{})
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			if !strings.HasSuffix(r.URL.Path, "/responses") {
+				http.NotFound(w, r)
+				return
+			}
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"id":"resp_1","model":"fake","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`)
+		}))
+		t.Cleanup(func() {
+			close(release)
+			srv.Close()
+		})
+		dir := filepath.Join(home, ".blitz")
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		settings := fmt.Sprintf("[llm]\nprovider = \"ollama\"\n\n[llm.openai]\nbase_url = %q\nmodel = \"fake\"\n", srv.URL+"/v1")
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.toml"), []byte(settings), 0o600))
+
+		ws := t.TempDir()
+		addWorker(t, ws, "slow", "---\nschedule: daily at noon\n---\nTake your time.\n")
+		_, err := runCLI(t, "-d", ws, "workers", "enable", "slow", "--yes")
+		require.NoError(t, err)
+
+		runDone := make(chan error, 1)
+		go func() {
+			_, err := runCLI(t, "-d", ws, "workers", "run", "slow")
+			runDone <- err
+		}()
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+			t.Fatal("worker run did not reach model")
+		}
+		out, err := runCLI(t, "-d", ws, "workers", "stop", "slow")
+		require.NoError(t, err, out)
+		assert.Contains(t, out, "Stopping slow")
+		<-runDone
+	})
+
+	t.Run("ensureService failure across worker subcommands", func(t *testing.T) {
+		isolate(t)
+		inner := startShared
+		startShared = func(context.Context, string) error { return errors.New("service down") }
+		t.Cleanup(func() { startShared = inner })
+		ws := t.TempDir()
+		for _, args := range [][]string{
+			{"-d", ws, "workers"},
+			{"-d", ws, "workers", "enable", "x", "--yes"},
+			{"-d", ws, "workers", "disable", "x"},
+			{"-d", ws, "workers", "run", "x"},
+			{"-d", ws, "workers", "runs", "x"},
+			{"-d", ws, "workers", "stop", "x"},
+			{"-d", ws, "workers", "undo", "r1"},
+			{"-d", ws, "jobs", "move", "x"},
+		} {
+			_, err := runCLI(t, args...)
+			assert.ErrorContains(t, err, "service down")
+		}
+	})
+
+	t.Run("workerErr preserves non-sentinel errors", func(t *testing.T) {
+		plain := errors.New("boom")
+		assert.Equal(t, plain, workerErr(plain))
+	})
 }

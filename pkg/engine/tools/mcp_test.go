@@ -19,14 +19,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/tool"
 	"google.golang.org/adk/v2/tool/mcptoolset"
@@ -228,4 +232,101 @@ func TestMCPManagerCloseEndsHTTPSessions(t *testing.T) {
 	for ss := range server.Sessions() { // the test server's side of it
 		ss.Close()
 	}
+}
+
+func TestMCPProcClosesPipes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell and signals")
+	}
+	old := mcpTerminateWait
+	mcpTerminateWait = 50 * time.Millisecond
+	t.Cleanup(func() { mcpTerminateWait = old })
+
+	start := func(t *testing.T, argv []string) *mcpProc {
+		t.Helper()
+		p, err := startMCPProc(func() (*guardedCmd, error) {
+			return (*ExecEnv)(nil).command(context.Background(), argv)
+		})
+		require.NoError(t, err)
+		return p
+	}
+
+	assertPipesClosed := func(t *testing.T, p *mcpProc) {
+		t.Helper()
+		_, err := p.stdin.Write([]byte("x"))
+		assert.ErrorIs(t, err, os.ErrClosed, "stdin pipe should be closed")
+		var buf [1]byte
+		_, err = p.stdout.Read(buf[:])
+		assert.ErrorIs(t, err, os.ErrClosed, "stdout pipe should be closed")
+	}
+
+	t.Run("Close closes stdin and stdout when child exits on EOF", func(t *testing.T) {
+		p := start(t, []string{"cat"})
+		require.NoError(t, p.Close())
+		<-p.done
+		assertPipesClosed(t, p)
+	})
+
+	t.Run("Close kills unresponsive child and closes both pipes", func(t *testing.T) {
+		p := start(t, []string{"sh", "-c", `trap "" TERM; while :; do sleep 1; done`})
+		require.NoError(t, p.Close())
+		<-p.done
+		assertPipesClosed(t, p)
+	})
+
+	t.Run("kill closes both pipes on running process", func(t *testing.T) {
+		p := start(t, []string{"cat"})
+		p.kill()
+		select {
+		case <-p.done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("process did not exit after kill")
+		}
+		assertPipesClosed(t, p)
+	})
+
+	t.Run("kill closes both pipes even after child already exited", func(t *testing.T) {
+		p := start(t, []string{"true"})
+		select {
+		case <-p.done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("process did not exit")
+		}
+		p.kill()
+		assertPipesClosed(t, p)
+	})
+
+	t.Run("kill on nil is safe", func(t *testing.T) {
+		var p *mcpProc
+		assert.NotPanics(t, p.kill)
+	})
+}
+
+type fakeReadonlyCtx struct {
+	agent.ReadonlyContext
+	name string
+}
+
+func (f fakeReadonlyCtx) AgentName() string { return f.name }
+
+func TestMCPContextWrappers(t *testing.T) {
+	type ctxKey struct{}
+	base := createTestToolContext()
+	derived, cancel := context.WithTimeout(context.WithValue(base, ctxKey{}, "val"), 50*time.Millisecond)
+	defer cancel()
+
+	ro := readonlyWith{adkReadonly{fakeReadonlyCtx{name: "mcp-agent"}}, derived}
+	assert.Equal(t, "mcp-agent", ro.AgentName())
+	assert.Equal(t, "val", ro.Value(ctxKey{}))
+	_, hasDeadline := ro.Deadline()
+	assert.True(t, hasDeadline)
+
+	tw := toolWith{adkTool{base}, derived}
+	assert.Equal(t, base.FunctionCallID(), tw.FunctionCallID())
+	assert.Equal(t, "val", tw.Value(ctxKey{}))
+	cancel()
+	<-ro.Done()
+	<-tw.Done()
+	assert.ErrorIs(t, ro.Err(), context.Canceled)
+	assert.ErrorIs(t, tw.Err(), context.Canceled)
 }

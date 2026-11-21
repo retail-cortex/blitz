@@ -352,6 +352,31 @@ func TestTrustStore(t *testing.T) {
 	assert.Equal(t, TrustNew, s.State("/other", "sha256:a"), "trust is per directory")
 }
 
+func TestTrustStoreDamaged(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "{damaged"},
+		{name: "wrong type", raw: `{"workspaces": "bad"}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, "trust.json")
+			require.NoError(t, os.WriteFile(p, []byte(tc.raw), 0o600))
+
+			s := OpenTrustStore(dir)
+			assert.Equal(t, TrustNew, s.State("/w", "sha256:a"))
+			assert.NoFileExists(t, p)
+			assert.FileExists(t, p+".damaged")
+
+			require.NoError(t, s.Set("/w", "sha256:a", true))
+			assert.Equal(t, TrustTrusted, s.State("/w", "sha256:a"))
+		})
+	}
+}
+
 // A repository's .mcp.json (Claude Code) and .agents/mcp_config.json
 // (Antigravity) are its MCP servers: they wait for trust like any.
 func TestProjectMCPJSON(t *testing.T) {

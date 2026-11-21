@@ -19,7 +19,6 @@ go_library(
     srcs = [
         "agentmodels.go",
         "apiprovider.go",
-        "atomic.go",
         "background.go",
         "browserprofiles.go",
         "check.go",
@@ -51,6 +50,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/config",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/atomicfile",
         "//pkg/jobspec",
         "//pkg/secrets",
         "@com_github_anthropics_anthropic_sdk_go//config",
@@ -65,7 +65,6 @@ go_test(
     srcs = [
         "agentmodels_test.go",
         "apiprovider_test.go",
-        "atomic_test.go",
         "browserprofiles_test.go",
         "check_test.go",
         "config_test.go",

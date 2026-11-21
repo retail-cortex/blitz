@@ -15,12 +15,13 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
-	"os"
+	"log/slog"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // What a person decided about a workspace's project settings, for the
@@ -110,8 +111,8 @@ func (s *TrustStore) readLocked() map[string]trustEntry {
 	var f struct {
 		Workspaces map[string]trustEntry `json:"workspaces"`
 	}
-	if data, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(data, &f)
+	if _, err := atomicfile.ReadJSONOrQuarantine(s.path, &f); err != nil {
+		slog.Warn("trust store unreadable; using empty defaults", "path", s.path, "error", err)
 	}
 	if f.Workspaces == nil {
 		f.Workspaces = map[string]trustEntry{}
@@ -120,10 +121,10 @@ func (s *TrustStore) readLocked() map[string]trustEntry {
 }
 
 func (s *TrustStore) writeLocked(all map[string]trustEntry) error {
-	err := writeJSONAtomic(s.path, struct {
+	err := atomicfile.WriteJSON(s.path, struct {
 		Version    int                   `json:"version"`
 		Workspaces map[string]trustEntry `json:"workspaces"`
-	}{1, all})
+	}{1, all}, 0o600)
 	if err != nil {
 		return errors.Join(errors.New("saving the trust decision"), err)
 	}

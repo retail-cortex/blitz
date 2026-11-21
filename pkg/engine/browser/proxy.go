@@ -43,8 +43,9 @@ type proxy struct {
 	// refused records what was refused, for the tool to report.
 	refused func(host string, err error)
 
-	mu    sync.Mutex
-	conns map[net.Conn]struct{}
+	mu     sync.Mutex
+	closed bool
+	conns  map[net.Conn]struct{}
 }
 
 // ErrBlockedAddress means the browser tried to reach an address that isn't
@@ -96,10 +97,13 @@ func (p *proxy) close() {
 	p.srv.Close()
 	p.transport.CloseIdleConnections()
 	p.mu.Lock()
-	for c := range p.conns {
+	p.closed = true
+	conns := p.conns
+	p.conns = nil
+	p.mu.Unlock()
+	for c := range conns {
 		c.Close()
 	}
-	p.mu.Unlock()
 }
 
 func (p *proxy) check(host string) error {
@@ -176,27 +180,50 @@ func (p *proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 		upstream.Close()
 		return
 	}
-	p.track(client, upstream)
-	client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+	if !p.track(client, upstream) {
+		return
+	}
+	if _, err := client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+		client.Close()
+		upstream.Close()
+		p.untrack(client, upstream)
+		return
+	}
 	go func() {
+		defer upstream.Close()
 		if n := buf.Reader.Buffered(); n > 0 {
-			b, _ := buf.Reader.Peek(n)
-			upstream.Write(b)
+			b, err := buf.Reader.Peek(n)
+			if err != nil {
+				return
+			}
+			if _, err := upstream.Write(b); err != nil {
+				return
+			}
 		}
 		io.Copy(upstream, client)
-		upstream.Close()
 	}()
 	io.Copy(client, upstream)
 	client.Close()
 	p.untrack(client, upstream)
 }
 
-func (p *proxy) track(cs ...net.Conn) {
+func (p *proxy) track(cs ...net.Conn) bool {
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	if p.closed {
+		p.mu.Unlock()
+		for _, c := range cs {
+			c.Close()
+		}
+		return false
+	}
+	if p.conns == nil {
+		p.conns = map[net.Conn]struct{}{}
+	}
 	for _, c := range cs {
 		p.conns[c] = struct{}{}
 	}
+	p.mu.Unlock()
+	return true
 }
 
 func (p *proxy) untrack(cs ...net.Conn) {

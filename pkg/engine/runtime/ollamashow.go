@@ -22,6 +22,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/netutil"
 )
 
 // ollamaShowTimeout bounds asking Ollama about a model: it answers at
@@ -48,7 +50,9 @@ func showOllama(ctx context.Context, baseURL, model string) (listedFacts, bool) 
 		return listedFacts{}, false
 	}
 	req.Header.Set("Content-Type", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	hc := netutil.NewClient(ollamaShowTimeout)
+	defer hc.CloseIdleConnections()
+	res, err := hc.Do(req)
 	if err != nil {
 		return listedFacts{}, false
 	}

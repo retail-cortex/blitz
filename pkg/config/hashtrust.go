@@ -16,10 +16,13 @@ package config
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // HashTrust keeps what the person reviewed and trusted, by path (symbolic
@@ -108,15 +111,26 @@ func (s *HashTrust) Forget(path string) error {
 
 // writeLocked writes the decisions in place of the file, atomically.
 func (s *HashTrust) writeLocked(all map[string]hashTrustEntry) error {
-	return writeJSONAtomic(s.path, map[string]any{"version": 1, s.key: all})
+	return atomicfile.WriteJSON(s.path, map[string]any{"version": 1, s.key: all}, 0o600)
 }
 
 // readLocked reads the decisions; a missing or damaged file has none.
 func (s *HashTrust) readLocked() map[string]hashTrustEntry {
 	var f map[string]json.RawMessage
 	all := map[string]hashTrustEntry{}
-	if data, err := os.ReadFile(s.path); err == nil && json.Unmarshal(data, &f) == nil {
-		_ = json.Unmarshal(f[s.key], &all)
+	ok, err := atomicfile.ReadJSONOrQuarantine(s.path, &f)
+	if err != nil {
+		slog.Warn("hash trust store unreadable; using empty defaults", "path", s.path, "error", err)
+		return all
+	}
+	if ok && len(f[s.key]) > 0 {
+		if err := json.Unmarshal(f[s.key], &all); err != nil {
+			slog.Warn("quarantining damaged JSON state file", "path", s.path, "key", s.key, "error", err)
+			if rerr := os.Rename(s.path, s.path+".damaged"); rerr != nil {
+				slog.Warn("quarantining damaged hash trust store failed", "path", s.path, "error", rerr)
+			}
+			return map[string]hashTrustEntry{}
+		}
 	}
 	if all == nil {
 		all = map[string]hashTrustEntry{}

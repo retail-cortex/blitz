@@ -26,6 +26,7 @@ import (
 	goruntime "runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/loginitem"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -237,4 +238,74 @@ func TestServeRunsBlitzd(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	_, err = runCLI(t, "serve")
 	assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
+}
+
+func TestServiceErrorPaths(t *testing.T) {
+	if goruntime.GOOS != "darwin" && goruntime.GOOS != "linux" {
+		t.Skip("login items are only supported on macOS and Linux")
+	}
+
+	t.Run("uninstall failure", func(t *testing.T) {
+		isolate(t)
+		blitzdOnPath(t, "exit 0")
+		fakeSystem(t, nil)
+		_, err := runCLI(t, "service", "install")
+		require.NoError(t, err)
+		unitPath, err := loginitem.Path()
+		require.NoError(t, err)
+		unitDir := filepath.Dir(unitPath)
+		require.NoError(t, os.Chmod(unitDir, 0o500))
+		t.Cleanup(func() { _ = os.Chmod(unitDir, 0o700) })
+		_, err = runCLI(t, "service", "uninstall")
+		assert.Error(t, err)
+	})
+
+	t.Run("restart via login item fails on restart command", func(t *testing.T) {
+		isolate(t)
+		blitzdOnPath(t, "exit 0")
+		fakeSystem(t, nil)
+		_, err := runCLI(t, "service", "install")
+		require.NoError(t, err)
+		fakeSystem(t, errors.New("kickstart failed"))
+		_, err = runCLI(t, "service", "restart")
+		assert.ErrorContains(t, err, "kickstart failed")
+	})
+
+	t.Run("restart via login item times out waiting for service", func(t *testing.T) {
+		isolate(t)
+		blitzdOnPath(t, "exit 0")
+		fakeSystem(t, nil)
+		_, err := runCLI(t, "service", "install")
+		require.NoError(t, err)
+		oldWait := startWait
+		startWait = 80 * time.Millisecond
+		t.Cleanup(func() { startWait = oldWait })
+		_, err = runCLI(t, "service", "restart")
+		assert.Error(t, err)
+	})
+
+	t.Run("restart on demand fails when ensureService fails", func(t *testing.T) {
+		isolate(t)
+		_, err := ensureService(context.Background())
+		require.NoError(t, err)
+		inner := startShared
+		startShared = func(context.Context, string) error { return errors.New("start failed") }
+		t.Cleanup(func() { startShared = inner })
+		_, err = runCLI(t, "service", "restart")
+		assert.ErrorContains(t, err, "start failed")
+	})
+
+	t.Run("waitStopped timeout and cancellation", func(t *testing.T) {
+		isolate(t)
+		sock := startService(t)
+		oldWait := startWait
+		startWait = 30 * time.Millisecond
+		t.Cleanup(func() { startWait = oldWait })
+		assert.ErrorContains(t, waitStopped(context.Background(), sock), "didn't stop within")
+
+		startWait = 5 * time.Second
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		assert.ErrorIs(t, waitStopped(ctx, sock), context.Canceled)
+	})
 }

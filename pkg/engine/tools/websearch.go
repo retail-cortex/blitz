@@ -32,7 +32,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
-
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -151,7 +151,7 @@ func newWebSearcher(cfg WebSearchConfig) (*webSearcher, error) {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = config.DefaultWebTimeoutSeconds * time.Second
 	}
-	return &webSearcher{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}}, nil
+	return &webSearcher{cfg: cfg, client: netutil.NewClient(cfg.Timeout)}, nil
 }
 
 // WebSearchInput defines arguments for web_search.
@@ -426,8 +426,10 @@ var groundingRedirectHost = func(host string) bool {
 func (s *webSearcher) resolveRedirects(ctx context.Context, results []SearchResult) {
 	client := &http.Client{
 		Timeout:       10 * time.Second,
+		Transport:     netutil.CloneDefaultTransport(),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
+	defer client.CloseIdleConnections()
 	var wg sync.WaitGroup
 	for i := range results {
 		u, err := url.Parse(results[i].URL)
