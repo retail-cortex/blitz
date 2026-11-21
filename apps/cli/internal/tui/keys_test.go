@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/ergochat/readline"
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -370,4 +371,15 @@ func TestCancelledReadLeavesTheEditor(t *testing.T) {
 			assert.Equal(t, "next", line)
 		})
 	}
+}
+
+// A blitz the agent's command started refuses unsafe, by any name; the
+// person's own blitz takes it (spec_005 APR-14e).
+func TestUnsafeFromAgent(t *testing.T) {
+	assert.NoError(t, UnsafeFromAgent("unsafe"), "the person's own blitz")
+	t.Setenv(activity.AgentEnv, "1")
+	for _, m := range []string{"unsafe", "FAFO", "no-sandbox"} {
+		assert.ErrorIs(t, UnsafeFromAgent(m), api.ErrUnsafeNotHere, m)
+	}
+	assert.NoError(t, UnsafeFromAgent("plan"), "a stricter mode is fine")
 }

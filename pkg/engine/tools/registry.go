@@ -319,8 +319,14 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 		mode, modeNote = api.ModeDefault, api.ErrBypassNeedsSandbox
 	}
 	orgActive := cfg.Enterprise.URL != ""
-	if mode == api.ModeUnsafe && orgActive {
-		mode, modeNote = api.ModeDefault, api.ErrUnsafeNotHere
+	// Unsafe is never where a workspace starts, whatever a settings file
+	// says (one the agent's command could have written): the person
+	// chooses it each time (APR-14e).
+	if mode == api.ModeUnsafe {
+		mode, modeNote = api.ModeDefault, api.ErrUnsafeChosenEachTime
+		if orgActive {
+			modeNote = api.ErrUnsafeNotHere
+		}
 	}
 
 	r := &Registry{

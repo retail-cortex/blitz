@@ -181,9 +181,12 @@ func TestUnsafeModeAndTheOrganization(t *testing.T) {
 	r, err := NewRegistry(cfg, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { r.Close() })
+	// Never where a workspace starts, whatever its settings say: chosen
+	// each time (a settings file is one the agent's command could write).
+	assert.Equal(t, api.ModeDefault, r.Hooks().Mode())
+	assert.ErrorIs(t, r.ModeNote(), api.ErrUnsafeChosenEachTime)
+	require.NoError(t, r.SetPermissionMode(api.ModeUnsafe), "chosen, it's taken")
 	assert.Equal(t, api.ModeUnsafe, r.Hooks().Mode())
-	require.NoError(t, r.SetPermissionMode(api.ModeDefault))
-	require.NoError(t, r.SetPermissionMode(api.ModeUnsafe))
 
 	org := config.DefaultConfig()
 	org.Tools.WorkspaceDir = t.TempDir()

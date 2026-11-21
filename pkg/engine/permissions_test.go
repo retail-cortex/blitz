@@ -20,9 +20,11 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -252,4 +254,47 @@ func TestPermissionsProblem(t *testing.T) {
 	good.Permissions.Deny = []string{"shell(rm *)"}
 	require.NoError(t, w.ReloadPermissions(&good))
 	assert.NoError(t, w.PermissionsProblem())
+}
+
+// Unsafe is chosen only while the agent isn't working in the workspace: a
+// switch then could be the agent's own (a command reaching the service),
+// so a turn, or a background process it started, refuses it; idle, it's
+// taken (APR-14e).
+func TestUnsafeOnlyWhileTheAgentIsIdle(t *testing.T) {
+	w := openTest(t)
+	w.turnStarted("s1")
+	_, err := w.SetPermissionMode("unsafe")
+	require.ErrorIs(t, err, api.ErrUnsafeWhileAgentWorks, "during a turn")
+	w.turnEnded("s1")
+
+	bp, err := w.tools.Processes().Start("s1", "sleep 30", w.Dir())
+	require.NoError(t, err)
+	_, err = w.SetPermissionMode("unsafe")
+	require.ErrorIs(t, err, api.ErrUnsafeWhileAgentWorks, "a background process of the agent's still running")
+	_, err = w.tools.Processes().Kill(bp.ID)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return len(w.RunningProcesses()) == 0 }, 5*time.Second, 20*time.Millisecond)
+
+	got, err := w.SetPermissionMode("fafo")
+	require.NoError(t, err, "idle: the person's choice")
+	assert.Equal(t, "unsafe", got)
+	_, err = w.SetPermissionMode("default")
+	require.NoError(t, err, "leaving it is always allowed")
+}
+
+// A workflow that asks for unsafe runs in the workspace's mode, held:
+// only a workspace the person put in unsafe runs one in it (APR-14e).
+func TestWorkflowNeverReachesUnsafe(t *testing.T) {
+	w := openTest(t)
+	_, err := w.SetPermissionMode("default")
+	require.NoError(t, err)
+	_, mode, held := w.flowMode(context.Background(), flows.Flow{Mode: "unsafe"})
+	assert.Equal(t, api.ModeDefault, mode)
+	assert.Equal(t, api.ModeUnsafe, held, "held, and said so")
+	_, err = w.SetPermissionMode("bypass")
+	if err == nil { // bypass needs the sandbox; where it's on, unsafe is still looser
+		_, mode, held = w.flowMode(context.Background(), flows.Flow{Mode: "unsafe"})
+		assert.Equal(t, api.ModeBypass, mode)
+		assert.Equal(t, api.ModeUnsafe, held)
+	}
 }

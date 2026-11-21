@@ -234,6 +234,15 @@ var ErrSandboxUnavailable = errors.New("the OS sandbox is unavailable")
 // connected to an organization.
 var ErrUnsafeNotHere = errors.New("unsafe mode runs commands outside the sandbox: only you can switch to it (with /mode unsafe, or in the window), and not while you're connected to an organization")
 
+// ErrUnsafeChosenEachTime is a setting asking to start in unsafe mode:
+// it's never kept, so the workspace opens in default.
+var ErrUnsafeChosenEachTime = errors.New("unsafe mode isn't kept in settings: choose it each time, with /mode unsafe or the window's mode menu")
+
+// ErrUnsafeWhileAgentWorks refuses unsafe mode while the agent is at work
+// in the workspace (a turn, a background task, a background process it
+// started): only the person switches to it, when the agent isn't acting.
+var ErrUnsafeWhileAgentWorks = errors.New("unsafe mode can't be chosen while the agent is working here (a turn, a background task or a background process): wait for it to finish, or stop it, then choose unsafe")
+
 // ErrBypassNeedsSandbox refuses bypass mode without an active OS sandbox.
 var ErrBypassNeedsSandbox = errors.New("bypass mode needs the OS sandbox (sandbox.shell), which isn't active")
 

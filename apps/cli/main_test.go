@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine"
@@ -466,4 +467,12 @@ func TestResolvePromptReadErrorAndRootErrors(t *testing.T) {
 			assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
 		})
 	}
+	// A blitz the agent's command started never takes unsafe mode: only
+	// the person chooses it (spec_005 APR-14e).
+	t.Run("unsafe from the agent's command", func(t *testing.T) {
+		t.Setenv(activity.AgentEnv, "1")
+		_, err := runCLI(t, "-d", ws, "--permission-mode", "unsafe", "hello")
+		assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
+		assert.ErrorIs(t, err, api.ErrUnsafeNotHere)
+	})
 }

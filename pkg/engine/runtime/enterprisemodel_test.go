@@ -26,7 +26,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/agents"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
@@ -447,4 +450,23 @@ func TestMaskQuery(t *testing.T) {
 	assert.Equal(t, "https://gw.example/v1?api-version=2&subscription-key=REDACTED", maskQuery("https://gw.example/v1?subscription-key=abc123&api-version=2"))
 	assert.Equal(t, "https://gw.example/v1?a=1", maskQuery("https://gw.example/v1?a=1"))
 	assert.Equal(t, "https://gw.example/v1", maskQuery("https://gw.example/v1"))
+}
+
+// An agent's own permission_mode never takes its run to unsafe, though a
+// built-in agent's may loosen the mode otherwise (APR-14e): its context
+// keeps the workspace's mode.
+func TestAgentPermissionModeNeverUnsafe(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	reg, err := tools.NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { reg.Close() })
+	require.NoError(t, reg.SetPermissionMode(api.ModeDefault))
+	e := &Engine{cfg: cfg, toolReg: reg}
+	for _, m := range []string{"unsafe", "fafo", "no-sandbox"} {
+		ctx := e.agentRun(context.Background(), &agents.AgentSpec{AgentMetadata: agents.AgentMetadata{Name: "helper", PermissionMode: m}})
+		assert.Equal(t, api.ModeDefault, reg.Hooks().ModeOf(ctx), m)
+	}
+	ctx := e.agentRun(context.Background(), &agents.AgentSpec{AgentMetadata: agents.AgentMetadata{Name: "helper", PermissionMode: "accept-edits"}})
+	assert.Equal(t, api.ModeAcceptEdits, reg.Hooks().ModeOf(ctx), "another looser mode still applies to a built-in agent")
 }

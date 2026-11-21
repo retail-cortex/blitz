@@ -51,7 +51,8 @@ export function setEffort(dir: string, value: string) {
  */
 export async function keepPermissionMode(dir: string, mode: string) {
   const r = await workspaces.setPermissionMode({ workspace: dir, mode });
-  await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: r.mode });
+  // Unsafe is chosen each time, never kept (spec_005 APR-14e).
+  if (r.mode !== "unsafe") await config.setConfigValue({ workspace: dir, key: "blitz.permission_mode", value: r.mode });
   return r.mode;
 }
 

@@ -417,6 +417,9 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		}
 	}()
 	if o.mode != "" {
+		if err := tui.UnsafeFromAgent(o.mode); err != nil {
+			return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
+		}
 		if _, err := w.SetPermissionMode(o.mode); err != nil {
 			return withCode(exitUsage, fmt.Errorf("--permission-mode: %w", err))
 		}
