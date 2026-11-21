@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -222,7 +223,7 @@ func NewScriptHooks(cfg config.HooksConfig, env *ExecEnv, workspace string, log 
 	}
 	return &ScriptHooks{
 		hooks: cfg.ByEvent(), exec: env, workspace: workspace, audit: log, Warn: func(string) {},
-		HTTP: &http.Client{}, ifs: ifs, failures: map[string][]HookFailure{},
+		HTTP: netutil.NewClient(0), ifs: ifs, failures: map[string][]HookFailure{},
 	}, nil
 }
 

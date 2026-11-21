@@ -35,6 +35,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/breaker"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/mcpauth"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
@@ -158,10 +159,12 @@ var mcpTerminateWait = 5 * time.Second
 // connection is ever closed. The SDK talks to it over its pipes; closing
 // the connection closes its input, then signals, then kills it.
 type mcpProc struct {
-	cmd    *guardedCmd
-	stdin  *os.File      // our end of its input
-	stdout *os.File      // our end of its output
-	done   chan struct{} // closed once it's reaped
+	cmd        *guardedCmd
+	stdin      *os.File      // our end of its input
+	stdout     *os.File      // our end of its output
+	done       chan struct{} // closed once it's reaped
+	stdinOnce  sync.Once
+	stdoutOnce sync.Once
 }
 
 // startMCPProc builds and starts a server. Its pipes are plain os.Pipes,
@@ -203,10 +206,27 @@ func startMCPProc(build func() (*guardedCmd, error)) (*mcpProc, error) {
 // Write sends to the server's input.
 func (p *mcpProc) Write(b []byte) (int, error) { return p.stdin.Write(b) }
 
+func (p *mcpProc) closeStdin() {
+	p.stdinOnce.Do(func() {
+		if p.stdin != nil {
+			_ = p.stdin.Close()
+		}
+	})
+}
+
+func (p *mcpProc) closeStdout() {
+	p.stdoutOnce.Do(func() {
+		if p.stdout != nil {
+			_ = p.stdout.Close()
+		}
+	})
+}
+
 // Close ends the server as the MCP spec asks: its input closed, then
 // SIGTERM, then SIGKILL to its process group, waiting a while after each.
 func (p *mcpProc) Close() error {
-	p.stdin.Close()
+	defer p.closeStdout()
+	p.closeStdin()
 	if p.waitDone() {
 		return nil
 	}
@@ -240,8 +260,9 @@ func (p *mcpProc) kill() {
 	case <-p.done:
 	default:
 		_ = killProcessGroup(p.cmd.Cmd)
-		p.stdin.Close()
 	}
+	p.closeStdin()
+	p.closeStdout()
 }
 
 // closingTransport remembers the connections it makes, so closing it ends
@@ -728,7 +749,7 @@ func (r *recordingToolset) Tools(ctx agent.ReadonlyContext) ([]tool.Tool, error)
 	}
 	lctx, cancel := context.WithTimeout(ctx, mcpListTimeout)
 	defer cancel()
-	tools, err := r.srv.toolset.Tools(readonlyWith{ctx, lctx})
+	tools, err := r.srv.toolset.Tools(readonlyWith{adkReadonly{ctx}, lctx})
 	if err != nil {
 		r.srv.setState(0, err)
 		r.m.recordFailure(ctx, r.srv, err)
@@ -816,7 +837,7 @@ func (p *managedTool) Run(ctx agent.Context, args any) (map[string]any, error) {
 	cctx, cancel := context.WithTimeout(ctx, p.srv.callTimeout())
 	defer cancel()
 	defer p.srv.startCall(ctx)()
-	res, err := p.inner.Run(toolWith{ctx, cctx}, args)
+	res, err := p.inner.Run(toolWith{adkTool{ctx}, cctx}, args)
 	switch {
 	case err == nil:
 		p.m.recordSuccess(ctx, p.srv)
@@ -890,27 +911,21 @@ func turnNotices(ctx context.Context) func(string) {
 	return f
 }
 
-// readonlyWith and toolWith keep an ADK context's methods but take
-// deadline, cancellation and values from a derived context.
-type readonlyWith struct {
-	agent.ReadonlyContext
-	ctx context.Context
-}
+type adkReadonly struct{ agent.ReadonlyContext }
+type adkTool struct{ agent.Context }
 
-func (c readonlyWith) Deadline() (time.Time, bool) { return c.ctx.Deadline() }
-func (c readonlyWith) Done() <-chan struct{}       { return c.ctx.Done() }
-func (c readonlyWith) Err() error                  { return c.ctx.Err() }
-func (c readonlyWith) Value(key any) any           { return c.ctx.Value(key) }
+// readonlyWith and toolWith keep an ADK context's methods but take
+// deadline, cancellation and values from a derived context (whose
+// embedded context.Context sits shallower than the wrapped ADK context).
+type readonlyWith struct {
+	adkReadonly
+	context.Context
+}
 
 type toolWith struct {
-	agent.Context
-	ctx context.Context
+	adkTool
+	context.Context
 }
-
-func (c toolWith) Deadline() (time.Time, bool) { return c.ctx.Deadline() }
-func (c toolWith) Done() <-chan struct{}       { return c.ctx.Done() }
-func (c toolWith) Err() error                  { return c.ctx.Err() }
-func (c toolWith) Value(key any) any           { return c.ctx.Value(key) }
 
 // mcpApproval builds the approval request for an MCP tool call.
 func mcpApproval(server, toolName string, args map[string]any) api.ApprovalRequest {
@@ -946,13 +961,14 @@ func (r *Registry) ApproveMCP(ctx context.Context, toolName string, args map[str
 	return r.hooks.Approve(ctx, req)
 }
 
-// withHeaders is an HTTP client that sends headers with every request
-// (nil: the default client).
+// withHeaders is an HTTP client that clones Go's default transport (picking
+// up [network] ca_file) and sends headers with every request when non-empty.
 func withHeaders(headers map[string]string) *http.Client {
+	tr := netutil.CloneDefaultTransport()
 	if len(headers) == 0 {
-		return nil
+		return &http.Client{Transport: tr}
 	}
-	return &http.Client{Transport: headerTransport{headers: headers, base: http.DefaultTransport}}
+	return &http.Client{Transport: headerTransport{headers: headers, base: tr}}
 }
 
 // headerTransport adds a server's configured headers to its requests.

@@ -25,13 +25,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,6 +39,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 )
 
 // URL is where the pings go (AI-10); BLITZ_ACTIVITY_URL replaces it
@@ -92,6 +94,11 @@ type Recorder struct {
 
 	mu       sync.Mutex // activity.json's reads and writes in this process, one at a time; never held over the network
 	flushing sync.Mutex // one flush at a time, so a ping isn't sent twice by this process
+
+	clientMu     sync.Mutex
+	cachedClient *http.Client
+	cachedCAFile string
+	cachedCAMod  time.Time
 }
 
 func (r *Recorder) now() time.Time {
@@ -130,27 +137,20 @@ func (r *Recorder) file() string { return filepath.Join(r.Dir, "activity.json") 
 
 func (r *Recorder) load() state {
 	var s state
-	if data, err := os.ReadFile(r.file()); err == nil {
-		_ = json.Unmarshal(data, &s)
+	if _, err := atomicfile.ReadJSONOrQuarantine(r.file(), &s); err != nil {
+		slog.Warn("activity state unreadable; starting fresh", "path", r.file(), "error", err)
 	}
 	return s
 }
 
-// save writes s whole, through a private file beside it (one for each
-// process), so a reader never sees half of it.
+// save writes s whole, through a temporary file beside it, so a reader
+// never sees half of it.
 func (r *Recorder) save(s state) error {
 	data, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(r.Dir, 0o700); err != nil {
-		return err
-	}
-	tmp := fmt.Sprintf("%s.%d.tmp", r.file(), os.Getpid())
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, r.file())
+	return atomicfile.MkdirWrite(r.file(), data, 0o700, 0o600)
 }
 
 // recent keeps es from the last Keep days before today, and today.
@@ -288,32 +288,55 @@ func (r *Recorder) post(ctx context.Context, url string, ping map[string]string)
 	return res.StatusCode, nil
 }
 
-// client is Go's default transport, trusting CAFile's certificate
-// authorities too.
+// client returns a cached HTTP client using Go's default transport and
+// trusting CAFile's certificate authorities too.
 func (r *Recorder) client() (*http.Client, error) {
-	t := http.DefaultTransport.(*http.Transport).Clone()
+	caFile := ""
 	if r.CAFile != nil {
-		if file := r.CAFile(); file != "" {
-			pem, err := os.ReadFile(file)
-			if err != nil {
-				return nil, fmt.Errorf("[network] ca_file: %w", err)
-			}
-			pool, err := x509.SystemCertPool()
-			if err != nil || pool == nil {
-				pool = x509.NewCertPool()
-			}
-			if !pool.AppendCertsFromPEM(pem) {
-				return nil, fmt.Errorf("[network] ca_file %s: no PEM certificates in it", file)
-			}
-			tc := &tls.Config{MinVersion: tls.VersionTLS12}
-			if t.TLSClientConfig != nil {
-				tc = t.TLSClientConfig.Clone()
-			}
-			tc.RootCAs = pool
-			t.TLSClientConfig = tc
-		}
+		caFile = r.CAFile()
 	}
-	return &http.Client{Transport: t}, nil
+	var mod time.Time
+	if caFile != "" {
+		info, err := os.Stat(caFile)
+		if err != nil {
+			r.clearCachedClient()
+			return nil, fmt.Errorf("[network] ca_file: %w", err)
+		}
+		mod = info.ModTime()
+	}
+	r.clientMu.Lock()
+	defer r.clientMu.Unlock()
+	if r.cachedClient != nil && r.cachedCAFile == caFile && (caFile == "" || r.cachedCAMod.Equal(mod)) {
+		return r.cachedClient, nil
+	}
+	tr, err := netutil.NewTransport(caFile)
+	if err != nil {
+		if r.cachedClient != nil {
+			r.cachedClient.CloseIdleConnections()
+			r.cachedClient = nil
+			r.cachedCAFile = ""
+			r.cachedCAMod = time.Time{}
+		}
+		return nil, err
+	}
+	if r.cachedClient != nil {
+		r.cachedClient.CloseIdleConnections()
+	}
+	r.cachedClient = &http.Client{Timeout: Wait, Transport: tr}
+	r.cachedCAFile = caFile
+	r.cachedCAMod = mod
+	return r.cachedClient, nil
+}
+
+func (r *Recorder) clearCachedClient() {
+	r.clientMu.Lock()
+	if r.cachedClient != nil {
+		r.cachedClient.CloseIdleConnections()
+		r.cachedClient = nil
+		r.cachedCAFile = ""
+		r.cachedCAMod = time.Time{}
+	}
+	r.clientMu.Unlock()
 }
 
 // Use marks front's use today and, when a ping is due, sends it in the
@@ -328,7 +351,9 @@ func (r *Recorder) Use(front string) <-chan struct{} {
 	}
 	go func() {
 		defer close(done)
-		_ = r.Flush(context.Background())
+		if err := r.Flush(context.Background()); err != nil {
+			slog.Debug("activity ping flush failed", "error", err)
+		}
 	}()
 	return done
 }
@@ -346,7 +371,9 @@ func (r *Recorder) UseAndSend(front string) <-chan struct{} {
 	}
 	go func() {
 		defer close(done)
-		_ = r.Flush(context.Background())
+		if err := r.Flush(context.Background()); err != nil {
+			slog.Debug("activity ping flush failed", "error", err)
+		}
 	}()
 	return done
 }
@@ -371,10 +398,7 @@ func InstallID(dir string) (string, error) {
 		return "", err
 	}
 	id := hex.EncodeToString(b)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(file, []byte(id+"\n"), 0o600); err != nil {
+	if err := atomicfile.MkdirWrite(file, []byte(id+"\n"), 0o700, 0o600); err != nil {
 		return "", err
 	}
 	return id, nil

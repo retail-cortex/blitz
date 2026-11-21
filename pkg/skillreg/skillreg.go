@@ -43,7 +43,9 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -148,19 +150,12 @@ func (s *Store) load() (state, error) {
 }
 
 func (s *Store) save(st state) error {
-	if err := os.MkdirAll(filepath.Dir(s.File), 0o700); err != nil {
-		return err
-	}
 	var buf bytes.Buffer
 	buf.WriteString("# Skill registries and the skills installed from them (blitz skills).\n")
 	if err := toml.NewEncoder(&buf).Encode(st); err != nil {
 		return err
 	}
-	tmp := s.File + ".tmp"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.File)
+	return atomicfile.MkdirWrite(s.File, buf.Bytes(), 0o700, 0o600)
 }
 
 func tokenKey(registry string) string { return "skill-registry:" + registry }
@@ -244,7 +239,7 @@ func (s *Store) client() *http.Client {
 	if s.Client != nil {
 		return s.Client
 	}
-	return &http.Client{Timeout: timeout}
+	return netutil.NewClient(timeout)
 }
 
 // get reads a URL or a local file, at most limit bytes; the token goes

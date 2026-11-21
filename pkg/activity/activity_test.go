@@ -388,6 +388,11 @@ func TestCAFile(t *testing.T) {
 	ca := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600))
 	r.CAFile = func() string { return ca }
+	c1, err := r.client()
+	require.NoError(t, err)
+	c2, err := r.client()
+	require.NoError(t, err)
+	assert.Same(t, c1, c2, "cached client reused when CAFile is unchanged")
 	require.NoError(t, r.Flush(context.Background()), "kept, and sent once it's trusted")
 	assert.Equal(t, 1, got)
 
@@ -455,4 +460,37 @@ func TestUseAndSend(t *testing.T) {
 	r.On = func() bool { return false }
 	<-r.UseAndSend(CLI)
 	assert.Len(t, s.pings(), 2, "off")
+}
+
+// A damaged activity.json is quarantined aside (activity.json.damaged) and
+// subsequent Mark and Flush recover cleanly (AI-04).
+func TestDamagedActivityState(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "{damaged"},
+		{name: "wrong type", raw: `{"pending": "bad"}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newServer(t)
+			now := start
+			r := newRecorder(t, s.srv.URL, &now)
+			require.NoError(t, os.MkdirAll(r.Dir, 0o700))
+			p := filepath.Join(r.Dir, "activity.json")
+			require.NoError(t, os.WriteFile(p, []byte(tc.raw), 0o600))
+
+			due, err := r.Mark(CLI)
+			require.NoError(t, err)
+			assert.True(t, due)
+			assert.FileExists(t, p+".damaged")
+			damaged, err := os.ReadFile(p + ".damaged")
+			require.NoError(t, err)
+			assert.Equal(t, tc.raw, string(damaged))
+
+			require.NoError(t, r.Flush(context.Background()))
+			assert.Len(t, s.pings(), 1)
+		})
+	}
 }

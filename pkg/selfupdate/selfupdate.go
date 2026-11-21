@@ -41,6 +41,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/netutil"
 )
 
 // Source is where releases are: GitHub's API and its downloads.
@@ -66,7 +68,7 @@ func (s Source) File(tag, name string) string { return s.Download + "/" + tag + 
 // connection still ends (connecting, TLS and the answer's start; a
 // download's body takes as long as it takes).
 var client = &http.Client{Transport: func() *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
+	t := netutil.CloneDefaultTransport()
 	t.DialContext = (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	t.TLSHandshakeTimeout = 15 * time.Second
 	t.ResponseHeaderTimeout = 30 * time.Second

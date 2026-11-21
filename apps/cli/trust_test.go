@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,5 +107,13 @@ func TestTrustCommandEdges(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "asked again")
 	assert.Equal(t, api.TrustNew, r.ProjectSettings().State, "forgotten in the service")
+}
 
+func TestTrustServiceDown(t *testing.T) {
+	isolate(t)
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service down") }
+	t.Cleanup(func() { startShared = inner })
+	_, err := runCLI(t, "trust", t.TempDir())
+	assert.ErrorContains(t, err, "service down")
 }

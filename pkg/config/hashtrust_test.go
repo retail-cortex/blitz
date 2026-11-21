@@ -57,3 +57,28 @@ func TestHashTrust(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(settings, "connector-trust.json"), []byte(`{"connections": null}`), 0o600))
 	assert.False(t, OpenConnectorTrust(settings).Reviewed(file, "h"))
 }
+
+func TestHashTrustDamaged(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "{damaged"},
+		{name: "invalid key payload", raw: `{"skills": "not-an-object"}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			settings, skill := t.TempDir(), t.TempDir()
+			p := filepath.Join(settings, "skill-trust.json")
+			require.NoError(t, os.WriteFile(p, []byte(tc.raw), 0o600))
+
+			s := OpenSkillTrust(settings)
+			assert.False(t, s.Reviewed(skill, "sha256:a"))
+			assert.NoFileExists(t, p)
+			assert.FileExists(t, p+".damaged")
+
+			require.NoError(t, s.Trust(skill, "sha256:a"))
+			assert.True(t, s.Reviewed(skill, "sha256:a"))
+		})
+	}
+}

@@ -25,6 +25,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // Prefs are the window's own settings, kept in ~/.blitz/desktop.json:
@@ -300,28 +302,5 @@ func (s *PrefsStore) Save(p Prefs) (Prefs, error) {
 	p.normalize()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	data, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return p, err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return p, err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".desktop-*.json")
-	if err != nil {
-		return p, err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return p, err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return p, err
-	}
-	if err := tmp.Close(); err != nil {
-		return p, err
-	}
-	return p, os.Rename(tmp.Name(), s.path)
+	return p, atomicfile.WriteJSON(s.path, p, 0o600)
 }

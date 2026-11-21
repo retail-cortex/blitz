@@ -15,6 +15,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,4 +83,18 @@ func TestModelsCommandLists(t *testing.T) {
 
 	_, err = runCLI(t, "-d", filepath.Join(t.TempDir(), "missing"), "models")
 	assert.Equal(t, exitUsage, exitCodeFor(err))
+
+	// --all lists all models, not only chat models.
+	out, err = runCLI(t, "models", "--all")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "ollama/local-model")
+}
+
+func TestModelsServiceDown(t *testing.T) {
+	isolate(t)
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service down") }
+	t.Cleanup(func() { startShared = inner })
+	_, err := runCLI(t, "models")
+	assert.ErrorContains(t, err, "service down")
 }

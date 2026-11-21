@@ -297,15 +297,24 @@ func (b *Browser) connect(ctx context.Context) error {
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	var targets []struct {
-		Type string `json:"type"`
-		WS   string `json:"webSocketDebuggerUrl"`
-	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	defer client.CloseIdleConnections()
 	for {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/json/list", nil)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
-			json.NewDecoder(resp.Body).Decode(&targets)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/json/list", nil)
+		if err != nil {
+			return fmt.Errorf("building DevTools request: %w", err)
+		}
+		req.Close = true
+		var targets []struct {
+			Type string `json:"type"`
+			WS   string `json:"webSocketDebuggerUrl"`
+		}
+		if resp, err := client.Do(req); err == nil {
+			err := json.NewDecoder(resp.Body).Decode(&targets)
 			resp.Body.Close()
+			if err != nil {
+				targets = nil
+			}
 		}
 		ws := ""
 		for _, t := range targets {

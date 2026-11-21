@@ -20,7 +20,9 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/skillreg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/atomicfile",
         "//pkg/config",
+        "//pkg/netutil",
         "//pkg/secrets",
         "@com_github_burntsushi_toml//:toml",
     ],

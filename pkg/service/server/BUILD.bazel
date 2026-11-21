@@ -63,6 +63,10 @@ go_library(
         "workflowruns.go",
         "workflows.go",
         "workspace.go",
+        "workspace_git.go",
+        "workspace_models.go",
+        "workspace_procs.go",
+        "workspace_tools.go",
     ],
     importpath = "github.com/retail-cortex/blitz/pkg/service/server",
     visibility = [
@@ -72,6 +76,7 @@ go_library(
     deps = [
         "//pkg/activity",
         "//pkg/api",
+        "//pkg/atomicfile",
         "//pkg/config",
         "//pkg/docx",
         "//pkg/engine",

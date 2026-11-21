@@ -35,6 +35,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
@@ -272,18 +273,7 @@ func (w *Workspace) savePictureSession(s PictureSession) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(dir, "session.json.tmp")
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(dir, "session.json"))
+	return atomicfile.WriteJSON(filepath.Join(dir, "session.json"), s, 0o600)
 }
 
 // DeletePictureSession deletes session id and its pictures (not what was

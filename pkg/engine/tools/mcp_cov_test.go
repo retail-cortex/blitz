@@ -212,8 +212,8 @@ func TestDerivedContexts(t *testing.T) {
 		Deadline() (time.Time, bool)
 		Value(any) any
 	}{
-		"readonly": readonlyWith{createTestToolContext(), ctx},
-		"tool":     toolWith{createTestToolContext(), ctx},
+		"readonly": readonlyWith{adkReadonly{createTestToolContext()}, ctx},
+		"tool":     toolWith{adkTool{createTestToolContext()}, ctx},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got, ok := c.Deadline()

@@ -34,6 +34,7 @@ go_library(
         "//pkg/enterprise",
         "//pkg/guardrails",
         "//pkg/i18n",
+        "//pkg/netutil",
         "//pkg/observability",
         "//pkg/plugins",
         "//pkg/secrets",

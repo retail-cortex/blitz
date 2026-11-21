@@ -37,8 +37,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/agentpkg",
+        "//pkg/atomicfile",
         "//pkg/config",
         "//pkg/i18n",
+        "//pkg/netutil",
         "//pkg/secrets",
         "//pkg/signedin",
         "@org_golang_x_oauth2//:oauth2",

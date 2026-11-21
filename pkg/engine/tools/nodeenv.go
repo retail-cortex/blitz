@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
@@ -252,13 +253,5 @@ func (m *NodeEnvs) touch(e NodeEnv, skill string) NodeEnv {
 }
 
 func (m *NodeEnvs) writeMarker(e NodeEnv) error {
-	b, err := json.MarshalIndent(e, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(e.Dir, pyEnvMarker+".tmp")
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(e.Dir, pyEnvMarker))
+	return atomicfile.WriteJSON(filepath.Join(e.Dir, pyEnvMarker), e, 0o600)
 }

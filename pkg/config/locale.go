@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 var tableRE = regexp.MustCompile(`^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(#.*)?$`)
@@ -67,7 +68,7 @@ func editConfigFile(dir string, edit func(doc string) string, verify func(map[st
 	if err := verify(check); err != nil {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
-	return path, writeFileAtomic(path, []byte(updated), perm)
+	return path, atomicfile.MkdirWrite(path, []byte(updated), 0o700, perm)
 }
 
 // setTOMLKey sets key = value in [table], replacing an existing assignment,

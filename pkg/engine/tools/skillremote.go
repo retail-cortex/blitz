@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/skills"
 )
@@ -99,9 +100,7 @@ func (s *SkillScripts) remoteScript(ctx context.Context, skill *skills.Skill, sc
 	if got := hexSHA256(b); got != want {
 		return nil, fmt.Errorf("%s doesn't match the SHA-256 its definition pins (got %s)", raw, got)
 	}
-	if err := os.MkdirAll(cacheDir, 0o700); err == nil {
-		_ = writePrivate(cached, b)
-	}
+	_ = atomicfile.MkdirWrite(cached, b, 0o700, 0o600)
 	return b, nil
 }
 

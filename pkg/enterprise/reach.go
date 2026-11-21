@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/netutil"
 )
 
 // ErrUnreachable is the organization's service not answering lately:
@@ -49,7 +51,7 @@ var HTTPClient = sync.OnceValue(func() *http.Client {
 })
 
 func transport() *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
+	t := netutil.CloneDefaultTransport()
 	t.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
 	t.TLSHandshakeTimeout = tlsTimeout
 	t.ResponseHeaderTimeout = headerTimeout

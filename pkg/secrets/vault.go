@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // The user's own secrets (spec_039_secrets): values kept in the Store
@@ -75,19 +75,12 @@ func (v Vault) read() (index, error) {
 }
 
 func (v Vault) write(ix index) error {
-	if err := os.MkdirAll(filepath.Dir(v.Index), 0o700); err != nil {
-		return err
-	}
 	var b strings.Builder
 	b.WriteString("# The names of Blitz's secrets (their values are in the system's keychain).\n")
 	if err := toml.NewEncoder(&b).Encode(ix); err != nil {
 		return err
 	}
-	tmp := v.Index + ".tmp"
-	if err := os.WriteFile(tmp, []byte(b.String()), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, v.Index)
+	return atomicfile.MkdirWrite(v.Index, []byte(b.String()), 0o700, 0o600)
 }
 
 // List is scope's secrets, by key.

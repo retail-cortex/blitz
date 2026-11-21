@@ -16,9 +16,10 @@ package enterprise
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/agentpkg"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // PersonalItem is one of the person's own assets as the organization's
@@ -201,8 +203,11 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 	}
 	local, skipped := PersonalFiles(root)
 	var st syncState
-	if b, err := os.ReadFile(state); err == nil {
-		_ = json.Unmarshal(b, &st)
+	if _, err := atomicfile.ReadJSONOrQuarantine(state, &st); err != nil {
+		if _, statErr := os.Stat(state); !errors.Is(statErr, fs.ErrNotExist) {
+			return rep, fmt.Errorf("reading sync state: %w", err)
+		}
+		slog.Warn("personal sync state was damaged and quarantined; starting from empty state", "path", state, "error", err)
 	}
 	if st.Items == nil {
 		st.Items = map[string]syncedItem{}
@@ -319,10 +324,8 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 			}
 		}
 	}
-	if b, err := json.MarshalIndent(st, "", "  "); err == nil {
-		if err := os.MkdirAll(filepath.Dir(state), 0o700); err == nil {
-			errs = append(errs, os.WriteFile(state, b, 0o600))
-		}
+	if err := atomicfile.WriteJSON(state, st, 0o600); err != nil {
+		errs = append(errs, fmt.Errorf("saving sync state: %w", err))
 	}
 	return rep, errors.Join(errs...)
 }

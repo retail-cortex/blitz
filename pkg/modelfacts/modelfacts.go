@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // Recheck is how long a learned fact holds before the model is asked
@@ -200,24 +201,7 @@ func (s *Store) save() error {
 	if err := toml.NewEncoder(&buf).Encode(file{Models: s.facts}); err != nil {
 		return fmt.Errorf("models.learned.toml: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".models.learned-*.toml")
-	if err != nil {
-		return err
-	}
-	if _, err := tmp.Write(buf.Bytes()); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Rename(tmp.Name(), s.path); err != nil {
-		os.Remove(tmp.Name())
+	if err := atomicfile.MkdirWrite(s.path, buf.Bytes(), 0o700, 0o600); err != nil {
 		return err
 	}
 	if info, err := os.Stat(s.path); err == nil {

@@ -132,53 +132,65 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := layOutPolicy(dir, env); err != nil {
+	next, err := stagePolicy(dir, env)
+	if err != nil {
 		return false, err
 	}
 	// What the settings read as they load: the policy, why, the expiry.
-	state, _ := json.Marshal(struct {
+	// Written before swapping policy/ into place so readers never see the
+	// new rules or guardrails ahead of their matching policy.json.
+	state, err := json.Marshal(struct {
 		Policy  Policy                           `json:"policy"`
 		Explain map[string]config.PolicyDecision `json:"explain"`
 		Expires time.Time                        `json:"expires"`
 	}{env.Policy, env.Explain, env.Expires})
-	for _, f := range []struct {
-		name string
-		data []byte
-	}{{PolicyFile, state}, {policyETag, []byte(res.Header.Get("ETag"))}} {
-		if err := writeFile(dir, f.name, f.data); err != nil {
-			return true, err
-		}
+	if err != nil {
+		return false, fmt.Errorf("encoding policy state: %w", err)
+	}
+	if err := writeFile(dir, PolicyFile, state); err != nil {
+		return false, err
+	}
+	if err := swapPolicy(dir, next); err != nil {
+		return true, err
+	}
+	if err := writeFile(dir, policyETag, []byte(res.Header.Get("ETag"))); err != nil {
+		return true, err
 	}
 	return true, nil
 }
 
-// layOutPolicy writes env's rules and guardrails to dir/policy as a
-// workspace's .agents folder (rules/<name>.md, guardrails/<name>.md),
-// built beside the old ones and swapped in whole.
-func layOutPolicy(dir string, env PolicyEnvelope) error {
+// stagePolicy writes env's rules, guardrails and library items to
+// dir/policy.next (rules/<name>.md, guardrails/<name>.md), ready to be
+// swapped into dir/policy whole.
+func stagePolicy(dir string, env PolicyEnvelope) (string, error) {
 	next := filepath.Join(dir, policyDir+".next")
 	if err := os.RemoveAll(next); err != nil {
-		return err
+		return "", err
 	}
 	for _, set := range []struct {
 		sub     string
 		entries []PolicyEntry
 	}{{"rules", env.Rules}, {"guardrails", env.Guardrails}} {
 		if err := os.MkdirAll(filepath.Join(next, set.sub), 0o700); err != nil {
-			return err
+			return "", err
 		}
 		for _, e := range set.entries {
 			if !entryName.MatchString(e.Name) || len(e.Name) > 64 {
-				return fmt.Errorf("the organization's policy names a %s that can't be a file: %q", set.sub, e.Name)
+				return "", fmt.Errorf("the organization's policy names a %s that can't be a file: %q", set.sub, e.Name)
 			}
 			if err := os.WriteFile(filepath.Join(next, set.sub, e.Name+".md"), []byte(e.Body), 0o600); err != nil {
-				return err
+				return "", err
 			}
 		}
 	}
 	if err := layOutItems(next, env.Items); err != nil {
-		return err
+		return "", err
 	}
+	return next, nil
+}
+
+// swapPolicy replaces dir/policy with the staged directory next.
+func swapPolicy(dir, next string) error {
 	old := filepath.Join(dir, policyDir+".old")
 	_ = os.RemoveAll(old)
 	cur := filepath.Join(dir, policyDir)

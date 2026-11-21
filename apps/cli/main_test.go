@@ -423,3 +423,47 @@ func TestMaskConfigEverySecret(t *testing.T) {
 	}
 	assert.Equal(t, "hook-secret-1234567", cfg.Hooks.PreTool[0].Headers["X-Token"], "the config itself is unchanged")
 }
+
+type errReader struct{ err error }
+
+func (e errReader) Read([]byte) (int, error) { return 0, e.err }
+
+func TestResolvePromptReadErrorAndRootErrors(t *testing.T) {
+	_, _, err := resolvePrompt("-", nil, false, false, errReader{errors.New("broken pipe")})
+	assert.ErrorContains(t, err, "broken pipe")
+
+	// Service unavailable error paths across spec, eval, do, hook subcommands.
+	isolate(t)
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service down") }
+	t.Cleanup(func() { startShared = inner })
+	ws := t.TempDir()
+	for _, args := range [][]string{
+		{"-d", ws, "spec", "list"},
+		{"-d", ws, "spec", "review"},
+		{"-d", ws, "spec", "approve", "001.md"},
+		{"-d", ws, "spec", "verify"},
+		{"-d", ws, "spec", "impact", "001.md"},
+		{"-d", ws, "spec", "implement", "001.md"},
+		{"-d", ws, "eval", "basic"},
+		{"-d", ws, "do", "list"},
+		{"-d", ws, "hook", "run", "pre-commit"},
+	} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			_, err := runCLI(t, args...)
+			assert.Error(t, err)
+		})
+	}
+
+	// With a running service, invalid --effort and --permission-mode return exitUsage.
+	startShared = inner
+	for _, args := range [][]string{
+		{"-d", ws, "--effort", "bogus", "hello"},
+		{"-d", ws, "--permission-mode", "bogus", "hello"},
+	} {
+		t.Run("flag_"+args[2], func(t *testing.T) {
+			_, err := runCLI(t, args...)
+			assert.Equal(t, exitUsage, exitCodeFor(err), "%v", err)
+		})
+	}
+}
