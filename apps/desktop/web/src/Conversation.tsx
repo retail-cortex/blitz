@@ -19,6 +19,7 @@ import { createPortal } from "react-dom";
 import { mdiAlertCircleOutline, mdiClose, mdiImagePlusOutline, mdiProgressClock } from "@mdi/js";
 import { Button, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { serviceLost, sessions, workspaces } from "./api";
+import { RepoCodeNotice } from "./RepoCodeNotice";
 import { acceptAttribute, webBlocks } from "./attachments";
 import { allCommands, listedCommands, parseCommand, type CommandSpec } from "./commands";
 import { ComposerDock } from "./composerDock";
@@ -487,6 +488,7 @@ export function Conversation({
                 </Button>
               </div>
             )}
+            <RepoCodeNotice dir={dir} />
             {projectWaiting > 0 && (
               <div className="card warn row">
                 <Icon path={mdiAlertCircleOutline} />

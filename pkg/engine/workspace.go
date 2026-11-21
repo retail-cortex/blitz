@@ -308,6 +308,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
 	w.tools.SetWarn(o.Warn)
+	// Language servers run the workspace's own code (its Bazel driver,
+	// its .venv's Python) only once the person trusts it (VE-43a).
+	if m := w.tools.LSP(); m != nil {
+		m.TrustRepoCode(w.repoCodeTrusted)
+	}
 	w.tools.Processes().Notice = w.processNotice
 	// Search queries a provider bills go in the session's /cost, apart from
 	// the tokens (BL-WEB-01).

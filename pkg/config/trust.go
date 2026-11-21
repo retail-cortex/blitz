@@ -54,6 +54,13 @@ func OpenTrustStore(dir string) *TrustStore {
 	return &TrustStore{path: filepath.Join(dir, "trust.json")}
 }
 
+// OpenCodeTrustStore opens the decisions about workspaces' own code that
+// language servers would run (spec_037 VE-43a): code-trust.json in dir,
+// apart from the project settings' trust.
+func OpenCodeTrustStore(dir string) *TrustStore {
+	return &TrustStore{path: filepath.Join(dir, "code-trust.json")}
+}
+
 // CanonicalWorkspace is the key a workspace's trust is kept under: its
 // absolute path with symbolic links resolved, and nothing read from the
 // workspace itself.

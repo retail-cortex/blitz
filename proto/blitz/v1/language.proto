@@ -63,6 +63,10 @@ service LanguageService {
   // Stops a language's server; the next request starts it again, and the
   // editor's documents are opened in it again.
   rpc RestartLanguageServer(RestartLanguageServerRequest) returns (RestartLanguageServerResponse);
+  // Records whether the language servers may run the workspace's own code
+  // (its Bazel driver, its .venv's Python), and restarts those that would
+  // (spec_037 VE-43a). They start without it until it's trusted.
+  rpc TrustLanguageCode(TrustLanguageCodeRequest) returns (TrustLanguageCodeResponse);
 }
 
 // How a document's language server is.
@@ -327,7 +331,23 @@ message GetLanguageStatusResponse {
   repeated LanguageServerStatus servers = 1;
   // The project's settings aren't trusted: no server starts for the editor.
   bool untrusted = 2;
+  // Whether the servers may run the workspace's own code (VE-43a): ""
+  // (they'd run none), "ask" (not decided: they start without it),
+  // "trusted" or "declined".
+  string repo_code = 3;
+  // That code, to show when asking: tools/gopackagesdriver.sh, .venv/bin/python.
+  repeated string repo_code_files = 4;
 }
+
+// Request message for LanguageService.TrustLanguageCode.
+message TrustLanguageCodeRequest {
+  string workspace = 1;
+  // Whether the servers may run the workspace's own code.
+  bool trusted = 2;
+}
+
+// Response message for LanguageService.TrustLanguageCode.
+message TrustLanguageCodeResponse {}
 
 // Request message for LanguageService.RestartLanguageServer.
 message RestartLanguageServerRequest {

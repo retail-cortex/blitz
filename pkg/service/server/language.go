@@ -219,6 +219,7 @@ func (h languageService) GetLanguageStatus(ctx context.Context, r req[pb.GetLang
 		return nil, err
 	}
 	res := &pb.GetLanguageStatusResponse{Untrusted: !w.LanguageTrusted()}
+	res.RepoCode, res.RepoCodeFiles = w.RepoCodeTrust()
 	for _, st := range w.LanguageStatus() {
 		res.Servers = append(res.Servers, &pb.LanguageServerStatus{
 			Language: st.Language, Command: st.Command, Extensions: st.Extensions,
@@ -237,4 +238,17 @@ func (h languageService) RestartLanguageServer(ctx context.Context, r req[pb.Res
 		return nil, languageError(err)
 	}
 	return ok(&pb.RestartLanguageServerResponse{})
+}
+
+// TrustLanguageCode records whether the language servers may run the
+// workspace's own code (VE-43a).
+func (h languageService) TrustLanguageCode(ctx context.Context, r req[pb.TrustLanguageCodeRequest]) (*connect.Response[pb.TrustLanguageCodeResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.TrustRepoCode(r.Msg.Trusted); err != nil {
+		return nil, toAPI(err)
+	}
+	return ok(&pb.TrustLanguageCodeResponse{})
 }

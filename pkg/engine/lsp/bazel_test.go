@@ -161,6 +161,8 @@ bazel_dep(name = "rules_python", version = "1.6.0")`)
 		{Language: "typescript", Command: []string{"tls"}, Extensions: []string{".ts"}},
 	}, launch)
 	t.Cleanup(m.Close)
+	m.TrustRepoCode(func() bool { return true }) // the person trusted its code (VE-43a)
+	assert.Equal(t, []string{"bazel (its BUILD and MODULE files)"}, m.RepoCode())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	for _, f := range []string{"svc/a.go", "py/a.py", "web/a.ts"} {
@@ -173,6 +175,16 @@ bazel_dep(name = "rules_python", version = "1.6.0")`)
 	require.Len(t, rec.inits, 3)
 	opts, _ := json.Marshal(rec.inits[0]["initializationOptions"])
 	assert.Contains(t, string(opts), `"-bazel-bin"`, "gopls skips Bazel's output")
+
+	// Untrusted: gopls starts without the driver, which runs Bazel on the
+	// workspace's files (VE-43a; security review tools#1).
+	envs = nil
+	untrusted := NewManager(root, []Server{{Language: "go", Command: []string{"gopls"}, Extensions: []string{".go"}}}, launch)
+	t.Cleanup(untrusted.Close)
+	_, err := untrusted.For(ctx, filepath.Join(root, "svc/a.go"))
+	require.NoError(t, err)
+	require.Len(t, envs, 1)
+	assert.Nil(t, envs[0], "no driver before the person trusts the code")
 	tsOpts, _ := json.Marshal(rec.inits[2]["initializationOptions"])
 	assert.Contains(t, string(tsOpts), filepath.ToSlash(filepath.Join("bazel-bin", "node_modules", "typescript", "lib")))
 

@@ -23,7 +23,7 @@ import { language as languageApi } from "./api";
 import { message } from "./errors";
 import { ServerState, type GetLanguageStatusResponse } from "./gen/blitz/v1/language_pb";
 import { t } from "./i18n";
-import { IconButton, useSnackbar } from "@blitz/webui";
+import { Button, IconButton, useSnackbar } from "@blitz/webui";
 
 const stateKeys: Partial<Record<ServerState, string>> = {
   [ServerState.READY]: "desktop.lsp.ready",
@@ -60,11 +60,28 @@ export function LanguageServers({ dir }: { dir: string }) {
       snack(message(e), { error: true });
     }
   };
+  const trustCode = async (trusted: boolean) => {
+    try {
+      await languageApi.trustLanguageCode({ workspace: dir, trusted });
+      snack(t(trusted ? "desktop.lsp.code_trusted" : "desktop.lsp.code_declined"));
+      void load();
+    } catch (e) {
+      snack(message(e), { error: true });
+    }
+  };
   if (error) return <p className="error-text t-body-sm">{error}</p>;
   if (!status) return null;
   return (
     <div className="lsp-servers">
       <p className="t-body-sm muted">{status.untrusted ? t("desktop.lsp.untrusted") : t("desktop.lsp.help")}</p>
+      {(status.repoCode === "declined" || status.repoCode === "trusted") && (
+        <p className="t-body-sm muted row">
+          <span style={{ flex: 1 }}>{t(status.repoCode === "trusted" ? "desktop.lsp.code_state_trusted" : "desktop.lsp.code_state_declined", { files: status.repoCodeFiles.join(", ") })}</span>
+          <Button small onClick={() => void trustCode(status.repoCode !== "trusted")}>
+            {t(status.repoCode === "trusted" ? "desktop.lsp.code_untrust" : "desktop.lsp.code_trust")}
+          </Button>
+        </p>
+      )}
       <ul className="lsp-list">
         {status.servers.map((s) => (
           <li key={s.language} className="lsp-row">

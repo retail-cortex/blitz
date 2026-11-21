@@ -317,6 +317,10 @@ func TestLanguageServiceBadWorkspace(t *testing.T) {
 			_, err := lc.RestartLanguageServer(ctx, connect.NewRequest(&pb.RestartLanguageServerRequest{Workspace: bad}))
 			return err
 		},
+		"trust code": func() error {
+			_, err := lc.TrustLanguageCode(ctx, connect.NewRequest(&pb.TrustLanguageCodeRequest{Workspace: bad, Trusted: true}))
+			return err
+		},
 		"watch": func() error {
 			stream, err := lc.WatchDiagnostics(ctx, connect.NewRequest(&pb.WatchDiagnosticsRequest{Workspace: bad}))
 			if err != nil {
@@ -357,4 +361,24 @@ func TestLanguageErrors(t *testing.T) {
 	assert.Equal(t, connect.CodeCanceled, connect.CodeOf(languageError(context.Canceled)))
 	ce := connect.NewError(connect.CodeInternal, errors.New("already a connect error"))
 	assert.Same(t, ce, languageError(ce))
+}
+
+// The status says whether the servers may run the workspace's own code,
+// and TrustLanguageCode decides it (VE-43a).
+func TestTrustLanguageCode(t *testing.T) {
+	_, s := serve(t, nil)
+	lc := languageClient(t, s)
+	ctx := context.Background()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".venv", "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".venv", "bin", "python"), []byte("#!/bin/sh\n"), 0o755))
+	status, err := lc.GetLanguageStatus(ctx, connect.NewRequest(&pb.GetLanguageStatusRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, "ask", status.Msg.RepoCode)
+	assert.Equal(t, []string{".venv/bin/python"}, status.Msg.RepoCodeFiles)
+	_, err = lc.TrustLanguageCode(ctx, connect.NewRequest(&pb.TrustLanguageCodeRequest{Workspace: dir, Trusted: true}))
+	require.NoError(t, err)
+	status, err = lc.GetLanguageStatus(ctx, connect.NewRequest(&pb.GetLanguageStatusRequest{Workspace: dir}))
+	require.NoError(t, err)
+	assert.Equal(t, "trusted", status.Msg.RepoCode)
 }

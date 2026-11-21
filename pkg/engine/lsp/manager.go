@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -63,6 +64,55 @@ type Manager struct {
 	bazelWS   bazelWorkspace // the workspace's Bazel setup (bazel.go)
 
 	docs documents // the editor's (documents.go)
+
+	// repoCode reports whether servers may run code the workspace itself
+	// supplies (RepoCode): nil, or false, and they start without it
+	// (spec_037 VE-43a; security review tools#1, #2).
+	repoCode func() bool
+}
+
+// TrustRepoCode sets what says whether the servers may run code the
+// workspace supplies: its tools/gopackagesdriver.sh, Bazel on its
+// files, its .venv's Python. Servers already running keep what they
+// started with; Restart picks the answer up.
+func (m *Manager) TrustRepoCode(f func() bool) {
+	m.mu.Lock()
+	m.repoCode = f
+	m.mu.Unlock()
+}
+
+// repoCodeTrusted reports whether a server starting now may run code the
+// workspace supplies.
+func (m *Manager) repoCodeTrusted() bool {
+	m.mu.Lock()
+	f := m.repoCode
+	m.mu.Unlock()
+	return f != nil && f()
+}
+
+// RepoCode is the code of the workspace's own its servers would run, for
+// the person to trust or not: "" each when there's none.
+func (m *Manager) RepoCode() []string {
+	var out []string
+	for _, s := range m.servers {
+		switch s.Language {
+		case "go":
+			if b := m.bazel(); b.rulesGo != "" && runtime.GOOS != "windows" && !hasAny(m.root, rootMarkers["go"]) {
+				if own := filepath.Join(m.root, "tools", "gopackagesdriver.sh"); isFile(own) {
+					out = append(out, "tools/gopackagesdriver.sh")
+				} else {
+					out = append(out, "bazel (its BUILD and MODULE files)")
+				}
+			}
+		case "python":
+			if py := m.pythonPath(m.root); py != "" {
+				if rel, err := filepath.Rel(m.root, py); err == nil {
+					out = append(out, filepath.ToSlash(rel))
+				}
+			}
+		}
+	}
+	return out
 }
 
 // serverKey is a server's language and the project root it runs in.
@@ -214,7 +264,8 @@ func (m *Manager) startServer(ctx context.Context, cfg Server, root string) (*se
 		return nil, errors.New("no command")
 	}
 	var env []string
-	if cfg.Language == "go" {
+	trusted := m.repoCodeTrusted()
+	if cfg.Language == "go" && trusted {
 		env = m.goDriverEnv(root)
 	}
 	proc, err := m.launch(context.Background(), root, cfg.Command, env) // lives past ctx
@@ -225,7 +276,7 @@ func (m *Manager) startServer(ctx context.Context, cfg Server, root string) (*se
 	var settings map[string]any
 	if cfg.Language == "python" {
 		python := map[string]any{}
-		if py := m.pythonPath(root); py != "" {
+		if py := m.pythonPath(root); py != "" && trusted {
 			python["pythonPath"] = py
 		}
 		if extra := m.sitePackages(); len(extra) > 0 {

@@ -237,7 +237,15 @@ func TestPythonPath(t *testing.T) {
 	rec := &recording{}
 	pm := NewManager(root, []Server{{Language: "python", Command: []string{"pyright-langserver", "--stdio"}, Extensions: []string{".py"}}}, rec.launcher())
 	t.Cleanup(pm.Close)
+	// Untrusted: pyright starts, but never runs the workspace's Python
+	// (VE-43a; security review tools#2).
 	s, err := pm.For(context.Background(), filepath.Join(root, "python", "etl", "load.py"))
+	require.NoError(t, err)
+	assert.Nil(t, s.c.settings, "no interpreter of the workspace's before it's trusted")
+	require.NoError(t, pm.Restart("python"))
+	pm.TrustRepoCode(func() bool { return true })
+	require.NoError(t, pm.Restart("python"))
+	s, err = pm.For(context.Background(), filepath.Join(root, "python", "etl", "load.py"))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"python": map[string]any{"pythonPath": filepath.Join(root, "python", "etl", ".venv", "bin", "python")}}, s.c.settings)
 	s, err = pm.For(context.Background(), filepath.Join(root, "python", "bare", "x.py"))

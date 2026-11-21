@@ -106,3 +106,29 @@ func TestSourceLocations(t *testing.T) {
 	got := sourceLocations([]lsp.Location{{Path: "main.go"}, {Path: "/usr/lib/go/src/fmt/print.go"}, {Path: "../other/x.go"}})
 	assert.Equal(t, []bool{false, true, true}, []bool{got[0].Outside, got[1].Outside, got[2].Outside})
 }
+
+// The language servers run the workspace's own code (its .venv's Python
+// here) only once the person trusts it: asked first, then trusted or
+// declined, kept per folder (VE-43a; security review tools#1, #2).
+func TestRepoCodeTrust(t *testing.T) {
+	w := openTest(t)
+	state, code := w.RepoCodeTrust()
+	assert.Equal(t, RepoCodeNone, state, "no code of its own")
+	assert.Empty(t, code)
+
+	write(t, w.Dir(), ".venv/bin/python", "#!/bin/sh\n")
+	state, code = w.RepoCodeTrust()
+	assert.Equal(t, RepoCodeAsk, state)
+	assert.Equal(t, []string{".venv/bin/python"}, code)
+	assert.False(t, w.repoCodeTrusted())
+
+	require.NoError(t, w.TrustRepoCode(true))
+	state, _ = w.RepoCodeTrust()
+	assert.Equal(t, RepoCodeTrusted, state)
+	assert.True(t, w.repoCodeTrusted())
+
+	require.NoError(t, w.TrustRepoCode(false))
+	state, _ = w.RepoCodeTrust()
+	assert.Equal(t, RepoCodeDeclined, state)
+	assert.False(t, w.repoCodeTrusted())
+}
