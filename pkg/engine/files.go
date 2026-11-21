@@ -389,8 +389,8 @@ func (w *Workspace) RenameFile(ctx context.Context, from, to string) error {
 	if err := w.files().UserRename(ctx, fromRel, toRel); err != nil {
 		return err
 	}
-	if len(w.unstageGone(ctx, fromSlash)) > 0 {
-		w.restage(ctx, toSlash) // the new name in git in the old one's place (FIL-61)
+	if files := w.unstageGone(ctx, fromSlash); len(files) > 0 {
+		w.restage(ctx, movedTo(files, fromSlash, toSlash)...) // the new names in git in the old ones' place (FIL-61)
 	}
 	w.userEdited(fromSlash, "renamed to "+toSlash)
 	return nil

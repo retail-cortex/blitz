@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -58,22 +59,31 @@ var systemTrashIDs = regexp.MustCompile(`^sys-[0-9a-f]{16}$`)
 // systemTrashed is where a deletion went in the system's trash, by ID,
 // and the deletions (either trash's) that git's index had (FIL-61).
 type systemTrashed struct {
-	mu     sync.Mutex
-	where  map[string]string
-	staged map[string]bool
+	mu    sync.Mutex
+	where map[string]string
+	// staged is, by trash ID, the files git's index had and where they
+	// were, for RestoreFile.
+	staged map[string]trashedFiles
+}
+
+// trashedFiles are the files git tracked under from when it was trashed.
+type trashedFiles struct {
+	from  string
+	files []string
 }
 
 // unstageTrashed takes slash, just trashed under id, out of git's index,
 // remembering it was there for RestoreFile.
 func (w *Workspace) unstageTrashed(ctx context.Context, id, slash string) {
-	if len(w.unstageGone(ctx, slash)) == 0 {
+	files := w.unstageGone(ctx, slash)
+	if len(files) == 0 {
 		return
 	}
 	w.trashed.mu.Lock()
 	if w.trashed.staged == nil {
-		w.trashed.staged = map[string]bool{}
+		w.trashed.staged = map[string]trashedFiles{}
 	}
-	w.trashed.staged[id] = true
+	w.trashed.staged[id] = trashedFiles{from: slash, files: files}
 	w.trashed.mu.Unlock()
 }
 
@@ -81,11 +91,11 @@ func (w *Workspace) unstageTrashed(ctx context.Context, id, slash string) {
 // it was there.
 func (w *Workspace) restageRestored(ctx context.Context, id, slash string) {
 	w.trashed.mu.Lock()
-	was := w.trashed.staged[id]
+	was, ok := w.trashed.staged[id]
 	delete(w.trashed.staged, id)
 	w.trashed.mu.Unlock()
-	if was {
-		w.restage(ctx, slash)
+	if ok {
+		w.restage(ctx, movedTo(was.files, was.from, slash)...)
 	}
 }
 
@@ -124,6 +134,14 @@ func (w *Workspace) TrashFile(ctx context.Context, p string) (string, error) {
 		}
 		// A file the system's trash can't take (another disk): the workspace's.
 	}
+	// A trash folder (or .blitz) that's a link, committed by a cloned
+	// repository, would take what's deleted, and the .gitignore below,
+	// wherever it leads (security review service#2, files#4).
+	for _, d := range []string{path.Dir(trashDir), trashDir} {
+		if info, err := os.Lstat(filepath.Join(w.Dir(), filepath.FromSlash(d))); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("the workspace's trash isn't used: %s is a link", d)
+		}
+	}
 	w.emptyTrash(ctx, time.Now())
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
@@ -131,8 +149,9 @@ func (w *Workspace) TrashFile(ctx context.Context, p string) (string, error) {
 	if err := w.files().UserMkdir(filepath.FromSlash(path.Join(trashDir, id))); err != nil {
 		return "", err
 	}
-	// The trash stays out of git and the workspace's searches.
-	_ = os.WriteFile(filepath.Join(w.Dir(), filepath.FromSlash(trashDir), ".gitignore"), []byte("*\n"), 0o644)
+	// The trash stays out of git and the workspace's searches; written in
+	// the workspace's root, never through a link.
+	_ = w.files().UserWriteFile(ctx, filepath.FromSlash(path.Join(trashDir, ".gitignore")), []byte("*\n"), nil)
 	if err := w.files().UserRename(ctx, rel, filepath.FromSlash(path.Join(trashDir, id, path.Base(slash)))); err != nil {
 		_ = w.files().UserRemove(ctx, filepath.FromSlash(path.Join(trashDir, id)))
 		return "", err

@@ -49,8 +49,8 @@ function fakeService() {
       folders.add(path);
       return {};
     },
-    async deleteFile({ path }) {
-      calls.push(`rm ${path}`);
+    async deleteFile({ path, undoable }) {
+      calls.push(`${undoable ? "trash" : "rm"} ${path}`);
       folders.delete(path);
       for (const k of [...files.keys()]) if (k === path || k.startsWith(path + "/")) files.delete(k);
       return {};
@@ -135,6 +135,8 @@ describe("importDrop", () => {
     await importDrop(s.c, "/w", "", [folderItem], new Set(["pics"]), "replace");
     expect(s.files.has("pics/stale.png")).toBe(false);
     expect(s.files.get("pics/a.png")).toBe("A");
+    expect(s.calls).toContain("trash pics"); // to the Trash, never gone for good (files#1)
+    expect(s.calls).not.toContain("rm pics");
   });
 
   it("keeps two dropped items with one name apart", async () => {

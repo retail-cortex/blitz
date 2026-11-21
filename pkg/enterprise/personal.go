@@ -212,9 +212,11 @@ type SyncReport struct {
 	Skipped map[string]string
 }
 
-// syncState is what the last sync left, by "kind/name".
+// syncState is what the last sync left, by "kind/name", and whose sync it
+// was (the person's ID on the service).
 type syncState struct {
-	Items map[string]syncedItem `json:"items"`
+	Person string                `json:"person,omitempty"`
+	Items  map[string]syncedItem `json:"items"`
 }
 
 type syncedItem struct {
@@ -246,6 +248,15 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 		}
 		slog.Warn("personal sync state was damaged and quarantined; starting from empty state", "path", state, "error", err)
 	}
+	// The last sync was another person's (another account on the same
+	// service), or remembers items the service no longer lists any of (a
+	// reset): nothing here is taken for removed elsewhere, and what's here
+	// is sent (EN-93b; security review enterprise#3).
+	person := c.Status().Person.ID
+	if st.Person != person || len(remote) == 0 && len(st.Items) > 0 {
+		st.Items = nil
+	}
+	st.Person = person
 	if st.Items == nil {
 		st.Items = map[string]syncedItem{}
 	}

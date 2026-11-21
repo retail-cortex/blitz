@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/agent"
@@ -92,4 +93,23 @@ func TestTextCallsAreAlwaysAsked(t *testing.T) {
 			require.Len(t, *reqs, 1, "a call read from text is asked")
 		})
 	}
+}
+
+// Blitz's own settings are blocked wherever they were read from, not only
+// ~/.blitz (security review enterprise#4: MODENV_PREFIX or --config left
+// them readable).
+func TestSettingsBlockedWhereverTheyAre(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env.toml"), "[llm.gemini]\napi_key = \"secret\"\n")
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Dir = dir
+	r, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { r.Close() })
+	_, blocked := r.Workspace().Blocked().Match(filepath.Join(dir, ".env.toml"))
+	assert.True(t, blocked, "the settings file")
+	_, blocked = r.Workspace().Blocked().Match(filepath.Join(dir, "workspaces", "x", ".env.toml"))
+	assert.True(t, blocked)
+	assert.Empty(t, settingsBlocked(""))
 }

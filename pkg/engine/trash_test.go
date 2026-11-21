@@ -177,3 +177,22 @@ func TestCopyFile(t *testing.T) {
 	assert.ErrorContains(t, w.CopyFile(ctx, "src", "src/inner"), "into itself")
 	assert.Error(t, w.CopyFile(ctx, "", "x"), "copied the workspace")
 }
+
+// A trash folder that's a link (a cloned repository's .blitz/trash ->
+// ..) isn't used: what's deleted and the trash's .gitignore never land
+// where it leads (security review service#2, files#4).
+func TestTrashRefusesALinkedTrash(t *testing.T) {
+	w := openTest(t)
+	ctx := context.Background()
+	write(t, w.Dir(), ".gitignore", "node_modules/\n")
+	write(t, w.Dir(), "notes.md", "keep")
+	require.NoError(t, os.MkdirAll(filepath.Join(w.Dir(), ".blitz"), 0o755))
+	require.NoError(t, os.Symlink("..", filepath.Join(w.Dir(), ".blitz", "trash")))
+
+	_, err := w.TrashFile(ctx, "notes.md")
+	require.ErrorContains(t, err, "is a link")
+	b, err := os.ReadFile(filepath.Join(w.Dir(), ".gitignore"))
+	require.NoError(t, err)
+	assert.Equal(t, "node_modules/\n", string(b), "the workspace's .gitignore was overwritten")
+	assert.FileExists(t, filepath.Join(w.Dir(), "notes.md"))
+}

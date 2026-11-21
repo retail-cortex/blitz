@@ -248,15 +248,20 @@ func (w *Workspace) indexed(ctx context.Context, slash string) bool {
 // unstageGone takes paths gone from the workspace out of git's index
 // (FIL-61), when [git] auto_add is on and it's a repository: a file that
 // was only staged leaves git altogether, a committed one is a staged
-// deletion. It returns those that were in the index.
+// deletion. It returns the files under them that were in the index (what
+// restage puts back, and nothing else).
 func (w *Workspace) unstageGone(ctx context.Context, slashes ...string) []string {
 	if !w.cfg.Git.AutoAdd || !w.inRepository(ctx) {
 		return nil
 	}
-	var in []string
+	var in, files []string
 	for _, s := range slashes {
-		if s != "" && s != "." && w.indexed(ctx, s) {
+		if s == "" || s == "." {
+			continue
+		}
+		if tracked := w.trackedUnder(ctx, s); len(tracked) > 0 {
 			in = append(in, s)
+			files = append(files, tracked...)
 		}
 	}
 	if len(in) == 0 {
@@ -266,13 +271,41 @@ func (w *Workspace) unstageGone(ctx context.Context, slashes ...string) []string
 		slog.Warn("taking deleted files out of git", "workspace", w.Dir(), "error", err)
 		return nil
 	}
-	return in
+	return files
 }
 
-// restage adds paths back to git's index, as they are (FIL-61): a file
-// put back from the trash, or the new name of one renamed, that was in it.
-func (w *Workspace) restage(ctx context.Context, slashes ...string) {
-	if _, err := w.gitDo(ctx, nil, append([]string{"--literal-pathspecs", "add", "--all", "--"}, slashes...)...); err != nil {
+// trackedUnder is the files git's index has at slash or under it.
+func (w *Workspace) trackedUnder(ctx context.Context, slash string) []string {
+	out, err := w.gitDo(ctx, nil, "--literal-pathspecs", "ls-files", "-z", "--", slash)
+	if err != nil {
+		return nil
+	}
+	return slices.DeleteFunc(strings.Split(string(out), "\x00"), func(s string) bool { return s == "" })
+}
+
+// movedTo is files (under from) as they are under to after a move.
+func movedTo(files []string, from, to string) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		switch {
+		case f == from:
+			out = append(out, to)
+		case strings.HasPrefix(f, from+"/"):
+			out = append(out, to+strings.TrimPrefix(f, from))
+		}
+	}
+	return out
+}
+
+// restage adds files back to git's index, as they are (FIL-61): those put
+// back from the trash, or renamed, that were in it; never the files git
+// didn't track that were beside them (security review files#5). The
+// list goes on stdin: a folder can hold more than a command line takes.
+func (w *Workspace) restage(ctx context.Context, files ...string) {
+	if len(files) == 0 {
+		return
+	}
+	if _, err := w.gitDo(ctx, []byte(strings.Join(files, "\x00")), "--literal-pathspecs", "add", "--pathspec-from-file=-", "--pathspec-file-nul"); err != nil {
 		slog.Warn("adding files back to git", "workspace", w.Dir(), "error", err)
 	}
 }

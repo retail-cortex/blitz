@@ -188,6 +188,17 @@ func (r *Registry) Rules() *PermissionRules { return r.rules }
 // permission rules' shell patterns.
 func (r *Registry) CommandPolicy() *CommandPolicy { return r.policy }
 
+// settingsBlocked are the blocked-path patterns for Blitz's own settings
+// files in dir (the folder the settings were read from), as
+// config.DefaultBlockedPaths has them for ~/.blitz.
+func settingsBlocked(dir string) []string {
+	if dir == "" {
+		return nil
+	}
+	dir = filepath.ToSlash(dir)
+	return []string{dir + "/.env.toml", dir + "/.env.*.toml", dir + "/workspaces/*/.env.toml", dir + "/workspaces/*/.env.*.toml"}
+}
+
 // ModeNote is why the configured permission mode wasn't used, or nil.
 func (r *Registry) ModeNote() error { return r.modeNote }
 
@@ -209,6 +220,10 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	// deny read(...) rules are blocked paths: the file tools and the OS
 	// sandbox hide them from then on.
 	blocked := append(slices.Clone(sb.BlockedPaths), rules.Patterns(RuleRead, EffectDeny)...)
+	// Blitz's own settings, wherever they were read from: the defaults
+	// name ~/.blitz, and MODENV_PREFIX or --config puts them elsewhere
+	// (security review enterprise#4).
+	blocked = append(blocked, settingsBlocked(cfg.Dir)...)
 	// The ant command's sign-in (~/.config/anthropic) is Blitz's own when
 	// Claude signs in with it, and only then readable by what the model runs.
 	if !cfg.LLM.Anthropic.UsesOAuth() {

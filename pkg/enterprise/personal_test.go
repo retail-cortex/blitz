@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 )
 
@@ -292,6 +293,47 @@ func TestSyncPersonalStateRecoveryAndErrors(t *testing.T) {
 			if tc.check != nil {
 				tc.check(t, state, rep)
 			}
+		})
+	}
+}
+
+// A sync never takes what's here for removed elsewhere when the last sync
+// was another person's, or when the service lists none of what it
+// remembers (a reset): the local assets stay and are sent (EN-93b;
+// security review enterprise#3).
+func TestSyncPersonalKeepsLocalAfterAccountChangeOrReset(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		person string // the last sync's
+		remote map[string]*enterprisetest.PersonalAsset
+	}{
+		{name: "another person's state", person: "someone-else", remote: map[string]*enterprisetest.PersonalAsset{"skill/other": {Revision: 1, Files: map[string]string{"skills/other/SKILL.md": "---\nname: other\n---\nO.\n"}}}},
+		{name: "the service lists nothing", person: "", remote: map[string]*enterprisetest.PersonalAsset{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, s, c, _, _ := setup(t)
+			ctx := context.Background()
+			require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+			root, state := t.TempDir(), filepath.Join(t.TempDir(), "personal.json")
+			write(t, root, "agents/a.md", "---\nname: a\n---\nA.\n")
+			files, _ := PersonalFiles(root)
+			person := tc.person
+			if person == "" {
+				person = c.Status().Person.ID
+			}
+			st := syncState{Person: person, Items: map[string]syncedItem{"agent/a": {Revision: 3, SHA256: agentpkg.Digest(files["agent/a"])}}}
+			raw, err := json.Marshal(st)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(state, raw, 0o600))
+			s.Mu.Lock()
+			s.Personal, s.PersonalAllowed = tc.remote, map[string]bool{"agent": true, "skill": true}
+			s.Mu.Unlock()
+
+			rep, err := SyncPersonal(ctx, c, root, state)
+			require.NoError(t, err)
+			assert.Empty(t, rep.Removed, "nothing removed")
+			assert.FileExists(t, filepath.Join(root, "agents", "a.md"))
+			assert.Contains(t, rep.Sent, "agent/a", "sent again")
 		})
 	}
 }
