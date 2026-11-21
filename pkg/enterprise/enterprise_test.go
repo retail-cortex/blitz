@@ -1345,4 +1345,15 @@ func TestPolicyNewerSchemaRefused(t *testing.T) {
 	now, err := os.ReadFile(filepath.Join(dir, "policy.json"))
 	require.NoError(t, err)
 	assert.Equal(t, string(kept), string(now), "the policy kept stays")
+
+	// With policy.json gone, the ETag isn't sent: the policy comes again
+	// (security review enterprise#9: a 304 left none for ever).
+	s.Mu.Lock()
+	s.Policy["schema"] = PolicySchema
+	s.Mu.Unlock()
+	require.NoError(t, os.Remove(filepath.Join(dir, "policy.json")))
+	changed, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.FileExists(t, filepath.Join(dir, "policy.json"))
 }

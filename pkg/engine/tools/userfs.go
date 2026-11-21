@@ -50,7 +50,10 @@ func UserPath(p string) (string, error) {
 	if escapesRoot(c) {
 		return "", fmt.Errorf("%w: %q", ErrOutsideWorkspace, p)
 	}
-	if c == ".git" || strings.HasPrefix(c, ".git"+string(filepath.Separator)) {
+	// Any spelling of it on a disk that ignores case (.GIT/hooks), where
+	// it's the same folder (security review files#8).
+	first, _, _ := strings.Cut(c, string(filepath.Separator))
+	if first == ".git" || caseInsensitiveFS && strings.EqualFold(first, ".git") {
 		return "", ErrGitDir
 	}
 	return c, nil
@@ -294,6 +297,7 @@ func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, repla
 	}
 	defer unlock()
 	r := w.userRoot()
+	keep := os.FileMode(0)
 	if info, err := r.Lstat(rel); err == nil {
 		if !replace {
 			return fmt.Errorf("%s: %w", filepath.ToSlash(rel), fs.ErrExist)
@@ -301,10 +305,19 @@ func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, repla
 		if info.IsDir() {
 			return fmt.Errorf("%s is a folder", filepath.ToSlash(rel))
 		}
+		keep = info.Mode().Perm()
 	}
 	f, err := r.OpenFile(tmp, os.O_WRONLY, 0)
 	if err != nil {
 		return err
+	}
+	// A file replaced keeps its mode: an upload over a 0600 one doesn't
+	// make it readable by others (security review files#10).
+	if keep != 0 {
+		if err := f.Chmod(keep); err != nil {
+			f.Close()
+			return err
+		}
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()

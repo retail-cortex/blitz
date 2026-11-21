@@ -86,7 +86,7 @@ func TestExpandBlocked(t *testing.T) {
 		})
 	}
 	assert.NotContains(t, joined, "ok.txt", "unexpected entries: %s", joined)
-	assert.NotContains(t, joined, "node_modules", "unexpected entries: %s", joined)
+	assert.Contains(t, joined, filepath.Join(ws, "node_modules", "pkg", ".env"), "a blocked name under node_modules is masked too (SH-24d)")
 	assert.Contains(t, dirs, filepath.Join(home, ".ssh"), "~/.ssh should be masked as a directory")
 	f, d := expandBlocked(OSSandboxSpec{WritableDirs: []string{ws}})
 	assert.Equal(t, 0, len(f)+len(d), "no matcher -> nothing blocked")

@@ -132,3 +132,26 @@ func TestProfileSiteHost(t *testing.T) {
 		assert.Equal(t, want, is(host), host)
 	}
 }
+
+// The person's own file operations refuse .git in any spelling the disk
+// takes for it, and an upload replacing a file keeps its mode (security
+// review files#8, files#10).
+func TestUserFilesGitSpellingAndUploadMode(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	ctx := context.Background()
+	if caseInsensitiveFS {
+		_, err := UserPath(".GIT/hooks/pre-commit")
+		assert.ErrorIs(t, err, ErrGitDir)
+	}
+	_, err := UserPath(".gitignore")
+	assert.NoError(t, err, "a name that starts the same isn't .git")
+	writeFile(t, filepath.Join(dir, "secret.txt"), "old")
+	require.NoError(t, os.Chmod(filepath.Join(dir, "secret.txt"), 0o600))
+	tmp, err := ws.UserCreateUpload("secret.txt")
+	require.NoError(t, err)
+	require.NoError(t, ws.UserAppend(tmp, []byte("new")))
+	require.NoError(t, ws.UserFinishUpload(ctx, tmp, "secret.txt", true))
+	info, err := os.Stat(filepath.Join(dir, "secret.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "kept, not 0644")
+}

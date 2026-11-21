@@ -103,7 +103,10 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 		return false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	if tag, err := os.ReadFile(filepath.Join(dir, policyETag)); err == nil {
+	// The ETag only stands for a policy kept: with policy.json gone, the
+	// service's 304 would leave none for ever (security review
+	// enterprise#9).
+	if tag, err := os.ReadFile(filepath.Join(dir, policyETag)); err == nil && fileExists(filepath.Join(dir, "policy.json")) {
 		req.Header.Set("If-None-Match", string(tag))
 	}
 	res, err := c.hc.Do(req)
@@ -293,4 +296,10 @@ func (c *Client) SetItem(ctx context.Context, kind, name string, on bool) (confi
 	var out config.OrgAsset
 	err := c.signedCall(ctx, http.MethodPut, "/api/v1/me/items/"+url.PathEscape(kind)+"/"+url.PathEscape(name), map[string]any{"on": on}, &out)
 	return out, err
+}
+
+// fileExists reports whether a file is at path.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
