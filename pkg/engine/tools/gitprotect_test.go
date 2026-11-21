@@ -15,12 +15,16 @@
 package tools
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/session"
 )
 
 // The files git runs commands from, in a repository at any depth and its
@@ -68,4 +72,24 @@ func TestWorkspaceRefusesGitControl(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = ws.WritablePath("vendor/lib/.git/config")
 	assert.NoError(t, err, "a repository cloned further down is the agent's")
+}
+
+// A tool call a local model wrote as text is asked about even in bypass
+// mode, where a real call runs unasked (spec_056 CA-50a; security review
+// runtime#4).
+func TestTextCallsAreAlwaysAsked(t *testing.T) {
+	req := api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "make build", Targets: []string{"make build"}}
+	for _, mode := range []api.PermissionMode{api.ModeBypass} {
+		t.Run(string(mode), func(t *testing.T) {
+			h, reqs := decisionHooks(api.DecisionOnce)
+			h.policy.Mode = mode
+			h.SetRules(rulesOf(t, []string{"shell(make *)"}, nil, nil))
+			real := agent.NewToolContext(&mockIC{ctx: context.Background()}, "adk-123", &session.EventActions{}, nil)
+			require.NoError(t, h.Approve(real, req))
+			assert.Empty(t, *reqs, "a real call in bypass mode")
+			fromText := agent.NewToolContext(&mockIC{ctx: context.Background()}, TextCallPrefix+"1", &session.EventActions{}, nil)
+			require.NoError(t, h.Approve(fromText, req))
+			require.Len(t, *reqs, 1, "a call read from text is asked")
+		})
+	}
 }

@@ -70,6 +70,11 @@ func liveClientConfig(cc *genai.ClientConfig) *genai.ClientConfig {
 // Gemini API lists, else the backend's default. ErrVoiceNotSetUp when
 // Gemini can't sign in.
 func NewVoiceModel(ctx context.Context, cfg *config.Config) (*VoiceModel, error) {
+	// Voice is Gemini's live model: a provider of the person's own
+	// (runtime#6).
+	if err := ownProviderOff(cfg, "gemini"); err != nil {
+		return nil, fmt.Errorf("%w (%v)", ErrVoiceNotSetUp, err)
+	}
 	cc, err := geminiClientConfig(ctx, cfg.LLM.Gemini, policyFrom(cfg.LLM))
 	if err != nil {
 		return nil, fmt.Errorf("%w (%v)", ErrVoiceNotSetUp, err)
@@ -97,6 +102,9 @@ func NewVoiceModel(ctx context.Context, cfg *config.Config) (*VoiceModel, error)
 // API, "vertex" for Vertex AI), or why it can't (ErrVoiceNotSetUp,
 // VOX-03). It asks nothing of Google.
 func VoiceBackend(ctx context.Context, cfg *config.Config) (string, error) {
+	if err := ownProviderOff(cfg, "gemini"); err != nil {
+		return "", fmt.Errorf("%w (%v)", ErrVoiceNotSetUp, err)
+	}
 	cc, err := geminiClientConfig(ctx, cfg.LLM.Gemini, policyFrom(cfg.LLM))
 	if err != nil {
 		return "", fmt.Errorf("%w (%v)", ErrVoiceNotSetUp, err)

@@ -378,7 +378,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "rule-deny " + rule.String()})
 		return fmt.Errorf("%w: %s is denied by the permission rule deny %s", ErrNotApproved, req.Detail, rule)
 	}
-	mustAsk := req.MustAsk || effect == EffectAsk
+	mustAsk := req.MustAsk || effect == EffectAsk || FromText(ctx)
 
 	if decide, ok := ctx.Value(unattendedKey{}).(api.Approver); ok {
 		if mustAsk { // an ask rule needs a person, and nobody is watching

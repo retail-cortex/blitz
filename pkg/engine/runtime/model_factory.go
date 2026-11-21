@@ -24,17 +24,21 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"cloud.google.com/go/auth"
 	"cloud.google.com/go/auth/credentials"
 	"cloud.google.com/go/auth/httptransport"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/adk/v2/model/openaimodel"
@@ -174,6 +178,23 @@ func openAIKey(ctx context.Context, llm config.LLMConfig, provider string, pol r
 // organization's policy doesn't allow (EN-35).
 var ErrModelNotAllowed = errors.New("your organization doesn't allow that model")
 
+// ErrOwnProviderOff is a provider of the person's own while they're
+// connected to an organization, which is their provider then (EN-35a):
+// only the local one (Ollama) stays theirs.
+var ErrOwnProviderOff = errors.New("your organization is your provider")
+
+// ownProviderOff is why provider can't be used for pictures, speech or
+// voice while cfg is connected to an organization, or nil.
+func ownProviderOff(cfg *config.Config, provider string) error {
+	if cfg.Enterprise.URL == "" || provider == "enterprise" {
+		return nil
+	}
+	if ok, _ := cfg.Org.Policy.OwnProvider(provider); ok {
+		return nil
+	}
+	return fmt.Errorf("%w: %s of your own isn't used while you're connected to it (Ollama on this computer is): choose one of its models, or disconnect from it", ErrOwnProviderOff, provider)
+}
+
 // newProviderModel builds one model of the given provider, applying its
 // [model_settings] on each call.
 func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelName string) (model.LLM, error) {
@@ -192,6 +213,13 @@ func newProviderModel(ctx context.Context, cfg *config.Config, provider, modelNa
 	m, err := buildProviderModel(ctx, cfg, provider, modelName)
 	if err != nil {
 		return nil, err
+	}
+	// A model of the person's own the name didn't give (the provider's
+	// default) is checked as a named one is (security review runtime#3).
+	if cfg.Enterprise.URL != "" && provider != "enterprise" && modelName == "" {
+		if _, patterns := cfg.Org.Policy.OwnProvider(provider); !config.ModelAllowed(m.Name(), patterns) {
+			return nil, fmt.Errorf("%w: %s isn't one of the %s models %s allows (%s)", ErrModelNotAllowed, m.Name(), provider, cfg.Org.Why("models.own."+provider+".models"), strings.Join(patterns, ", "))
+		}
 	}
 	// The settings' max_tokens is applied first, then capped at what the
 	// model turns out to allow (outputcap.go).
@@ -256,6 +284,7 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 		if t, ok := m.(*toolCallParsingModel); ok {
 			t.provider, t.key = provider, apiKey
 			t.coreTools = provider == "ollama" && !cfg.LLM.Ollama.AllTools
+			t.textCalls = provider == "ollama" || localBaseURL(baseURL)
 		}
 		if err == nil && provider == "ollama" {
 			go listOllama(baseURL, modelName) // what Ollama says of it (spec_056 CA-11)
@@ -300,10 +329,10 @@ func buildProviderModel(ctx context.Context, cfg *config.Config, provider, model
 			if apiKey == "" {
 				apiKey = "ollama"
 			}
-			return newOpenAIModel(ctx, modelName, apiKey, cfg.LLM.OpenAI.BaseURL, pol.openAIOptions()...)
+			return localTextCalls(newOpenAIModel(ctx, modelName, apiKey, cfg.LLM.OpenAI.BaseURL, pol.openAIOptions()...))
 		}
 		// Default to local Ollama if available
-		return newOpenAIModel(ctx, modelName, "ollama", defaultOllamaBaseURL, pol.openAIOptions()...)
+		return localTextCalls(newOpenAIModel(ctx, modelName, "ollama", defaultOllamaBaseURL, pol.openAIOptions()...))
 
 	default:
 		// A misspelt provider is that, whatever keys are set: never
@@ -572,7 +601,7 @@ func newOpenAIModelFor(ctx context.Context, name, apiKey, baseURL string, api op
 	if err != nil {
 		return nil, err
 	}
-	return &toolCallParsingModel{inner: m}, nil
+	return &toolCallParsingModel{inner: m, baseURL: baseURL}, nil
 }
 
 type toolCallParsingModel struct {
@@ -583,6 +612,13 @@ type toolCallParsingModel struct {
 	// provider and key, when set, let a failed call say what the provider
 	// said (providerError), with the key masked.
 	provider, key string
+	// textCalls reads tool calls written as text in the reply: a local
+	// model's only (Ollama, a server on this computer), never OpenAI's or
+	// a gateway's, where a quoted line would become a call (spec_056
+	// CA-50a; security review runtime#4).
+	textCalls bool
+	// baseURL is the server's address.
+	baseURL string
 }
 
 func (m *toolCallParsingModel) Name() string {
@@ -607,7 +643,7 @@ func (m *toolCallParsingModel) GenerateContent(ctx context.Context, req *model.L
 				}
 				continue
 			}
-			if resp != nil && resp.Content != nil && !resp.Partial {
+			if m.textCalls && resp != nil && resp.Content != nil && !resp.Partial {
 				parseTextToolCalls(resp.Content, offeredTools(req))
 			}
 			if resp != nil && !resp.Partial {
@@ -646,10 +682,52 @@ func offeredTools(req *model.LLMRequest) map[string]bool {
 	return names
 }
 
+// localBaseURL reports whether an OpenAI-compatible server's address is
+// on this computer (Ollama, LM Studio, llama.cpp): a local model's.
+func localBaseURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	a, err := netip.ParseAddr(host)
+	return err == nil && a.Unmap().IsLoopback()
+}
+
+// localTextCalls turns text tool calls on for m when its server is on
+// this computer.
+func localTextCalls(m model.LLM, err error) (model.LLM, error) {
+	if t, ok := m.(*toolCallParsingModel); ok {
+		t.textCalls = t.textCalls || localBaseURL(t.baseURL)
+	}
+	return m, err
+}
+
+// textCallSeq numbers the tool calls read from text.
+var textCallSeq atomic.Int64
+
 func parseTextToolCalls(content *genai.Content, allowed map[string]bool) {
 	if len(allowed) == 0 {
 		return
 	}
+	// A call read from text is marked (tools.TextCallPrefix), so it's
+	// asked about in every mode, past an allow rule too (CA-50a).
+	native := map[*genai.FunctionCall]bool{}
+	for _, part := range content.Parts {
+		if part.FunctionCall != nil {
+			native[part.FunctionCall] = true
+		}
+	}
+	defer func() {
+		for _, part := range content.Parts {
+			if fc := part.FunctionCall; fc != nil && !native[fc] {
+				fc.ID = fmt.Sprintf("%s%d", tools.TextCallPrefix, textCallSeq.Add(1))
+			}
+		}
+	}()
 	var parts []*genai.Part
 	for _, part := range content.Parts {
 		if part.FunctionCall != nil || part.Text == "" {

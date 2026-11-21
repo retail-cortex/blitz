@@ -15,12 +15,15 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
+	"path"
 	"slices"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"google.golang.org/genai"
 )
 
@@ -201,7 +204,54 @@ func (e *Engine) providerToolPolicy() ProviderToolPolicy {
 			off[kind] = true
 		}
 	}
+	// The provider's web tools skip Blitz's per-host approval, its domain
+	// lists and web rules, web hooks and the guardrails on web results:
+	// while any of those applies, Blitz's own web tools are used (CA-81a,
+	// the owner's call; security review runtime#1).
+	if why := e.webRulesApply(); why != "" {
+		off[ptWebSearch], off[ptWebFetch] = true, true
+	} else if !slices.Contains(e.cfg.Web.AllowDomains, "*") {
+		// Blitz's web_fetch asks before a host it doesn't allow: the
+		// provider's would fetch it unasked.
+		off[ptWebFetch] = true
+	}
 	return ProviderToolPolicy{Off: all || !e.cfg.Tools.ProviderToolsOn(), Disabled: off}
+}
+
+// webChecker is a guard that can say whether a guardrail checks the web
+// tools' results.
+type webChecker interface{ ChecksWebResults() bool }
+
+// webRulesApply is what makes Blitz's own web tools the ones used, or "":
+// web.deny_domains or allow_domains (but "*"), a web(…) rule, a pre_tool
+// or post_tool hook for a web tool, or a guardrail on web results.
+func (e *Engine) webRulesApply() string {
+	switch {
+	case len(e.cfg.Web.DenyDomains) > 0:
+		return "web.deny_domains"
+	case len(e.cfg.Web.AllowDomains) > 0 && !slices.Contains(e.cfg.Web.AllowDomains, "*"):
+		return "web.allow_domains"
+	}
+	if e.toolReg != nil {
+		for _, r := range e.toolReg.Rules().List() {
+			if r.Kind == tools.RuleWeb {
+				return "a web(…) rule"
+			}
+		}
+	}
+	for _, event := range []string{"pre_tool", "post_tool"} {
+		for _, h := range e.cfg.Hooks.ByEvent()[event] {
+			for _, name := range []string{"web_fetch", "web_search"} {
+				if ok, _ := path.Match(cmp.Or(h.Match, "*"), name); ok {
+					return "a " + event + " hook"
+				}
+			}
+		}
+	}
+	if g, ok := e.guard.(webChecker); ok && g.ChecksWebResults() {
+		return "a guardrail on web results"
+	}
+	return ""
 }
 
 func (e *Engine) lookupSettings(name string) (config.ModelSettings, bool) {

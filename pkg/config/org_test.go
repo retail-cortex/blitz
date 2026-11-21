@@ -165,22 +165,32 @@ func TestOrgLayer(t *testing.T) {
 // EN-35, EN-39: own providers by provider and their models, from a
 // service that says, else own_providers for all; who decided a setting.
 func TestOrgPolicyProviders(t *testing.T) {
+	// While the organization is active it's the person's provider: only
+	// the local one stays theirs, whatever the policy allows (EN-35a).
 	var p OrgPolicy
-	ok, _ := p.OwnProvider("ollama")
-	assert.False(t, ok, "nothing allowed")
-	assert.False(t, p.AnyOwnProvider())
-	p.Models.OwnProviders = true
 	ok, models := p.OwnProvider("ollama")
-	assert.True(t, ok, "own_providers: every one")
+	assert.True(t, ok, "the local provider")
 	assert.Nil(t, models)
-	p.Models.Own = map[string]OwnProvider{"ollama": {Allowed: true, Models: []string{"llama3*"}}, "anthropic": {}}
-	p.Models.OwnProviders = false
+	assert.True(t, p.AnyOwnProvider())
+	for _, set := range []func(){
+		func() {},
+		func() { p.Models.OwnProviders = true },
+		func() { p.Models.Own = map[string]OwnProvider{"anthropic": {Allowed: true}, "gemini": {Allowed: true}} },
+	} {
+		set()
+		for _, prov := range []string{"anthropic", "gemini", "openai", "bedrock", "azure", "api"} {
+			ok, _ := p.OwnProvider(prov)
+			assert.False(t, ok, prov)
+		}
+	}
+	p.Models.Own = map[string]OwnProvider{"ollama": {Allowed: true, Models: []string{"llama3*"}}}
 	ok, models = p.OwnProvider("ollama")
 	assert.True(t, ok)
-	assert.Equal(t, []string{"llama3*"}, models)
-	ok, _ = p.OwnProvider("anthropic")
-	assert.False(t, ok, "the service said, by provider")
-	assert.True(t, p.AnyOwnProvider())
+	assert.Equal(t, []string{"llama3*"}, models, "its models, when the service names them")
+	p.Models.Own = map[string]OwnProvider{"ollama": {}}
+	ok, models = p.OwnProvider("ollama")
+	assert.True(t, ok, "the local provider can't be switched off")
+	assert.Nil(t, models)
 
 	tests := []struct {
 		model    string

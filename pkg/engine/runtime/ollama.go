@@ -69,7 +69,7 @@ func newOllamaAuto(key, baseURL string, opts []option.RequestOption, coreTools b
 	a.build = func(ctx context.Context, name string) (model.LLM, error) {
 		m, err := newOpenAIModel(ctx, name, key, baseURL, opts...)
 		if t, ok := m.(*toolCallParsingModel); ok {
-			t.provider, t.key, t.coreTools = "ollama", key, coreTools
+			t.provider, t.key, t.coreTools, t.textCalls = "ollama", key, coreTools, true
 		}
 		return m, err
 	}

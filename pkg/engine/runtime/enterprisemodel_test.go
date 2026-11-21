@@ -296,46 +296,38 @@ func TestEnterpriseListModels(t *testing.T) {
 	})
 }
 
-// The organization's policy and its catalog's expiry: a model named with
-// a provider of the person's own uses it when the policy allows (bare
-// names stay the organization's), and the organization's models wait
-// once its catalog is out of date (EN-33, EN-35).
+// While the organization is active it's the person's provider (EN-35a):
+// a model named with a provider of their own (but the local one) has the
+// organization's default stand in, whatever own_providers or the service
+// says by provider; bare names are the organization's; its models wait
+// once its catalog is out of date (EN-33).
 func TestEnterprisePolicy(t *testing.T) {
 	s := newOrgService(t)
 	cfg := signedIn(t, s)
 	cfg.LLM.Provider, cfg.LLM.Gemini.APIKey = "gemini", "a key of my own"
 	cfg.Org = config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
 
-	stood, err := NewModel(context.Background(), cfg, "openai/gpt-x")
-	require.NoError(t, err)
-	assert.Equal(t, "smart", stood.Name(), "not allowed: the organization's default stands in")
-	assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg))
-
-	cfg.Org.Policy.Models.OwnProviders = true
-	assert.Equal(t, []string{"enterprise", "gemini"}, ConfiguredProviders(cfg))
-	own, err := NewModel(context.Background(), cfg, "openai/gpt-x")
-	require.NoError(t, err)
-	assert.Equal(t, "gpt-x", own.Name(), "allowed: the person's own provider (the organization's would stand its default, smart, in)")
+	for _, policy := range []func(){
+		func() {},
+		func() { cfg.Org.Policy.Models.OwnProviders = true },
+		func() {
+			cfg.Org.Policy.Models.OwnProviders = false
+			cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"openai": {Allowed: true, Models: []string{"gpt-x*"}}, "gemini": {Allowed: true}}
+		},
+	} {
+		policy()
+		assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg), "the person's own key isn't offered")
+		for _, name := range []string{"openai/gpt-x", "gemini/gemini-3", "anthropic/claude-opus-5-5"} {
+			stood, err := NewModel(context.Background(), cfg, name)
+			require.NoError(t, err)
+			assert.Equal(t, "smart", stood.Name(), "%s: the organization's default stands in", name)
+		}
+	}
 	m, err := NewModel(context.Background(), cfg, "fast")
 	require.NoError(t, err)
 	_, _, err = callAPI(inSession("s"), m, helloRequest())
 	require.NoError(t, err)
 	assert.Equal(t, "/api/v1/responses", s.g.requests()[0].Path, "a bare name is the organization's")
-
-	// By provider, and its models by pattern: OpenAI's gpt-x* only, Gemini
-	// not, though its key is set (EN-35).
-	cfg.Org.Policy.Models.OwnProviders = false
-	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"openai": {Allowed: true, Models: []string{"gpt-x*"}}}
-	assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg))
-	own, err = NewModel(context.Background(), cfg, "openai/gpt-x")
-	require.NoError(t, err)
-	assert.Equal(t, "gpt-x", own.Name())
-	_, err = NewModel(context.Background(), cfg, "openai/o9")
-	require.ErrorIs(t, err, ErrModelNotAllowed)
-	assert.ErrorContains(t, err, "o9 isn't one of the openai models the organization's policy allows (gpt-x*)")
-	stood, err = NewModel(context.Background(), cfg, "gemini/gemini-3")
-	require.NoError(t, err)
-	assert.Equal(t, "smart", stood.Name(), "a provider not allowed: the organization's stands in")
 
 	cfg.Org.Expires = time.Now().Add(-time.Minute)
 	_, err = NewModel(context.Background(), cfg, "fast")
@@ -393,4 +385,35 @@ func TestEnterpriseTokenRenewedAfter401IsMasked(t *testing.T) {
 	res.Body.Close()
 	require.Equal(t, 2, calls, "renewed once after the 401")
 	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-fresh-token-0002"), "org-fresh-token-0002")
+}
+
+// Pictures, speech and voice of the person's own aren't used while
+// they're connected to an organization (EN-35a; review runtime#5, #6);
+// disconnected, they are.
+func TestOwnProvidersOffForPicturesSpeechAndVoice(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Gemini.APIKey = "a key of my own"
+	cfg.Images.Model = "gemini/gemini-3.1-flash-image"
+	cfg.Audio.Model = "gemini/gemini-2.5-flash-preview-tts"
+	cfg.Enterprise.URL = "https://blitz.example.com"
+	cfg.Org.Policy.Models.OwnProviders = true // what the policy says doesn't matter
+
+	_, err := NewPainter(context.Background(), cfg)
+	assert.ErrorIs(t, err, ErrOwnProviderOff)
+	_, err = NewSpeaker(context.Background(), cfg)
+	assert.ErrorIs(t, err, ErrOwnProviderOff)
+	_, err = NewVoiceModel(context.Background(), cfg)
+	assert.ErrorIs(t, err, ErrVoiceNotSetUp)
+	assert.ErrorContains(t, err, "your organization is your provider")
+	_, err = VoiceBackend(context.Background(), cfg)
+	assert.ErrorContains(t, err, "your organization is your provider")
+
+	cfg.Enterprise.URL = ""
+	p, err := NewPainter(context.Background(), cfg)
+	require.NoError(t, err)
+	assert.NotNil(t, p, "disconnected, the person's own")
+	assert.NoError(t, ownProviderOff(cfg, "gemini"))
+	cfg.Enterprise.URL = "https://blitz.example.com"
+	assert.NoError(t, ownProviderOff(cfg, "ollama"), "the local provider stays")
+	assert.NoError(t, ownProviderOff(cfg, "enterprise"))
 }

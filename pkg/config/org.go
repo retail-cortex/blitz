@@ -214,30 +214,31 @@ type OwnProvider struct {
 	Models []string `json:"models,omitempty"`
 }
 
-// OwnProvider says whether the policy lets people use provider (one of
-// Providers) themselves, and which of its models (every one when none,
-// EN-35): by provider from a service that says (Models.Own), else
-// own_providers for every one.
+// LocalProvider is the provider of the person's own that stays theirs
+// while an organization is active: models on this computer (Ollama),
+// which send nothing anywhere.
+const LocalProvider = "ollama"
+
+// OwnProvider says whether people may use provider (one of Providers)
+// themselves while the organization is active, and which of its models
+// (every one when none). The organization is their provider then
+// (EN-35a, the owner's call): only the local one (LocalProvider) stays
+// theirs, with the models the service names for it if it names any;
+// every other provider of their own is off, whatever own_providers says.
+// Disconnecting from the organization gives them all back.
 func (p OrgPolicy) OwnProvider(provider string) (bool, []string) {
-	if o, ok := p.Models.Own[provider]; ok {
-		return o.Allowed, o.Models
+	if provider != LocalProvider {
+		return false, nil
 	}
-	return p.Models.OwnProviders, nil
+	if o, ok := p.Models.Own[provider]; ok && o.Allowed {
+		return true, o.Models
+	}
+	return true, nil
 }
 
-// AnyOwnProvider reports whether the policy lets people use any provider
-// of their own.
-func (p OrgPolicy) AnyOwnProvider() bool {
-	if p.Models.OwnProviders {
-		return true
-	}
-	for _, o := range p.Models.Own {
-		if o.Allowed {
-			return true
-		}
-	}
-	return false
-}
+// AnyOwnProvider reports whether the person has any provider of their
+// own while the organization is active: the local one always.
+func (p OrgPolicy) AnyOwnProvider() bool { return true }
 
 // ModelAllowed reports whether model matches one of patterns (every
 // model when there are none): shell-style globs, such as "llama3*" or

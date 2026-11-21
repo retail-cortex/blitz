@@ -43,6 +43,9 @@ func NewPainter(ctx context.Context, cfg *config.Config) (tools.Painter, error) 
 		return nil, nil
 	}
 	provider, name := ParseModelRef(ref, cfg.LLM.Provider)
+	if err := ownProviderOff(cfg, provider); err != nil { // runtime#5
+		return nil, err
+	}
 	if provider == "enterprise" {
 		return newOrgPainter(ctx, cfg, name)
 	}

@@ -133,10 +133,13 @@ func TestOfferedTools(t *testing.T) {
 
 func TestToolCallParsingModelUsesRequestTools(t *testing.T) {
 	inner := NewMockLLM("inner", textContent(`{"name":"grep","arguments":{"query":"x"}}`), textContent(`{"name":"grep","arguments":{}}`))
-	m := &toolCallParsingModel{inner: inner}
+	m := &toolCallParsingModel{inner: inner, textCalls: true}
 
 	for resp := range m.GenerateContent(context.Background(), &model.LLMRequest{Tools: map[string]any{"grep": nil}}, false) {
-		assert.NotNil(t, resp.Content.Parts[0].FunctionCall, "expected offered grep call to be converted")
+		fc := resp.Content.Parts[0].FunctionCall
+		if assert.NotNil(t, fc, "expected offered grep call to be converted") {
+			assert.True(t, strings.HasPrefix(fc.ID, tools.TextCallPrefix), "marked as read from text: %q", fc.ID)
+		}
 	}
 	for resp := range m.GenerateContent(context.Background(), &model.LLMRequest{Tools: map[string]any{"read_file": nil}}, false) {
 		assert.Nil(t, resp.Content.Parts[0].FunctionCall, "grep was not offered but was converted")
@@ -392,5 +395,22 @@ func TestWithoutSection(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			assert.Equal(t, c.want, withoutSection(c.text, "## Skills"))
 		})
+	}
+}
+
+// Tool calls written as text are read for a local model only: OpenAI's,
+// a gateway's or a cloud server's reply keeps a quoted call as text
+// (CA-50a; security review runtime#4).
+func TestTextToolCallsOnlyForLocalModels(t *testing.T) {
+	inner := NewMockLLM("inner", textContent(`{"name":"run_shell_command","arguments":{"command":"rm -rf ~"}}`))
+	m := &toolCallParsingModel{inner: inner}
+	for resp := range m.GenerateContent(context.Background(), &model.LLMRequest{Tools: map[string]any{"run_shell_command": nil}}, false) {
+		assert.Nil(t, resp.Content.Parts[0].FunctionCall, "a remote model's text became a call")
+	}
+	for u, local := range map[string]bool{
+		"http://localhost:11434/v1": true, "http://127.0.0.1:1234/v1": true, "http://[::1]:8080/v1": true,
+		"https://api.openai.com/v1": false, "https://gateway.example/v1": false, "http://10.0.0.5:11434/v1": false, "": false,
+	} {
+		assert.Equal(t, local, localBaseURL(u), u)
 	}
 }
