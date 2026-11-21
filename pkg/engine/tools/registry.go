@@ -27,6 +27,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -188,6 +189,17 @@ func (r *Registry) Rules() *PermissionRules { return r.rules }
 // permission rules' shell patterns.
 func (r *Registry) CommandPolicy() *CommandPolicy { return r.policy }
 
+// lspDriverDirs is the language servers' scripts folder, made when it
+// isn't there (a read-only bind needs its target), for the sandbox to
+// keep read-only (VE-43a; security review tools#3).
+func lspDriverDirs() []string {
+	dir := lsp.DriverDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil
+	}
+	return []string{dir}
+}
+
 // settingsBlocked are the blocked-path patterns for Blitz's own settings
 // files in dir (the folder the settings were read from), as
 // config.DefaultBlockedPaths has them for ~/.blitz.
@@ -270,7 +282,7 @@ func NewRegistry(cfg *config.Config, agentReg *agents.Registry, skillProv *skill
 	osb, err := NewOSSandbox(OSSandboxSpec{
 		Mode:         ShellSandboxMode(sb.Shell),
 		WritableDirs: writable,
-		ReadOnlyDirs: ws.ReadOnlyDirs(),
+		ReadOnlyDirs: append(ws.ReadOnlyDirs(), lspDriverDirs()...),
 		Blocked:      ws.Blocked(),
 		AllowNetwork: sb.AllowNetwork,
 	})

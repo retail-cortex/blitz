@@ -102,6 +102,13 @@ var cacheDir = func() string {
 	return filepath.Join(d, "blitz")
 }
 
+// DriverDir is the folder of Blitz's own scripts the language servers
+// run (its Bazel package driver): the OS sandbox keeps it read-only for
+// commands, so one can't plant code there that a server later runs in
+// another workspace (security review tools#3). Blitz writes it itself,
+// outside the sandbox.
+func DriverDir() string { return filepath.Join(cacheDir(), "lsp") }
+
 // goDriverScript runs rules_go's package driver with the flags the
 // environment gives (GOPACKAGESDRIVER_BAZEL_FLAGS: Bazel's own output
 // base, so the language server never starts or shares the person's Bazel
@@ -128,7 +135,7 @@ func (m *Manager) goDriverEnv(root string) []string {
 	if own := filepath.Join(m.root, "tools", "gopackagesdriver.sh"); isFile(own) {
 		return []string{"GOPACKAGESDRIVER=" + own}
 	}
-	dir := filepath.Join(cacheDir(), "lsp")
+	dir := DriverDir()
 	script := filepath.Join(dir, "gopackagesdriver.sh")
 	if data, err := os.ReadFile(script); err != nil || string(data) != goDriverScript {
 		if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(script, []byte(goDriverScript), 0o700) != nil {
