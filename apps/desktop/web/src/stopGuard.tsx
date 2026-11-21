@@ -23,10 +23,19 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mdiAlertOutline } from "@mdi/js";
-import { workers } from "./api";
+import { sessions, workers } from "./api";
 import { t, tn } from "./i18n";
 import { Button, Dialog } from "@blitz/webui";
 import { isGoing, useWorkflowRuns } from "./workflowRuns";
+
+/** The background chats going in the service, by their prompt's first line ([] when it can't say). */
+export async function runningBackground(): Promise<string[]> {
+  try {
+    return (await sessions.listBackground({})).runs.filter((r) => r.state === "running" || r.state === "waiting").map((r) => r.prompt);
+  } catch {
+    return [];
+  }
+}
 
 /** The jobs whose runs are going in the service ([] when it can't say). */
 export async function runningJobs(): Promise<string[]> {
@@ -46,11 +55,15 @@ export function useStopGuard(): { guard: (action: () => void) => void; dialog: R
   const { runs } = useWorkflowRuns();
   const going = runs.filter(isGoing);
   const [jobs, setJobs] = useState<string[]>([]);
+  // Background chats are stopped too: asked about with the runs (N26
+  // desktop-4#35). An eval run is recorded as stopped (EV-07a).
+  const [chats, setChats] = useState<string[]>([]);
   const [pending, setPending] = useState<(() => void) | null>(null);
   const guard = (action: () => void) =>
-    void runningJobs().then((names) => {
-      if (!going.length && !names.length) return action();
+    void Promise.all([runningJobs(), runningBackground()]).then(([names, bg]) => {
+      if (!going.length && !names.length && !bg.length) return action();
       setJobs(names);
+      setChats(bg);
       setPending(() => action);
     });
   const close = () => setPending(null);
@@ -77,7 +90,7 @@ export function useStopGuard(): { guard: (action: () => void) => void; dialog: R
           </>
         }
       >
-        <p>{tn("desktop.service.stop_runs_body", going.length + jobs.length)}</p>
+        <p>{tn("desktop.service.stop_runs_body", going.length + jobs.length + chats.length)}</p>
         <ul>
           {going.map((r) => (
             <li key={r.id} className="mono">
@@ -86,6 +99,9 @@ export function useStopGuard(): { guard: (action: () => void) => void; dialog: R
           ))}
           {jobs.map((name) => (
             <li key={`job:${name}`}>{t("desktop.service.stop_runs_job", { name })}</li>
+          ))}
+          {chats.map((prompt, i) => (
+            <li key={`bg:${i}`}>{t("desktop.service.stop_runs_chat", { prompt })}</li>
           ))}
         </ul>
       </Dialog>,

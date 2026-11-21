@@ -4971,6 +4971,7 @@
     "desktop.service.stop_runs_body.other": "{count} exécutions sont en cours dans le service. Redémarrer ou arrêter le service les arrête.",
     "desktop.service.stop_runs_go": "Les arrêter et continuer",
     "desktop.service.stop_runs_job": "Job {name}",
+    "desktop.service.stop_runs_chat": "La conversation en arrière-plan « {prompt} »",
     "desktop.service.restarting": "Redémarrage…",
     "desktop.service.restarting_now": "Redémarrage du service Blitz…",
     "desktop.service.starting_now": "Démarrage du service Blitz…",

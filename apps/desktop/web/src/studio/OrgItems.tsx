@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { mdiLockOutline } from "@mdi/js";
 import { config } from "../api";
+import { message, reason } from "../errors";
 import type { OrgItem } from "../gen/blitz/v1/config_pb";
 import { t } from "../i18n";
 import { Icon, Switch, useSnackbar } from "@blitz/webui";
@@ -45,19 +46,36 @@ export function subtitle(it: Pick<OrgItem, "version" | "state" | "on" | "decided
  */
 export function OrgItems({ kind, title, empty }: { kind?: OrgKind; title?: string; empty?: string }) {
   const [items, setItems] = useState<OrgItem[]>([]);
+  const [failed, setFailed] = useState("");
   const [busy, setBusy] = useState("");
   const snack = useSnackbar();
   const load = useCallback(
     () =>
       config.listOrgItems({ kind: kind ?? "" }).then(
-        (r) => setItems(r.items),
-        () => setItems([]),
+        (r) => {
+          setItems(r.items);
+          setFailed("");
+        },
+        // No organization: nothing to show. Anything else is said, not
+        // taken for an empty library (N26 desktop-4#37).
+        (e) => {
+          setItems([]);
+          setFailed(reason(e) === "NOT_CONNECTED" ? "" : message(e));
+        },
       ),
     [kind],
   );
   useEffect(() => {
     void load();
   }, [load]);
+  if (items.length === 0 && failed) {
+    return (
+      <section className="stack rule-section org-items" style={{ gap: 4 }}>
+        <span className="t-title-sm">{title ?? t("desktop.orgitems.title")}</span>
+        <span className="t-body-sm error-text">{failed}</span>
+      </section>
+    );
+  }
   if (items.length === 0) {
     if (!empty) return null;
     // Where the library has its own card (Settings › Organization): say

@@ -4971,6 +4971,7 @@
     "desktop.service.stop_runs_body.other": "{count} runs are going in the service. Restarting or stopping the service stops them.",
     "desktop.service.stop_runs_go": "Stop them and go on",
     "desktop.service.stop_runs_job": "Job {name}",
+    "desktop.service.stop_runs_chat": "The background chat “{prompt}”",
     "desktop.service.restarting": "Restarting…",
     "desktop.service.restarting_now": "Restarting the Blitz service…",
     "desktop.service.starting_now": "Starting the Blitz service…",

@@ -308,6 +308,11 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 		return nil, fmt.Errorf("failed to initialize tools: %w", err)
 	}
 	w.tools.SetWarn(o.Warn)
+	// A hand-written [health] schedule that can't be read means no check
+	// ever runs: said as the workspace opens (N26 engine-top-2#17).
+	if why := w.healthScheduleProblem(); why != "" && o.Warn != nil {
+		o.Warn(why)
+	}
 	// Language servers run the workspace's own code (its Bazel driver,
 	// its .venv's Python) only once the person trusts it (VE-43a).
 	if m := w.tools.LSP(); m != nil {

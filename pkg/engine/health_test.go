@@ -151,3 +151,14 @@ func TestHealthSchedule(t *testing.T) {
 	assert.Len(t, judge.Requests, due, "the agent and the built-in guardrails")
 	assert.Empty(t, store.State().Skipped)
 }
+
+// A [health] schedule that can't be read is said when the workspace
+// opens, not left to mean no check ever runs (N26 engine-top-2#17).
+func TestHealthScheduleProblem(t *testing.T) {
+	bad, _ := openTestWith(t, func(c *config.Config) { c.Health.Schedule = "every blue moon" })
+	assert.Contains(t, bad.healthScheduleProblem(), "[health] schedule can't be read")
+	good, _ := openTestWith(t, func(c *config.Config) { c.Health.Schedule = "daily at 9" })
+	assert.Empty(t, good.healthScheduleProblem())
+	off, _ := openTestWith(t, func(c *config.Config) { c.Health.Schedule = "off" })
+	assert.Empty(t, off.healthScheduleProblem())
+}

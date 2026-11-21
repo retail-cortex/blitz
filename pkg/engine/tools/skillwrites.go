@@ -216,16 +216,41 @@ func (c *wsCopy) keepChanges(ctx context.Context, ws *Workspace, hooks *Hooks, s
 			return nil, err
 		}
 	}
-	var written []string
-	var errs []error
+	// A skill's script never gets, so never makes, a hidden file: a key
+	// or .env it wrote stays in its copy. Refused before anything is
+	// written, so the changes are kept all or none.
 	for _, ch := range changes {
-		var err error
-		// A skill's script never gets, so never makes, a hidden file: a
-		// key or .env it wrote stays in its copy.
 		if pat, kept := ws.KeptFromModel(filepath.Join(ws.Dir(), ch.path)); kept {
-			errs = append(errs, fmt.Errorf("%s: %w (%s)", ch.path, ErrBlockedPath, pat))
-			continue
+			return nil, fmt.Errorf("%s: %w (%s)", ch.path, ErrBlockedPath, pat)
 		}
+	}
+	// All or none (N26 engine-tools-2#13: a failure partway left the
+	// earlier files written): what each file was is kept, under the lock,
+	// and put back if one fails.
+	type was struct {
+		path   string
+		data   []byte
+		absent bool
+	}
+	var done []was
+	undo := func() {
+		for i := len(done) - 1; i >= 0; i-- {
+			d := done[i]
+			if d.absent {
+				_ = ws.RemoveFile(ctx, d.path)
+			} else {
+				_ = ws.WriteFileAtomic(ctx, d.path, d.data)
+			}
+		}
+	}
+	var written []string
+	for _, ch := range changes {
+		prev, rerr := ws.ReadFile(filepath.FromSlash(ch.path))
+		if rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			undo()
+			return nil, fmt.Errorf("%s: %w", ch.path, rerr)
+		}
+		var err error
 		if ch.deleted {
 			err = ws.RemoveFile(ctx, ch.path)
 			if errors.Is(err, fs.ErrNotExist) {
@@ -235,12 +260,13 @@ func (c *wsCopy) keepChanges(ctx context.Context, ws *Workspace, hooks *Hooks, s
 			err = ws.WriteFileAtomic(ctx, ch.path, bytes.Clone(ch.after))
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", ch.path, err))
-			continue
+			undo()
+			return nil, fmt.Errorf("%s: %w (nothing was kept)", ch.path, err)
 		}
+		done = append(done, was{path: ch.path, data: prev, absent: errors.Is(rerr, fs.ErrNotExist)})
 		written = append(written, ch.path)
 	}
-	return written, errors.Join(errs...)
+	return written, nil
 }
 
 // remove deletes the copy.

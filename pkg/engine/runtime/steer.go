@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"maps"
+	"sync"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
@@ -45,7 +46,7 @@ func (e *Engine) Steer(sessionID, text string) error {
 	}
 	e.steerMu.Lock()
 	defer e.steerMu.Unlock()
-	if !e.steering[sessionID] {
+	if e.steering[sessionID] == 0 {
 		return api.ErrSteerTooLate
 	}
 	if e.steers == nil {
@@ -55,21 +56,35 @@ func (e *Engine) Steer(sessionID, text string) error {
 	return nil
 }
 
-// OpenSteers makes sessionID take steer messages: its turn has started.
-func (e *Engine) OpenSteers(sessionID string) {
+// OpenSteers makes sessionID take steer messages: a run of it has
+// started. It returns the run's close, which acts once however often
+// it's called (CloseSteers).
+func (e *Engine) OpenSteers(sessionID string) func() []string {
 	e.steerMu.Lock()
 	defer e.steerMu.Unlock()
 	if e.steering == nil {
-		e.steering = map[string]bool{}
+		e.steering = map[string]int{}
 	}
-	e.steering[sessionID] = true
+	e.steering[sessionID]++
+	var once sync.Once
+	return func() (msgs []string) {
+		once.Do(func() { msgs = e.CloseSteers(sessionID) })
+		return msgs
+	}
 }
 
-// CloseSteers stops sessionID taking steer messages and returns those no
-// tool result carried (the turn's leftovers).
+// CloseSteers ends one run's taking steer messages for sessionID; the
+// last to end stops the session taking them and gets those no tool
+// result carried (the turn's leftovers). Runs still going (parallel
+// workflow steps) keep taking them (N26 engine-top-2#10: the first step
+// to end closed steering for the rest, and took their messages).
 func (e *Engine) CloseSteers(sessionID string) []string {
 	e.steerMu.Lock()
 	defer e.steerMu.Unlock()
+	if e.steering[sessionID] > 1 {
+		e.steering[sessionID]--
+		return nil
+	}
 	delete(e.steering, sessionID)
 	msgs := e.steers[sessionID]
 	delete(e.steers, sessionID)

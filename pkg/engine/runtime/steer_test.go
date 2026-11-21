@@ -177,3 +177,19 @@ func TestSteerDefaultSession(t *testing.T) {
 	f := newEngine(t)
 	assert.ErrorIs(t, f.eng.Steer("", "hi"), api.ErrSteerTooLate)
 }
+
+// Parallel runs of one session (a workflow's steps) share its steering:
+// one ending leaves the others taking messages and their leftovers, and
+// each run's close acts once, however often it's called (N26
+// engine-top-2#10).
+func TestSteersSharedByParallelRuns(t *testing.T) {
+	e := &Engine{}
+	closeA := e.OpenSteers("s")
+	closeB := e.OpenSteers("s")
+	require.NoError(t, e.Steer("s", "first"))
+	assert.Nil(t, closeA(), "one run ending leaves the messages to the one still going")
+	assert.Nil(t, closeA(), "a close acts once")
+	require.NoError(t, e.Steer("s", "second"), "the other run still takes them")
+	assert.Equal(t, []string{"first", "second"}, closeB())
+	assert.ErrorIs(t, e.Steer("s", "late"), api.ErrSteerTooLate)
+}

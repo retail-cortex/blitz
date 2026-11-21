@@ -4971,6 +4971,7 @@
     "desktop.service.stop_runs_body.other": "Hay {count} ejecuciones en curso en el servicio. Reiniciar o detener el servicio las detiene.",
     "desktop.service.stop_runs_go": "Detenerlas y continuar",
     "desktop.service.stop_runs_job": "Trabajo {name}",
+    "desktop.service.stop_runs_chat": "La conversación en segundo plano «{prompt}»",
     "desktop.service.restarting": "Reiniciando…",
     "desktop.service.restarting_now": "Reiniciando el servicio de Blitz…",
     "desktop.service.starting_now": "Iniciando el servicio de Blitz…",

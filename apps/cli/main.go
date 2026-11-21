@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/activity"
+	"github.com/retail-cortex/blitz/pkg/pdftext"
 	"github.com/retail-cortex/blitz/pkg/socket"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -86,6 +87,11 @@ type rootOptions struct {
 }
 
 func main() {
+	// A PDF's text is read in a child, this program run again, as the
+	// service does: a parser looping on a file ends with the child, not
+	// spinning on in this process after its deadline (N26 pkg-small-2#9).
+	pdftext.MaybeServe()
+	pdftext.UseHelper()
 	// Until observability.StartProcess installs the log file, slog's default would
 	// print to stderr and duplicate the terminal warnings.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
