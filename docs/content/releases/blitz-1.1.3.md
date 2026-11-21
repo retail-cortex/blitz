@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.1.3
-weight: 1
+weight: 2
 ---
 
 Your profile's intranet sites open for the agent. Sites you list in a browser profile can now be on your company's private network, reached over a VPN or through your company's DNS. The agent browses to them signed in, as it already did for public sites.
