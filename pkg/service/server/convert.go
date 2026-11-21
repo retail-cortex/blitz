@@ -337,3 +337,27 @@ func choiceMsgs(list []api.Choice) []*pb.QuestionChoice {
 	}
 	return out
 }
+
+// reasoningMsg is a session's turns and one turn's reasoning graph
+// (spec_066_reasoning).
+func reasoningMsg(r api.Reasoning) *pb.GetReasoningResponse {
+	out := &pb.GetReasoningResponse{Turn: int32(r.Turn), Cut: r.Cut}
+	for _, t := range r.Turns {
+		out.Turns = append(out.Turns, &pb.ReasoningTurn{Index: int32(t.Index), Prompt: t.Prompt, Start: timestamppb.New(t.Start), Calls: int32(t.Calls), Thoughts: int32(t.Thoughts), Usage: usageMsg(t.Usage)})
+	}
+	for _, n := range r.Nodes {
+		m := &pb.ReasoningNode{
+			Id: n.ID, Parent: n.Parent, Kind: n.Kind, Title: n.Title, Text: n.Text, Author: n.Author,
+			Provider: n.Provider, Model: n.Model, Tool: n.Tool, Args: structMsg(n.Args), Result: structMsg(n.Result),
+			Status: n.Status, DurationMs: n.Duration.Milliseconds(), Hidden: n.Hidden,
+		}
+		if !n.Start.IsZero() {
+			m.Start = timestamppb.New(n.Start)
+		}
+		if n.Usage != nil {
+			m.Usage = usageMsg(*n.Usage)
+		}
+		out.Nodes = append(out.Nodes, m)
+	}
+	return out
+}

@@ -1408,7 +1408,8 @@ fieldset.rule-form { border: none; margin: 0; padding: 0; min-width: 0; }
 .mermaid-diagram.pannable.panning { cursor: grabbing; }
 .mermaid-diagram.zoomed { overflow: hidden; }
 .mermaid-diagram.panning svg, .mermaid-diagram.zoomed svg { user-select: none; -webkit-user-select: none; }
-.diagram-viewer { position: fixed; inset: 0; z-index: 900; background: var(--md-scrim); animation: fade 0.15s; }
+/* Under the top menu, which stays usable (as the drawer's views). */
+.diagram-viewer { position: fixed; inset: var(--topbar-height) 0 0 0; z-index: 900; background: var(--md-scrim); animation: fade 0.15s; }
 .diagram-viewer-stage { position: absolute; inset: 56px 24px 24px; display: flex; align-items: center; justify-content: center; padding: 16px; border-radius: var(--md-shape-lg); background: var(--glass-strong, var(--md-surface)); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: var(--md-elevation-3); overflow: hidden; }
 .diagram-viewer-bar { position: absolute; top: 12px; right: 24px; display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: var(--md-shape-full, 999px); background: var(--glass-strong, var(--md-surface-container-high)); color: var(--md-on-surface); box-shadow: var(--md-elevation-2); }
 

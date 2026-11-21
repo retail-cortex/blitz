@@ -31,6 +31,8 @@ import { TaskList } from "./conversation/StatusCards";
 import { useAttachments } from "./conversation/useAttachments";
 import { useBackgroundTasks } from "./conversation/useBackgroundTasks";
 import { useConversationEvents } from "./conversation/useConversationEvents";
+import { liveThought, showPrompt } from "./reasoning/chatLink";
+import { ReasoningDrawer } from "./reasoning/ReasoningDrawer";
 import { ConversationStream } from "./conversation/ConversationStream";
 import { useConversationRun } from "./conversation/useConversationRun";
 import { useConversationShell } from "./conversation/useConversationShell";
@@ -115,6 +117,10 @@ export function Conversation({
   const commands = useMemo(() => allCommands(customCommands), [customCommands]);
   const [dragging, setDragging] = useState(false);
   const [deleting, setDeleting] = useState<SessionInfo[] | null>(null);
+  // The Reasoning view (spec_066_reasoning), asked to look again as the conversation changes.
+  const [reasoningOpen, setReasoningOpen] = useState(false);
+  const [changes, setChanges] = useState(0);
+  useEffect(() => setChanges((n) => n + 1), [entries]);
   const [forceRewind, setForceRewind] = useState<{ index: number; mode: string; error: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -472,7 +478,17 @@ export function Conversation({
           <span className="t-title">{t("desktop.drop")}</span>
         </div>
       )}
-      <SessionBar session={session} list={list} running={running} onNew={newSession} onLoad={load} onRename={rename} onDelete={setDeleting} expand={expand} />
+      <SessionBar
+        session={session}
+        list={list}
+        running={running}
+        onNew={newSession}
+        onLoad={load}
+        onRename={rename}
+        onDelete={setDeleting}
+        expand={expand}
+        reasoning={{ open: reasoningOpen, toggle: () => setReasoningOpen((o) => !o) }}
+      />
       <div className="chat-scroll" ref={scroller} onScroll={onScroll}>
         <ShellRunContext.Provider value={putShell}>
           <div className="chat-column">
@@ -538,6 +554,20 @@ export function Conversation({
         </ShellRunContext.Provider>
       </div>
       {dockEl && visible ? createPortal(dock, dockEl) : dock}
+      {reasoningOpen && visible && (
+        <ReasoningDrawer
+          dir={dir}
+          sessionId={session?.id ?? ""}
+          running={running}
+          activity={changes}
+          live={liveThought(entries, running)}
+          onShowInChat={(turn) => {
+            setReasoningOpen(false);
+            requestAnimationFrame(() => showPrompt(scroller.current, turn));
+          }}
+          onClose={() => setReasoningOpen(false)}
+        />
+      )}
       {deleting && <DeleteSessionsDialog deleting={deleting} onCancel={() => setDeleting(null)} onConfirm={(l) => void remove(l)} />}
       {forceRewind && (
         <ForceRewindDialog

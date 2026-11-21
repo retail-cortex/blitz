@@ -157,7 +157,7 @@ function UserBubble({ entry, running, onRewind, onEdit }: { entry: UserEntry; ru
   }
   const canRewind = entry.index !== undefined && !running;
   return (
-    <div className={`turn-user ${entry.sub === "steer" ? "steer" : ""}`}>
+    <div className={`turn-user ${entry.sub === "steer" ? "steer" : ""}`} data-prompt={entry.sub ? undefined : ""}>
       <div className="bubble-actions">
         <IconButton icon={mdiContentCopy} label={t("desktop.copy")} small onClick={() => navigator.clipboard?.writeText(entry.text).then(() => snack(t("desktop.copied")))} />
         {canRewind && (

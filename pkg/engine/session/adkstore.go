@@ -418,10 +418,21 @@ func (p *PersistentService) replayLocked(ctx context.Context, s adksession.Sessi
 // skipped, as replay skips it (SES-21a), so a session that resumes also
 // exports.
 func ReadEvents(dir, id string) ([]*adksession.Event, error) {
+	return readEventLog(dir, id, eventsSuffix)
+}
+
+// ReadSubagentEvents reads what session id's foreground sub-agents did,
+// from its sub-agent log in dir (nil when it has none); each event names
+// its agent (Author).
+func ReadSubagentEvents(dir, id string) ([]*adksession.Event, error) {
+	return readEventLog(dir, id, subagentsSuffix)
+}
+
+func readEventLog(dir, id, suffix string) ([]*adksession.Event, error) {
 	if err := ValidateID(id); err != nil {
 		return nil, err
 	}
-	f, err := os.Open(filepath.Join(dir, id+eventsSuffix))
+	f, err := os.Open(filepath.Join(dir, id+suffix))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}

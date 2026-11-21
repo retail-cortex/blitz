@@ -21,6 +21,7 @@ import { Decision } from "../gen/blitz/v1/turn_pb";
 import { backgroundRuns, driveFlow, fakeFlowRuns, fakeFlows, runStopped, watchRun } from "./fakeFlows";
 import { active, msg, notFound, now, state } from "./fakeHelpers";
 import { runTurn } from "./fakeTurn";
+import { fakeReasoning } from "./fakeReasoning";
 
 let fakeGoal: { condition: string; continues: number; max: number; last: string } | undefined;
 
@@ -124,6 +125,8 @@ export function fakeSessionService(): ServiceImpl<typeof SessionService> {
       return { mode, prompt, restored: mode === "conversation" ? [] : ["internal/cart/discount.go"], compacted: { eventsCompacted: 6, summaryChars: 900 } };
     },
     listRewindPoints: () => ({ points: [] }),
+    // The Reasoning view's graph (spec_066_reasoning): two turns, once the chat has a prompt.
+    getReasoning: ({ workspace, turn }) => fakeReasoning(active(state(workspace)).messages.filter((m) => m.role === "user" && !m.kind).length, turn),
     searchSession: ({ terms }) => ({ found: terms === "zzz" ? 0 : 2, prompt: `Look at these passages about ${terms}…` }),
     saveSnapshot: ({ name }) => ({ snapshot: { id: "snap-1", snapshot: name } }),
   };

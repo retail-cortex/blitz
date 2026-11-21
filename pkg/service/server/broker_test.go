@@ -176,7 +176,7 @@ func TestCloseWaitsForRunningTurns(t *testing.T) {
 // A session's tool calls, each with its turn, prompt and result, for the
 // window's tool list; the suggestions for a workspace without a harness.
 func TestSessionToolsAndSuggestions(t *testing.T) {
-	c, _ := serve(t, nil, call("list_files", map[string]any{"path": "."}), text("done"))
+	c, _ := serve(t, nil, call("list_files", map[string]any{"directory": "."}), text("done"))
 	dir := t.TempDir()
 	ctx := context.Background()
 	s, err := c.sessions.NewSession(ctx, connect.NewRequest(&pb.NewSessionRequest{Workspace: dir}))
@@ -195,6 +195,31 @@ func TestSessionToolsAndSuggestions(t *testing.T) {
 	assert.Equal(t, "list_files", got.Call.Name)
 	assert.Equal(t, "what's here?", got.Prompt)
 	assert.NotNil(t, got.Result, "with its result")
+
+	// Its reasoning graph: the turn, its two calls, the tool between
+	// them, the answer (spec_066 RSN-01).
+	rz, err := c.sessions.GetReasoning(ctx, connect.NewRequest(&pb.GetReasoningRequest{Workspace: dir, SessionId: id}))
+	require.NoError(t, err)
+	require.Len(t, rz.Msg.Turns, 1)
+	assert.Equal(t, int32(0), rz.Msg.Turn)
+	assert.Equal(t, int32(2), rz.Msg.Turns[0].Calls)
+	var kinds []string
+	for _, n := range rz.Msg.Nodes {
+		kinds = append(kinds, n.Kind)
+	}
+	assert.Equal(t, []string{"turn", "call", "tool", "call", "text"}, kinds)
+	assert.Equal(t, "list_files", rz.Msg.Nodes[2].Tool)
+	assert.NotNil(t, rz.Msg.Nodes[2].Args)
+	assert.NotNil(t, rz.Msg.Nodes[1].Usage, "a call's tokens")
+	assert.NotNil(t, rz.Msg.Nodes[0].Start)
+	turn := int32(5)
+	past, err := c.sessions.GetReasoning(ctx, connect.NewRequest(&pb.GetReasoningRequest{Workspace: dir, SessionId: id, Turn: &turn}))
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), past.Msg.Turn, "past the end is the last")
+	_, err = c.sessions.GetReasoning(ctx, connect.NewRequest(&pb.GetReasoningRequest{Workspace: dir, SessionId: "../bad"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	_, err = c.sessions.GetReasoning(ctx, connect.NewRequest(&pb.GetReasoningRequest{Workspace: filepath.Join(t.TempDir(), "gone"), SessionId: id}))
+	assert.Error(t, err)
 
 	none, err := c.sessions.ListSessionTools(ctx, connect.NewRequest(&pb.ListSessionToolsRequest{Workspace: dir, SessionId: "no-such-session"}))
 	require.NoError(t, err)

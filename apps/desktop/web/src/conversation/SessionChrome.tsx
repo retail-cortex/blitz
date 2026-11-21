@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { mdiAlertCircleOutline, mdiArrowCollapse, mdiArrowExpand, mdiDeleteOutline, mdiPencilOutline, mdiPlus } from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowCollapse, mdiArrowExpand, mdiDeleteOutline, mdiGraphOutline, mdiPencilOutline, mdiPlus } from "@mdi/js";
 import { Button, Dialog, Icon, IconButton } from "@blitz/webui";
 import { workspaces } from "../api";
 import { setupCommand } from "../events";
@@ -25,7 +25,7 @@ import { chatTitle, HistoryMenu } from "../HistoryMenu";
 import { t, tn } from "../i18n";
 import { pollMs, shouldPoll, welcomeTiles, type TileAction } from "../suggestions";
 
-/** The chat's bar: its title (renamed in place), History, New chat and, when set, expand. */
+/** The chat's bar: its title (renamed in place), Reasoning, History, New chat and, when set, expand. */
 export function SessionBar({
   session,
   list,
@@ -35,6 +35,7 @@ export function SessionBar({
   onRename,
   onDelete,
   expand,
+  reasoning,
 }: {
   session?: SessionInfo;
   list: SessionInfo[];
@@ -44,6 +45,8 @@ export function SessionBar({
   onRename: (t: string) => void;
   onDelete: (s: SessionInfo[]) => void;
   expand?: { expanded: boolean; toggle: () => void };
+  /** The Reasoning view's button (spec_066_reasoning): shown, and its toggle. */
+  reasoning?: { open: boolean; toggle: () => void };
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -90,6 +93,7 @@ export function SessionBar({
           onClick={expand.toggle}
         />
       )}
+      {reasoning && <IconButton icon={mdiGraphOutline} label={t("desktop.reasoning.open")} selected={reasoning.open} disabled={!session} onClick={reasoning.toggle} />}
       <HistoryMenu list={list} current={session?.id} disabled={running} onLoad={onLoad} onDelete={onDelete} />
       <IconButton icon={mdiPlus} label={t("desktop.chat.new")} variant="filled" onClick={onNew} disabled={running} />
     </div>

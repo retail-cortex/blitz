@@ -72,8 +72,9 @@
 }
 .pictures-action:hover::after, .pictures-action:focus-within::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 0.15s; }
 .pictures-saved { border: none; background: transparent; color: var(--accent-a); cursor: pointer; padding: 0 4px; text-align: center; }
-/* Full size, over everything. */
-.pictures-viewer { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 56px 32px 32px; background: rgba(0, 0, 0, 0.88); cursor: zoom-out; }
+/* Full size, over everything under the top menu, which stays usable;
+   its menus open over it. */
+.pictures-viewer { position: fixed; inset: var(--topbar-height) 0 0 0; z-index: 900; display: flex; align-items: center; justify-content: center; padding: 56px 32px 32px; background: rgba(0, 0, 0, 0.88); cursor: zoom-out; }
 .pictures-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--md-shape-sm); box-shadow: var(--md-elevation-3); cursor: default; }
 .pictures-viewer .pictures-viewer-close { position: absolute; top: 12px; right: 16px; color: #fff; background: rgba(255, 255, 255, 0.12); }
 .pictures-composer { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--md-outline-variant); }
