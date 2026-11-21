@@ -4806,6 +4806,7 @@
     "desktop.error.reason.UNREACHABLE": "No se puede contactar con el servicio de tu organización.",
     "desktop.error.reason.SIGN_IN_RUNNING": "Ya hay un inicio de sesión en curso.",
     "desktop.error.reason.TURN_RUNNING": "Ya hay un turno en curso en esta conversación.",
+    "desktop.error.reason.TERMINALS_RUNNING": "Hay terminales abiertas en este espacio de trabajo: ciérralas antes, o el cambio se aplica cuando se vuelva a abrir.",
     "desktop.error.reason.SESSION_BUSY": "La conversación está ocupada.",
     "desktop.error.reason.SESSION_OPEN": "La conversación está abierta en otro lugar.",
     "desktop.error.reason.STEER_TOO_LATE": "El turno terminó antes de que le llegara el mensaje.",

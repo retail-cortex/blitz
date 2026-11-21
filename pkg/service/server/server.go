@@ -239,6 +239,10 @@ func (s *Server) openWorkspace(key string, op *opening) {
 // closing would cut the turn off, maybe another client's.
 var errTurnRunning = errors.New("a turn is running in this workspace")
 
+// errTerminalsRunning refuses to close a workspace while terminals are
+// open in it: closing would end their shells.
+var errTerminalsRunning = errors.New("terminals are open in this workspace")
+
 // closeWorkspace closes and forgets the workspace for dir, if open.
 func (s *Server) closeWorkspace(dir string) error {
 	key, err := canonical(dir)
@@ -250,6 +254,13 @@ func (s *Server) closeWorkspace(dir string) error {
 	if ok && w.Busy() {
 		s.mu.Unlock()
 		return apiError(connect.CodeFailedPrecondition, "TURN_RUNNING", errTurnRunning, "workspace", dir)
+	}
+	// Closing ends its terminals' shells, a build or an editor in one too
+	// (security review terminal#3): a trust decision then applies when
+	// the workspace next opens.
+	if ok && w.Terminals() != nil && w.Terminals().Running() > 0 {
+		s.mu.Unlock()
+		return apiError(connect.CodeFailedPrecondition, "TERMINALS_RUNNING", errTerminalsRunning, "workspace", dir)
 	}
 	delete(s.workspaces, key)
 	s.mu.Unlock()

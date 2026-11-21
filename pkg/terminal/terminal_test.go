@@ -270,3 +270,27 @@ func TestTerminalNotReading(t *testing.T) {
 	require.NoError(t, m.Close(term.Info().ID))
 	assert.ErrorIs(t, term.Write([]byte("x")), ErrExited)
 }
+
+// Running counts the open terminals; a shell started after the manager
+// closed is ended at once, never left waiting (security review
+// terminal#2: Open hung there).
+func TestManagerRunningAndClosedWhileStarting(t *testing.T) {
+	m := NewManager(0, 0)
+	assert.Zero(t, m.Running())
+	term, err := m.Open(Options{Dir: t.TempDir(), Shell: "/bin/sh", Args: []string{"-c", "sleep 5"}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, m.Running())
+	require.NoError(t, m.Close(term.Info().ID))
+	m.CloseAll()
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.Open(Options{Dir: t.TempDir(), Shell: "/bin/sh", Args: []string{"-c", "sleep 5"}})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, ErrClosed)
+	case <-time.After(3 * time.Second):
+		t.Fatal("Open hung after the manager closed")
+	}
+}

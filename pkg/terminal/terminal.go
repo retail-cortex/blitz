@@ -177,7 +177,11 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 	m.mu.Lock()
 	if m.closed { // closed while it started
 		m.mu.Unlock()
-		t.close()
+		// Its reader and waiter aren't started, so t.close() would wait for
+		// them for ever (security review terminal#2): ended here instead.
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = f.Close()
 		return nil, ErrClosed
 	}
 	m.terms[t.info.ID] = t
@@ -187,6 +191,13 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 	go t.wait()
 	go t.write()
 	return t, nil
+}
+
+// Running is how many terminals are open.
+func (m *Manager) Running() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.terms)
 }
 
 // Get is terminal id.

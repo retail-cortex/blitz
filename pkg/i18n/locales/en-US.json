@@ -4806,6 +4806,7 @@
     "desktop.error.reason.UNREACHABLE": "Your organization's service can't be reached.",
     "desktop.error.reason.SIGN_IN_RUNNING": "A sign-in is already going.",
     "desktop.error.reason.TURN_RUNNING": "A turn is already going in this chat.",
+    "desktop.error.reason.TERMINALS_RUNNING": "Terminals are open in this workspace: close them first, or the change applies when it next opens.",
     "desktop.error.reason.SESSION_BUSY": "The chat is busy.",
     "desktop.error.reason.SESSION_OPEN": "The chat is open elsewhere.",
     "desktop.error.reason.STEER_TOO_LATE": "The turn ended before the message reached it.",

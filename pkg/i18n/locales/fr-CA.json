@@ -4806,6 +4806,7 @@
     "desktop.error.reason.UNREACHABLE": "Le service de votre organisation est injoignable.",
     "desktop.error.reason.SIGN_IN_RUNNING": "Une connexion est déjà en cours.",
     "desktop.error.reason.TURN_RUNNING": "Un tour est déjà en cours dans cette conversation.",
+    "desktop.error.reason.TERMINALS_RUNNING": "Des terminaux sont ouverts dans cet espace de travail : fermez-les d’abord, ou le changement s’applique à sa prochaine ouverture.",
     "desktop.error.reason.SESSION_BUSY": "La conversation est occupée.",
     "desktop.error.reason.SESSION_OPEN": "La conversation est ouverte ailleurs.",
     "desktop.error.reason.STEER_TOO_LATE": "Le tour s'est terminé avant que le message n'arrive.",
