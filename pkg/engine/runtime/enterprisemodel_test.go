@@ -439,3 +439,12 @@ func TestSignedThoughtWithASecretIsMasked(t *testing.T) {
 	assert.Equal(t, "nothing secret here", clean.Text)
 	assert.Equal(t, sig, clean.ThoughtSignature, "kept as signed")
 }
+
+// The gateway's debug log masks credential-named query values in a URL
+// (security review runtime#8: Azure's subscription-key matched no key
+// format).
+func TestMaskQuery(t *testing.T) {
+	assert.Equal(t, "https://gw.example/v1?api-version=2&subscription-key=REDACTED", maskQuery("https://gw.example/v1?subscription-key=abc123&api-version=2"))
+	assert.Equal(t, "https://gw.example/v1?a=1", maskQuery("https://gw.example/v1?a=1"))
+	assert.Equal(t, "https://gw.example/v1", maskQuery("https://gw.example/v1"))
+}
