@@ -298,6 +298,9 @@ func (w *Workspace) check(loc location, write bool) error {
 	if pat, blocked := w.blocked.Match(loc.abs()); blocked {
 		return fmt.Errorf("%w (%s): %s", ErrBlockedPath, pat, w.display(loc.abs()))
 	}
+	if write && loc.root.writable && isGitControl(loc.rel) {
+		return fmt.Errorf("%w: %s", ErrGitControl, w.display(loc.abs()))
+	}
 	// A hidden file may be written (made), never read.
 	if pat, hidden := w.hidden.Match(loc.abs()); hidden && !write {
 		return fmt.Errorf("%w (%s): %s", ErrHiddenPath, pat, w.display(loc.abs()))
@@ -316,6 +319,9 @@ func (w *Workspace) check(loc location, write bool) error {
 		if write {
 			if target, ok := w.locate(real); ok && !target.root.writable {
 				return fmt.Errorf("%w (via symlink): %s", ErrReadOnlyPath, w.display(loc.abs()))
+			}
+			if target, ok := w.locate(real); ok && target.root.writable && isGitControl(target.rel) {
+				return fmt.Errorf("%w (via symlink): %s", ErrGitControl, w.display(loc.abs()))
 			}
 		}
 	}

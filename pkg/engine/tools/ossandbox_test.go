@@ -148,6 +148,23 @@ func TestOSSandboxEnforcement(t *testing.T) {
 	run("cp .env leaked.txt")
 	b, _ = os.ReadFile(filepath.Join(f.work, "leaked.txt"))
 	assert.NotContains(t, string(b), "API_KEY", "shell copied a blocked file's contents")
+	// git's config and hooks stay the person's: what's planted there runs
+	// outside the sandbox (SH-23b); git's other files are written as usual.
+	for _, cmd := range []string{
+		"echo '[core] fsmonitor = touch /tmp/x' >> .git/config",
+		"printf '#!/bin/sh\\n' > .git/hooks/pre-commit",
+		"mkdir -p .git/info && echo '* filter=x' > .git/info/attributes",
+	} {
+		out = run(cmd)
+		assert.NotEqual(t, 0, out.ExitCode, "sandbox allowed: %s", cmd)
+	}
+	b, _ = os.ReadFile(filepath.Join(f.work, ".git", "config"))
+	assert.Equal(t, "[core]\n", string(b), ".git/config was changed")
+	assert.NoFileExists(t, filepath.Join(f.work, ".git", "hooks", "pre-commit"))
+	out = run("echo ref: refs/heads/topic > .git/HEAD")
+	assert.Equal(t, 0, out.ExitCode, "git's other files are writable: %+v", out)
+	out = run("mkdir -p sub/.git && echo '[core]' > sub/.git/config")
+	assert.Equal(t, 0, out.ExitCode, "a repository made further down is the agent's: %+v", out)
 	// A read-only root nested in the writable workspace stays read-only.
 	out = run("echo pwned > vendor-ro/lib.go")
 	assert.NotEqual(t, 0, out.ExitCode, "shell wrote into a read-only root nested in the workspace")

@@ -34,6 +34,10 @@ func bwrapArgs(bwrap string, spec OSSandboxSpec, blockedFiles, blockedDirs []str
 	for _, d := range existing(spec.ReadOnlyDirs) {
 		args = append(args, "--ro-bind", d, d)
 	}
+	// git's config, hooks and attributes stay the person's (SH-23b).
+	for _, f := range gitControlFiles(existing(spec.WritableDirs)) {
+		args = append(args, "--ro-bind", f, f)
+	}
 	for _, f := range blockedFiles {
 		args = append(args, "--ro-bind", "/dev/null", f)
 	}
