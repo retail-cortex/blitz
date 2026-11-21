@@ -117,7 +117,14 @@ func assetName(kind string, e fs.DirEntry) (string, bool) {
 func readAsset(root, kind, name string) (map[string]string, string) {
 	files := map[string]string{}
 	add := func(rel string) string {
-		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		// A link (a cloned repository's agent file pointing at
+		// ~/.aws/credentials) isn't read: what it leads to would be
+		// published or compiled in (security review packages#3).
+		if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
+			return rel + " is a link, not a file of its own"
+		}
+		b, err := os.ReadFile(path)
 		switch {
 		case err != nil:
 			return err.Error()

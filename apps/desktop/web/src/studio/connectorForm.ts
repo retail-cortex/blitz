@@ -183,16 +183,21 @@ export function sameConnectorForm(a: ConnectorForm, b: ConnectorForm): boolean {
 /** The words that start a statement that reads. */
 const readVerbs = new Set(["select", "with", "explain", "show", "pragma", "values", "describe", "table"]);
 /** Words that may make a statement write (WITH … DELETE). */
-const writeWords = /\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex)\b/i;
+const writeWords = /\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex|into)\b/i;
 /** Functions that write or act though a SELECT calls them (Postgres's sequences, large objects, backends, dblink). */
 const writeCalls = /\b(setval|nextval|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|lo_\w+|dblink_exec|dblink_send_query|set_config|pg_advisory_lock\w*|pg_switch_wal|pg_promote)\s*\(/i;
 /** A PRAGMA that sets its value (PRAGMA x = 1). */
 const pragmaSet = /^\s*pragma\s+[\w.]+\s*=/i;
+/** A PRAGMA's call form, PRAGMA x(v): a write but for the pragmas that only read. */
+const pragmaCall = /^\s*pragma\s+(?:\w+\.)?(\w+)\s*\(/i;
+const readPragmas = new Set(["table_info", "table_xinfo", "table_list", "index_list", "index_info", "index_xinfo", "foreign_key_list", "foreign_key_check", "integrity_check", "quick_check", "collation_list", "compile_options", "database_list", "function_list", "module_list", "pragma_list"]);
 
 /** Whether a SQL statement only reads, as the service judges it (a hint: a read-only connection is the guard). */
 export function readsOnly(statement: string): boolean {
   const s = statement.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, " ");
   const first = s.trim().replace(/^\(+/, "").toLowerCase().split(/\s+/)[0]?.replace(/;+$/, "") ?? "";
+  const call = pragmaCall.exec(s);
+  if (call && !readPragmas.has(call[1].toLowerCase())) return false;
   return readVerbs.has(first) && !writeWords.test(s) && !writeCalls.test(s) && !pragmaSet.test(s);
 }
 

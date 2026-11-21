@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/packages"
 	"github.com/retail-cortex/blitz/pkg/secrets"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 	"github.com/spf13/cobra"
 )
 
@@ -339,6 +340,11 @@ func newPkgPublishCommand(g *globalFlags, reg func(*cobra.Command) (*enterprise.
 			files, why := agentpkg.ReadAsset(root, kind, name)
 			if why != "" {
 				return fmt.Errorf("%s: %s", args[0], why)
+			}
+			// Read for secrets before it leaves the computer, as sharing
+			// and syncing are (EN-36b; security review packages#3).
+			if found := enterprise.PersonalSecrets(files); len(found) > 0 {
+				return withCode(exitUsage, fmt.Errorf("%s isn't published: it holds what look like secrets: %s. Remove them, or mark a false alarm with %s on its line", args[0], enterprise.SecretsSummary(found), secretscan.AllowMarker))
 			}
 			r, err := reg(cmd)
 			if err != nil {

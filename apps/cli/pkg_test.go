@@ -98,6 +98,14 @@ func TestPkgCommand(t *testing.T) {
 	assert.Equal(t, exitUsage, exitCodeFor(err))
 	_, err = runCLI(t, "-d", ws, "pkg", "publish", "skill/nope")
 	assert.Error(t, err)
+	// What looks like a secret isn't published, and a linked agent file
+	// isn't read (security review packages#3).
+	put(ws, ".agents/agents/keyed.md", "---\nname: keyed\n---\nUse AKIAIOSFODNN7EXAMPLE.\n")
+	_, err = runCLI(t, "-d", ws, "pkg", "publish", "agent/keyed")
+	assert.ErrorContains(t, err, "look like secrets")
+	require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "credentials"), filepath.Join(ws, ".agents", "agents", "linked.md")))
+	_, err = runCLI(t, "-d", ws, "pkg", "publish", "agent/linked")
+	assert.ErrorContains(t, err, "is a link")
 
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)

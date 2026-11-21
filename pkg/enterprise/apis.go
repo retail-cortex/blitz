@@ -17,8 +17,10 @@ package enterprise
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -30,6 +32,12 @@ import (
 // organization's token and logs the call. Its answer is the server's, as
 // it gave it; the caller closes its body.
 func (c *Client) CallAPI(ctx context.Context, connector, method, path, query string, body []byte, header http.Header) (*http.Response, error) {
+	// The path stays under the connector: a ".." (or one escaped, %2e%2e)
+	// would reach the person's other endpoints on the service with their
+	// token (security review enterprise#5).
+	if unescaped, err := url.PathUnescape(path); err != nil || slices.Contains(strings.Split(strings.ReplaceAll(unescaped, `\`, "/"), "/"), "..") {
+		return nil, fmt.Errorf("an API step's path can't leave its connector: %q", path)
+	}
 	u := c.url + "/api/v1/apis/" + url.PathEscape(connector) + "/" + strings.TrimLeft(path, "/")
 	if query != "" {
 		u += "?" + query

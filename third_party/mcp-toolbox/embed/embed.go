@@ -182,14 +182,19 @@ var (
 	// readVerbs start a statement that reads.
 	readVerbs = map[string]bool{"select": true, "with": true, "explain": true, "show": true, "pragma": true, "values": true, "describe": true, "table": true}
 	// writeWords in a statement may make it write (WITH … DELETE).
-	writeWords = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex)\b`)
+	writeWords = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|upsert|create|drop|alter|truncate|grant|revoke|copy|call|vacuum|attach|detach|reindex|into)\b`)
 	// writeCalls are functions that write or act though a SELECT calls
 	// them (Postgres's sequences, large objects, backends, dblink).
 	writeCalls = regexp.MustCompile(`(?i)\b(setval|nextval|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|lo_\w+|dblink_exec|dblink_send_query|set_config|pg_advisory_lock\w*|pg_switch_wal|pg_promote)\s*\(`)
 	// pragmaSet is a PRAGMA that sets its value (PRAGMA x = 1); the call
 	// form, PRAGMA table_info(t), is mostly a read and isn't counted.
 	pragmaSet = regexp.MustCompile(`(?i)^\s*pragma\s+[\w.]+\s*=`)
-	sqlComment = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
+	// pragmaCall is a PRAGMA's call form, PRAGMA x(v): a write but for
+	// the pragmas that only read (readPragmas; security review
+	// databases#2: PRAGMA user_version(7) passed).
+	pragmaCall  = regexp.MustCompile(`(?i)^\s*pragma\s+(?:\w+\.)?(\w+)\s*\(`)
+	readPragmas = map[string]bool{"table_info": true, "table_xinfo": true, "table_list": true, "index_list": true, "index_info": true, "index_xinfo": true, "foreign_key_list": true, "foreign_key_check": true, "integrity_check": true, "quick_check": true, "collation_list": true, "compile_options": true, "database_list": true, "function_list": true, "module_list": true, "pragma_list": true}
+	sqlComment  = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
 )
 
 // ReadsOnly says whether a SQL statement only reads: it starts with
@@ -203,6 +208,9 @@ var (
 func ReadsOnly(statement string) bool {
 	s := sqlComment.ReplaceAllString(statement, " ")
 	words := strings.Fields(strings.ToLower(strings.TrimLeft(strings.TrimSpace(s), "(")))
+	if m := pragmaCall.FindStringSubmatch(s); m != nil && !readPragmas[strings.ToLower(m[1])] {
+		return false
+	}
 	return len(words) > 0 && readVerbs[strings.TrimRight(words[0], ";")] && !writeWords.MatchString(s) &&
 		!writeCalls.MatchString(s) && !pragmaSet.MatchString(s)
 }

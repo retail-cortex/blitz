@@ -357,6 +357,13 @@ func TestReadsOnly(t *testing.T) {
 		{"PRAGMA writable_schema = 1", false},
 		{"pragma main.user_version=3", false},
 		{"SELECT nextval_note FROM t", true},
+		// Security review databases#2.
+		{"WITH c AS (SELECT 1) REPLACE INTO t VALUES (1)", false},
+		{"SELECT * INTO new_t FROM t", false},
+		{"PRAGMA schema_version(1)", false},
+		{"PRAGMA main.user_version(7)", false},
+		{"PRAGMA index_list(t)", true},
+		{"PRAGMA integrity_check", true},
 		{"", false},
 	} {
 		t.Run(tc.sql, func(t *testing.T) {
