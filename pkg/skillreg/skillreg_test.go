@@ -425,7 +425,7 @@ func must(s string, err error) string {
 // failingKeys is a keychain that refuses to keep anything.
 type failingKeys struct{ secrets.Memory }
 
-func (failingKeys) Set(string, string) error { return errors.New("keychain locked") }
+func (*failingKeys) Set(string, string) error { return errors.New("keychain locked") }
 
 func TestStoreFailures(t *testing.T) {
 	ctx := context.Background()
