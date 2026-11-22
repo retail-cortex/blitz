@@ -97,6 +97,7 @@
     "sandbox.title": "Política del sandbox",
     "command.unknown": "Comando desconocido '/{command}'. Escribe /help para ver la lista de comandos.",
     "command.did_you_mean": "¿Quisiste decir {command}?",
+    "runs.agents_moved": "Nota: las ejecuciones en segundo plano ahora son blitz runs; blitz agents listará tus agentes desde la próxima versión.",
     "help.reasoning": "El razonamiento de un turno como árbol: sus llamadas al modelo, los pasos que compartió, herramientas y subagentes (/reasoning turns los lista)",
     "reasoning.usage": "/reasoning [<turno>] [--full], o /reasoning turns",
     "reasoning.none": "Aún no hay ningún turno que mostrar: el razonamiento aparece cuando se ejecuta un turno.",

@@ -97,6 +97,7 @@
     "sandbox.title": "Politique du bac à sable",
     "command.unknown": "Commande inconnue '/{command}'. Tapez /help pour la liste des commandes.",
     "command.did_you_mean": "Vouliez-vous dire {command}?",
+    "runs.agents_moved": "Note : les exécutions en arrière-plan sont désormais blitz runs; blitz agents listera vos agents dès la prochaine version.",
     "help.reasoning": "Le raisonnement d'un tour en arbre : ses appels au modèle, les étapes partagées, les outils et les sous-agents (/reasoning turns les liste)",
     "reasoning.usage": "/reasoning [<tour>] [--full], ou /reasoning turns",
     "reasoning.none": "Aucun tour à montrer pour l'instant : le raisonnement apparaît une fois un tour exécuté.",

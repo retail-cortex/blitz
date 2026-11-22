@@ -57,6 +57,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 		}
 		return api.Note{}, withCode(exitUsage, fmt.Errorf("%w: %q", api.ErrNoNote, name))
 	}
+	var listJSON bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List this workspace's notes, newest first",
@@ -65,6 +66,9 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 			list, err := notes(cmd)
 			if err != nil {
 				return err
+			}
+			if listJSON { // CLP-53
+				return writeJSON(cmd.OutOrStdout(), list)
 			}
 			out := cmd.OutOrStdout()
 			if len(list) == 0 {
@@ -77,6 +81,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 	}
+	list.Flags().BoolVar(&listJSON, "json", false, "Print JSON")
 	show := &cobra.Command{
 		Use:   "show <name>",
 		Short: "Show a note (its name, or the start of it)",

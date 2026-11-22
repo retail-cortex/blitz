@@ -162,7 +162,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newConfigureCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand(), newDocsCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newConfigureCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newRunsCommand(o), agentsForNow(), movedToRuns(newAttachCommand(o)), movedToRuns(newLogsCommand()), movedToRuns(newStopCommand()), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand(), newDocsCommand(&o.global))
 	root.SetHelpCommand(newHelpCommand(root, o))
 	addShellCompletion(root, &o.global)
 	groupHelp(root)
@@ -173,12 +173,16 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVarP(&o.prompt, "prompt", "p", "", `One-shot prompt; "-" reads it from stdin`)
 	f.StringVarP(&o.global.agent, "agent", "a", "", "Agent to activate (blitz, helios, qa, ...)")
+	_ = f.MarkShorthandDeprecated("agent", "use --agent; -a will mean --all, as it does elsewhere")
 	f.StringVarP(&o.global.model, "model", "m", "", "Model identifier to use")
 	f.StringVar(&o.global.agency, "agency", "", "Agency level (low, medium, high, extreme)")
 	f.BoolVar(&o.global.trustProject, "trust-project", false, "Trust the workspace's project settings (.blitz/settings.toml) for this run, without recording it")
 	f.BoolVar(&o.global.trustProject, "trust-workspace", false, "Deprecated since v0.2.0: --trust-project")
 	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
+	// -w means --workspace on every other command, -a --all (CLP-51):
+	// these two work for a release, saying so.
+	_ = f.MarkShorthandDeprecated("worktree", "use --worktree; -w will mean --workspace, as it does elsewhere")
 	f.Lookup("worktree").NoOptDefVal = "new"
 	f.StringArrayVar(&o.global.addDirs, "add-dir", nil, "Let the agent read and write this directory too, for this run, as sandbox.allowed_paths does (repeatable; runs in a private service)")
 	f.StringArrayVar(&o.global.pluginDirs, "plugin-dir", nil, "Load the plugin in this directory for the run (repeatable; runs in a private service)")

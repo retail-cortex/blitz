@@ -41,7 +41,7 @@ weight: 20
 | `blitz models [provider…]` | The providers' models, with known prices |
 | `blitz update [--check]` | Install the latest release over this one |
 | `blitz sessions export <id> [-o file]` | A session as Markdown, or Word for a `.docx` name ([spec_017_sessions](spec_017_sessions.md) SES-21) |
-| `blitz agents [--all]`, `blitz attach <id>`, `blitz logs <id> [-f]`, `blitz stop <id>` | Background runs (`--bg`) in the service |
+| `blitz runs [--all]`, `blitz runs attach|logs|stop <id>` (spec_067 CLP-50; the old `agents`, `attach`, `logs`, `stop` for a release) | Background runs (`--bg`) in the service |
 | `blitz security [fix-apparmor] \| scan-secrets [--staged] [file…] \| install-hook [dir]` | The OS sandbox's state, and the secrets checks |
 | `blitz search <terms> [--in …] [--json] [--status] [--reindex]` | Workspace search |
 | `blitz eval <name> \| --skill <skill>` | Run an eval |
@@ -81,7 +81,7 @@ Run flags (root and `exec`):
 | `--allow RULE`, `--deny RULE` | Add permission rules for this run (repeatable; `read(…)` can't be given this way) |
 | `--effort LEVEL` | Session reasoning effort (`minimal`…`max`; otherwise a usage error). Attached, it changes the service workspace's effort |
 | `--permission-mode MODE` | Start in `auto` (the default), `default`, `accept-edits`, `plan`, `dont-ask` or `bypass` (needs the OS sandbox; otherwise a usage error). Attached, it changes the service workspace's mode |
-| `--bg` | Start the prompt as a background run in the service and return (`blitz agents`) |
+| `--bg` | Start the prompt as a background run in the service and return (`blitz runs`) |
 | `-w/--worktree[=NAME]`, `--ref REF` | Start in a new git worktree (CLI-12a) |
 | `--add-dir DIR`, `--plugin-dir DIR` | Another read-write directory, or a plugin, for this run, in a service of its own (CLI-11; repeatable) |
 | `--image PATH` | Attach an image to the first prompt (repeatable) |

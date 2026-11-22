@@ -38,7 +38,7 @@ The flags a run takes, on `blitz` and on `blitz exec`:
 | `--allow RULE`, `--deny RULE` | A [permission rule](../guide/safety.md) for this run only, such as `--allow "shell(go test *)"` or `--deny "shell(git push *)"` (repeatable) |
 | `--permission-mode MODE` | Start in `auto` (the default), `default`, `accept-edits`, `plan`, `dont-ask` or `bypass` (needs the OS sandbox) |
 | `--plan`, `--image FILE`, `--bg` | A plan-only run; an image for the first prompt (repeatable); a background run in the service |
-| `-w, --worktree[=NAME]`, `--ref REF` | Start in a new git worktree, from `REF` |
+| `--worktree[=NAME]`, `--ref REF` (`-w` too, for a release: it will mean `--workspace`) | Start in a new git worktree, from `REF` |
 | `--add-dir DIR`, `--plugin-dir DIR`, `--append-system-prompt[-file]`, `--local`, `--trust-project` | Settings of the run's own: they run in a private service (above) |
 | `--output-format`, `--input-format`, `--json-schema`, `--max-turns`, `--max-cost-usd`, `--timeout`, `--no-session-persistence` | [Scripting](#scripting) |
 
@@ -180,7 +180,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz skills registry add\|list\|remove`, `blitz skills search\|install\|update\|uninstall\|list` | Skills from registries such as Castor, hash-checked ([skills](../guide/skills.md#skills-from-a-registry)) |
 | `blitz plugin install\|list\|show\|enable\|disable\|remove\|update`, `blitz plugin marketplace add\|list\|remove`, `blitz plugin import claude\|gemini <dir>`, `--plugin-dir <dir>` | Plugins: skills, commands, agents, hooks and MCP servers in one bundle ([extending](../guide/extending.md#plugins)) |
 | `blitz --bg "<prompt>"` | Start the prompt as a background run in the Blitz service and return |
-| `blitz agents [--all]`, `blitz attach <id>`, `blitz logs <id> [-f]`, `blitz stop <id>` | The background runs in every workspace; follow one in the REPL, answering what it asks, then carry on in its session; show what it has done; stop it |
+| `blitz runs [--all]`, `blitz runs attach <id>`, `blitz runs logs <id> [-f]`, `blitz runs stop <id>` (`blitz agents`, `attach`, `logs` and `stop` work for a release; then `blitz agents` lists your agents) | The background runs in every workspace; follow one in the REPL, answering what it asks, then carry on in its session; show what it has done; stop it |
 | `blitz update [--check]` | Install the latest release over this one, its signature and checksum checked |
 | `blitz models [provider…]` | The models your providers offer, with the prices Blitz knows |
 | `blitz picture "<prompt>"` (or `-` / a pipe for stdin), `blitz picture models\|list`, `blitz picture show\|delete <session>` | [Make pictures](../guide/images.md#pictures-from-the-terminal) with an image model, as the desktop's Pictures does: `--model`, `--ratio`, `--size`, `-n/--count`, `--ref path[:character\|object\|style]`, `--thinking`, `--search[=image]`, `--avoid`, `--people`, `--format`, `--quality`, `--seed`, `--enhance`, `-o/--out`, `--continue <session>`; prints each saved picture and the cost. `show` prints a session's turns (`--json` for JSON) |

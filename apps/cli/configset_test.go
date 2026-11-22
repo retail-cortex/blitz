@@ -129,3 +129,36 @@ func TestSettingValue(t *testing.T) {
 	assert.True(t, ok)
 	assert.IsType(t, map[string]any{}, v)
 }
+
+// blitz runs is the background runs; the old names work for a release,
+// saying the new one (CLP-50, CLP-51).
+func TestRunsAndOldNames(t *testing.T) {
+	out, err := runBlitz(t, "runs", "--help")
+	require.NoError(t, err)
+	for _, sub := range []string{"list", "logs", "stop", "attach"} {
+		assert.Contains(t, out, sub)
+	}
+	out, _ = runBlitz(t, "logs")
+	assert.Contains(t, out, "use blitz runs logs")
+	out, err = runBlitz(t, "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "runs")
+	assert.NotContains(t, out, "\n  logs ", "hidden")
+	out, err = runBlitz(t, "-w", "x", "--version")
+	require.NoError(t, err)
+	assert.Contains(t, out, "-w will mean --workspace")
+}
+
+// Lists print JSON for scripts; MCP servers' JSON carries no env or header
+// values (CLP-53).
+func TestListsAsJSON(t *testing.T) {
+	cfg := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cfg, ".env.toml"), []byte("[[mcp.servers]]\nname = \"gh\"\ncommand = \"npx\"\nenv = { GITHUB_TOKEN = \"ghp_secret\" }\n"), 0o600))
+	out, err := runBlitz(t, "-c", cfg, "mcp", "list", "--json")
+	require.NoError(t, err)
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "gh", rows[0]["name"])
+	assert.NotContains(t, out, "ghp_secret")
+}

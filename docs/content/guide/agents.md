@@ -137,7 +137,7 @@ A delegated agent can also run **in the background**: `invoke_agent` with `backg
 - `isolation: worktree` gives a task its own git worktree and branch, so its changes stay out of your checkout until you merge them (it can still delegate, and your session's approvals and `permission_request` hooks apply there); `blitz worktrees list` shows them. You can start a whole session in one too: `blitz --worktree[=name]`.
 - A background task can't start another, and [jobs](workers.md) can't start them at all.
 
-Not to be confused with **background runs**: `blitz --bg "<prompt>"` runs a whole prompt in the service, and `blitz agents` lists those runs ([the service](../products/service.md#background-runs)), not agent definitions.
+Not to be confused with **background runs**: `blitz --bg "<prompt>"` runs a whole prompt in the service, and `blitz runs` lists those runs ([the service](../products/service.md#background-runs)), not agent definitions.
 
 ## Tools
 

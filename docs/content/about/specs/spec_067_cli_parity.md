@@ -7,7 +7,7 @@ weight: 67
 
 | | |
 |---|---|
-| Status | **Phases 1–4 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built) and CLP-20–24 (help from the tree, the docs in the binary, ask Blitz from them, the offline answer, errors; `help.model` and `--debug` aren't built) and CLP-30–32, 35 (`/configure` and `blitz configure`, MCP servers from a page with env, headers and secrets, the settings the agent may set; providers, CLP-33, and the deletes, CLP-34, go to phase 5); phase 5 in part: CLP-40 (`config get|set|edit|check|reference`), CLP-47 (`/reasoning`, `blitz sessions reasoning`), CLP-48 (`sessions list`), CLP-34 (`connector remove|test`, `rule|guardrail|secret|workflow|skill remove` through the tool and `blitz do`, rule and guardrail saves diffed against the old file; agent and job removes are for later); About you and `[voice]` are `blitz config set profile.*|voice.*` for now; the rest of phase 5 and phase 6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
+| Status | **Phases 1–4 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built) and CLP-20–24 (help from the tree, the docs in the binary, ask Blitz from them, the offline answer, errors; `help.model` and `--debug` aren't built) and CLP-30–32, 35 (`/configure` and `blitz configure`, MCP servers from a page with env, headers and secrets, the settings the agent may set; providers, CLP-33, and the deletes, CLP-34, go to phase 5); phase 5 in part: CLP-40 (`config get|set|edit|check|reference`), CLP-47 (`/reasoning`, `blitz sessions reasoning`), CLP-48 (`sessions list`), CLP-34 (`connector remove|test`, `rule|guardrail|secret|workflow|skill remove` through the tool and `blitz do`, rule and guardrail saves diffed against the old file; agent and job removes are for later); About you and `[voice]` are `blitz config set profile.*|voice.*` for now; phase 6 in part: CLP-50, CLP-51 (`blitz runs`; the old names and the root's `-w`/`-a` for a release), CLP-53 in part; the rest planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
 | Source | `apps/cli/` (cobra commands, `helpgroups.go`, `configcmd.go`, `mcp.go`, `do.go`); `apps/cli/internal/tui/` (`repl.go`, `render.go`, `terminal.go`, `commands.go`, `commands_extra.go`, `status.go`, `theme.go`); `pkg/api/blitzcommands.go` (the catalog), `pkg/engine/blitzcommands.go` (its handlers), `pkg/engine/tools/blitz.go`; `pkg/config/mcpedit.go`, `providers.go` (`SetValue`); `pkg/i18n/locales/` |
 | Tests | Listed with each phase (§4). Every phase ends with the CLI's tests, `tools/check_format.sh`, and the journey tests of §4.8 |
 | Depends on | [spec_019_tui](spec_019_tui.md), [spec_020_cli](spec_020_cli.md), [spec_060_blitz_tools](spec_060_blitz_tools.md) (the catalog, approvals, `blitz do`), [spec_009_mcp](spec_009_mcp.md), [spec_004_i18n](spec_004_i18n.md), [spec_008_web](spec_008_web.md) |
@@ -189,18 +189,16 @@ The desktop's settings and Studio, reachable from the CLI. Each item is a `blitz
 ### 3.6 Consistency (phase 6)
 
 - **CLP-50** **One word, one meaning.**
-  - `blitz agents` (background runs) becomes `blitz runs` (`list|logs|stop|attach`). `blitz agents` is then the agent personas, as `/agents` is.
-  - The old forms keep working for one minor release: hidden aliases that print a one-line note of the new name to stderr.
-  - `blitz attach <run>` becomes `blitz runs attach`.
-- **CLP-51** **Flags mean one thing.**
-  - `-w` is `--workspace` everywhere. The root's worktree flag becomes `--worktree` only, with a hidden `-w` alias on the root for one release.
-  - `-a` is `--all`, and the root's agent flag stays `--agent` without `-a`.
-  - `-f` is `--force`, and `logs --follow` uses `-F`, as `tail`'s scripts would.
-  - `-y` is `--yes` on every command that asks.
-  - `-o` is `--output`.
-  - A test walks the command tree and fails on any short flag with two meanings.
-- **CLP-52** **Removal is `remove`.** Every noun uses `remove`, with `rm` and `delete` (and `uninstall` for plugins and skills) as aliases. Every remove asks unless `-y` is given or stdin isn't a terminal, which needs `-y`.
-- **CLP-53** **`--json` on every list and show,** with the same field names as the RPC's JSON. A test runs each `list` with `--json` against the fake service and parses it.
+  - `blitz runs` (`list`, `logs`, `stop`, `attach`) is the background runs. *Built.*
+  - `blitz attach`, `logs` and `stop` work for a release, hidden, each saying its new name.
+  - `blitz agents` lists the runs for a release, saying it moves. It can't mean both at once; from the next release it lists the agents, as `/agents` does.
+- **CLP-51** **Flags mean one thing.** *Built in part.*
+  - The root's `-w` (`--worktree`) and `-a` (`--agent`) work for a release, saying they'll mean `--workspace` and `--all` as they do elsewhere (pflag's deprecated shorthands).
+  - `-f` keeps its usual meanings, follow for `logs` and force elsewhere, as `tail`, `docker` and `git` use them.
+  - `-y` is `--yes` where a command asks.
+  - A test that walks the command tree for short flags with two meanings is for later.
+- **CLP-52** **Removal is `remove`.** Every noun uses `remove`, with `rm` and `delete` (and `uninstall` for plugins and skills) as aliases. A remove asks on a terminal unless `-y` is given. In a script it does as it did, so scripts keep working. *For later.*
+- **CLP-53** **`--json` on every list and show,** with the same field names as the RPC's JSON. *Built for* `runs`, `sessions list`, `mcp list` (names, targets, scope and state, never env or header values), `memory list`, `config get` and `config reference`, beside `do`, `data`, `eval`, `search`, `pkg validate` and `picture show`. The rest (`models`, `plugin list`, `skills list`, `jobs list`, `spec list`, `worktrees list`, `config keys`, `enterprise …`) and a test running each against the fake service are for later.
 - **CLP-54** **Exit codes.** "Not found" exits with `exitNotFound` everywhere (a new code, documented in spec_020), and usage errors with `exitUsage`.
 - **CLP-55** **Localised help.** Cobra's Short, Long and Example text and flag usage come from the i18n catalogs (`cli.cmd.<path>.short` and so on), so `blitz --help` reads in the person's language. The i18n lint covers the cobra tree.
 

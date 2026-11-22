@@ -97,6 +97,7 @@
     "sandbox.title": "Sandbox Policy",
     "command.unknown": "Unknown command '/{command}'. Type /help for a list of commands.",
     "command.did_you_mean": "Did you mean {command}?",
+    "runs.agents_moved": "Note: background runs are blitz runs now; blitz agents will list your agents from the next release.",
     "help.reasoning": "A turn's reasoning as a tree: its model calls, the steps they shared, tools and sub-agents (/reasoning turns lists them)",
     "reasoning.usage": "/reasoning [<turn>] [--full], or /reasoning turns",
     "reasoning.none": "No turn to show yet: the reasoning shows once a turn has run.",
