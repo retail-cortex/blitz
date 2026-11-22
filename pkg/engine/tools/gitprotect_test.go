@@ -204,3 +204,24 @@ func TestUnsafeModeAndTheOrganization(t *testing.T) {
 	require.NoError(t, h.Approve(context.Background(), api.ApprovalRequest{Tool: "run_shell_command", Kind: api.ActionCommand, Detail: "make"}))
 	assert.Empty(t, *reqs)
 }
+
+// Bubblewrap binds only what exists, so a repository without hooks/ or
+// info/attributes gets empty ones first: a command can't then make one
+// git would run (SH-23b, as Ubuntu's CI found). What's there is kept.
+func TestGitControlFilesMadeToBind(t *testing.T) {
+	dir := t.TempDir()
+	git := filepath.Join(dir, ".git")
+	require.NoError(t, os.MkdirAll(git, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(git, "config"), []byte("[core]\n"), 0o644))
+	got := gitControlFiles([]string{dir, filepath.Join(dir, "no-repo")})
+	assert.ElementsMatch(t, []string{filepath.Join(git, "config"), filepath.Join(git, "hooks"), filepath.Join(git, "info", "attributes")}, got)
+	b, err := os.ReadFile(filepath.Join(git, "info", "attributes"))
+	require.NoError(t, err)
+	assert.Empty(t, b, "empty: as none to git")
+	assert.DirExists(t, filepath.Join(git, "hooks"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(git, "info", "attributes"), []byte("*.go diff=golang\n"), 0o644))
+	gitControlFiles([]string{dir})
+	b, _ = os.ReadFile(filepath.Join(git, "info", "attributes"))
+	assert.Equal(t, "*.go diff=golang\n", string(b), "the person's own kept")
+}

@@ -68,7 +68,11 @@ func gitControlSBPL(writable []string) string {
 
 // gitControlFiles are the files and folders bubblewrap binds read-only
 // under the writable dirs: each repository's at the top of one (and its
-// submodules'), those that exist (a bind needs its target).
+// submodules'). A bind needs its target, so a repository without hooks/
+// or info/attributes gets an empty one first, made by Blitz outside the
+// sandbox: otherwise a command could make one git would run (an empty
+// attributes file is as none, an empty hooks folder runs nothing).
+// config.worktree is read only when the config, bound already, says so.
 func gitControlFiles(writable []string) []string {
 	var out []string
 	for _, d := range writable {
@@ -81,6 +85,7 @@ func gitControlFiles(writable []string) []string {
 			dirs = append(dirs, mods...)
 		}
 		for _, g := range dirs {
+			ensureGitControl(g)
 			for _, rel := range []string{"config", "config.worktree", "hooks", filepath.Join("info", "attributes")} {
 				p := filepath.Join(g, rel)
 				if _, err := os.Lstat(p); err == nil {
@@ -90,4 +95,21 @@ func gitControlFiles(writable []string) []string {
 		}
 	}
 	return out
+}
+
+// ensureGitControl makes git dir g's hooks folder and info/attributes
+// when they're missing, empty, so bubblewrap can bind them read-only.
+// One that can't be made is left; the bind then skips it, as before.
+func ensureGitControl(g string) {
+	if _, err := os.Lstat(filepath.Join(g, "hooks")); os.IsNotExist(err) {
+		_ = os.Mkdir(filepath.Join(g, "hooks"), 0o755)
+	}
+	attrs := filepath.Join(g, "info", "attributes")
+	if _, err := os.Lstat(attrs); os.IsNotExist(err) {
+		if os.MkdirAll(filepath.Join(g, "info"), 0o755) == nil {
+			if f, err := os.OpenFile(attrs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
+				_ = f.Close()
+			}
+		}
+	}
 }
