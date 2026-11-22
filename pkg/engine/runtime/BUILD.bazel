@@ -246,6 +246,7 @@ go_test(
         "@com_github_azure_azure_sdk_for_go_sdk_azcore//:azcore",
         "@com_github_azure_azure_sdk_for_go_sdk_azcore//policy",
         "@com_github_go_pdf_fpdf//:fpdf",
+        "@com_github_gorilla_websocket//:websocket",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_openai_openai_go_v3//:openai-go",
         "@com_github_openai_openai_go_v3//option",

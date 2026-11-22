@@ -24,7 +24,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -246,4 +248,53 @@ func TestVoiceLiveConfig(t *testing.T) {
 	assert.Nil(t, tap.RealtimeInputConfig)
 	hold := VoiceLiveConfig("Kore", true)
 	assert.True(t, hold.RealtimeInputConfig.AutomaticActivityDetection.Disabled)
+}
+
+// fakeLive serves the Live API's socket: it reads the setup and accepts it
+// (setupComplete), or closes with refuse as the reason, as Google does for
+// a model the key can't use. The setup it read is in got.
+func fakeLive(t *testing.T, refuse string) (*genai.ClientConfig, *[]byte) {
+	t.Helper()
+	var got []byte
+	up := websocket.Upgrader{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := up.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_, msg, err := c.ReadMessage()
+		if err != nil {
+			return
+		}
+		got = msg
+		if refuse != "" {
+			_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, refuse))
+			return
+		}
+		_ = c.WriteMessage(websocket.TextMessage, []byte(`{"setupComplete":{}}`))
+		_, _, _ = c.ReadMessage() // until the client closes
+	}))
+	t.Cleanup(srv.Close)
+	cc := &genai.ClientConfig{Backend: genai.BackendGeminiAPI, APIKey: "a-key",
+		HTTPOptions: genai.HTTPOptions{BaseURL: "ws://" + strings.TrimPrefix(srv.URL, "http://") + "/", APIVersion: "v1beta"}}
+	return cc, &got
+}
+
+// The live check against a socket: accepted is an answer, the setup sent
+// is the conversation's; refused is the provider's reason (the "failed to
+// receive setup complete" a conversation stopped with).
+func TestProbeLive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cc, got := fakeLive(t, "")
+	require.NoError(t, probeLive(ctx, cc, "gemini-3.8-live", liveSetup("Kore")))
+	assert.Contains(t, string(*got), "gemini-3.8-live")
+	assert.Contains(t, string(*got), "Kore", "with the conversation's voice")
+	assert.Contains(t, string(*got), "sessionResumption")
+
+	cc, _ = fakeLive(t, "models/gemini-3.8-live is not found for API version v1beta")
+	err := probeLive(ctx, cc, "gemini-3.8-live", liveSetup("Kore"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not found for API version v1beta", "Google's reason, kept")
 }
