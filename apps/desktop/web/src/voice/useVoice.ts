@@ -28,7 +28,7 @@ export function useVoiceSetup(dir: string): VoiceSetup & { refresh: () => void }
   const [setup, setSetup] = useState<VoiceSetup>({ enabled: false, notSetUp: "", mic: "unknown" });
   const refresh = useCallback(() => {
     voices.describeVoice({ workspace: dir }).then(
-      async (d) => setSetup({ enabled: d.enabled, notSetUp: d.notSetUp, summaries: d.summaries, mic: d.enabled ? await micPermission().then((p) => (p === "prompt" ? "unknown" : p)) : "unknown" }),
+      async (d) => setSetup({ enabled: d.enabled, notSetUp: d.notSetUp, summaries: d.summaries, bufferMs: d.bufferMs, mic: d.enabled ? await micPermission().then((p) => (p === "prompt" ? "unknown" : p)) : "unknown" }),
       () => setSetup((s) => ({ ...s, enabled: false })),
     );
   }, [dir]);
@@ -142,7 +142,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
   const start = useCallback(async () => {
     if (live.current || currentConversation()) return;
     const abort = new AbortController();
-    const l = { abort, mic: null as Mic | null, player: new Player(), id: "", sent: nothingWaiting, heard: "", said: "", queue: [] as Uint8Array[], chain: Promise.resolve() as Promise<unknown>, holding: false };
+    const l = { abort, mic: null as Mic | null, player: new Player(setup.bufferMs), id: "", sent: nothingWaiting, heard: "", said: "", queue: [] as Uint8Array[], chain: Promise.resolve() as Promise<unknown>, holding: false };
     live.current = l;
     const conv: Conversation = { dir, sessionId, id: "", phase: "connecting", state: "listening", muted: false, holding: false, listen: "tap", model: "", voice: "", heard: "", said: "", error: "" };
     setConversation(conv);
@@ -169,7 +169,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
     }
     if (live.current === l) end();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dir, sessionId, mic, end]);
+  }, [dir, sessionId, mic, end, setup.bufferMs]);
 
   // What waits on the person, each time it changes (VOX-13).
   useEffect(() => {

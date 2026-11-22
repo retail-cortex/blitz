@@ -89,6 +89,15 @@ describe("the voice's player", () => {
     expect(ctx.closed).toBe(true);
   });
 
+  it("holds a reply's start for the buffer, then plays the rest on", () => {
+    const p = new Player(300);
+    p.play(second);
+    expect(p.remainingMs).toBeCloseTo(1300, -1);
+    p.play(second);
+    expect(p.remainingMs).toBeCloseTo(2300, -1, "the second piece follows the first, not another buffer");
+    expect(new Player(5).remainingMs).toBe(0);
+  });
+
   it("waits at most the limit", async () => {
     const p = new Player();
     for (let i = 0; i < 30; i++) p.play(second);

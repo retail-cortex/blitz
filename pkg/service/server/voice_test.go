@@ -217,6 +217,17 @@ func TestVoiceDescribeAndReasons(t *testing.T) {
 
 	d, err := voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{ListModels: true}))
 	require.NoError(t, err)
+	assert.Equal(t, "normal", d.Msg.Noise, "the defaults (VOX-08)")
+	assert.EqualValues(t, 20, d.Msg.BufferMs)
+	for key, value := range map[string]string{"voice.noise": "noisy", "voice.pause_ms": "1500", "voice.buffer_ms": "250"} {
+		_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: key, Value: value}))
+		require.NoError(t, err, key)
+	}
+	tuned, err := voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "noisy", tuned.Msg.Noise)
+	assert.EqualValues(t, 1500, tuned.Msg.PauseMs)
+	assert.EqualValues(t, 250, tuned.Msg.BufferMs)
 	assert.Equal(t, []string{"gemini-live-a"}, d.Msg.Models)
 	assert.Equal(t, "gemini/gemini-live-a", d.Msg.ModelInUse)
 	_, err = voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{Workspace: "relative"}))

@@ -36,6 +36,10 @@ While the microphone is open, the bar above the chat box shows what's heard and 
 | **Listening** | **Tap to talk** (click to start, click to stop; Gemini hears when you start and stop speaking) or **Hold to talk** (Blitz hears you only while you hold the microphone or ⌥⌘V: for noisy rooms). |
 | **Spoken summaries** | When work is summarised aloud: in voice conversations, always, or never. |
 | **End after** | Minutes of quiet before a conversation ends by itself. |
+| **The room** | **Quiet** or **Noisy**. In a noisy room, Blitz waits for clearer speech before taking a sound for you talking, so background chatter doesn't interrupt it. (Tap to talk.) |
+| **Pause before Blitz answers** | How long a silence ends your turn, in milliseconds: longer lets you stop to think without an early answer. Empty is Gemini's own. (Tap to talk.) |
+| **Speech that starts your turn** | How much speech counts as you starting to talk: longer ignores a cough or a click. Empty is Gemini's own. (Tap to talk.) |
+| **Playback buffer** | How much of a reply is held before it plays: more smooths choppy sound on a slow or uneven connection, with a little more delay. |
 
 They're the `[voice]` table of your settings file (`~/.blitz/.env.toml`), which a workspace's settings can't change:
 
@@ -46,6 +50,10 @@ model = "gemini/<a live model>"   # optional: one Settings › Voice lists
 voice = "Puck"                                                   # optional
 listen = "tap"        # or "hold"
 summaries = "voice"   # or "always", "off"
+noise = "normal"      # or "noisy"
+pause_ms = 0          # 200-5000; 0: Gemini's own
+start_ms = 0          # 20-2000; 0: Gemini's own
+buffer_ms = 20        # 20-2000
 idle_minutes = 5
 ```
 

@@ -140,10 +140,63 @@ export function VoiceSettings() {
             />
             <span className="t-body-sm muted">{t("desktop.voice.settings.idle_detail")}</span>
           </label>
+          {d.listen !== "hold" && (
+            <>
+              <label className="field">
+                <span className="t-label">{t("desktop.voice.settings.noise")}</span>
+                <Segmented<string>
+                  label={t("desktop.voice.settings.noise")}
+                  value={d.noise || "normal"}
+                  onChange={(v) => void set("voice.noise", v)}
+                  options={[
+                    { value: "normal", label: t("desktop.voice.settings.noise.normal") },
+                    { value: "noisy", label: t("desktop.voice.settings.noise.noisy") },
+                  ]}
+                />
+                <span className="t-body-sm muted">{t("desktop.voice.settings.noise_detail")}</span>
+              </label>
+              <MsField label={t("desktop.voice.settings.pause")} detail={t("desktop.voice.settings.pause_detail", { min: 200, max: 5000 })} value={d.pauseMs} min={200} max={5000} busy={busy} onSet={(v) => void set("voice.pause_ms", v)} />
+              <MsField label={t("desktop.voice.settings.start")} detail={t("desktop.voice.settings.start_detail", { min: 20, max: 2000 })} value={d.startMs} min={20} max={2000} busy={busy} onSet={(v) => void set("voice.start_ms", v)} />
+            </>
+          )}
+          <MsField label={t("desktop.voice.settings.buffer")} detail={t("desktop.voice.settings.buffer_detail", { min: 20, max: 2000 })} value={d.bufferMs} min={20} max={2000} busy={busy} onSet={(v) => void set("voice.buffer_ms", v)} />
           <p className="t-body-sm muted">{t("desktop.voice.settings.cost")}</p>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * A setting in milliseconds (VOX-08), its label and detail in words: empty
+ * is the default (0); a number within min and max is saved when the field
+ * is left.
+ */
+function MsField({ label, detail, value, min, max, busy, onSet }: { label: string; detail: string; value: number; min: number; max: number; busy: boolean; onSet: (v: string) => void }) {
+  return (
+    <label className="field">
+      <span className="t-label">{label}</span>
+      <input
+        className="input"
+        type="number"
+        min={min}
+        max={max}
+        step={10}
+        placeholder={t("desktop.voice.settings.ms_default")}
+        defaultValue={value || ""}
+        disabled={busy}
+        onBlur={(e) => {
+          const raw = e.target.value.trim();
+          if (raw === "") {
+            if (value) onSet("");
+            return;
+          }
+          const n = Math.round(Number(raw));
+          if (n !== value && n >= min && n <= max) onSet(String(n));
+        }}
+      />
+      <span className="t-body-sm muted">{detail}</span>
+    </label>
   );
 }
 

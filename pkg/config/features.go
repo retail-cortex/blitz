@@ -172,6 +172,20 @@ type VoiceConfig struct {
 	Summaries string `toml:"summaries"`
 	// IdleMinutes ends a quiet conversation (1 to 60; 0 is the default).
 	IdleMinutes int `toml:"idle_minutes"`
+	// Noise is the room: "normal" (the default) or "noisy", where Gemini
+	// wants clearer speech before it takes a sound for you starting to talk,
+	// so background chatter doesn't interrupt it (VOX-08).
+	Noise string `toml:"noise"`
+	// PauseMs is how long a silence ends your turn, 200 to 5000 ms (0:
+	// Gemini's own), so a pause to think doesn't get an answer too soon.
+	PauseMs int `toml:"pause_ms"`
+	// StartMs is how much speech it takes to count as you starting to
+	// talk, 20 to 2000 ms (0: Gemini's own).
+	StartMs int `toml:"start_ms"`
+	// BufferMs is how much of a reply the app holds before it plays,
+	// smoothing choppy audio on an uneven connection, 20 to 2000 ms (0:
+	// the default, 20).
+	BufferMs int `toml:"buffer_ms"`
 }
 
 // The voice's defaults and choices.
@@ -184,6 +198,12 @@ const (
 	VoiceSummaryVoice  = "voice"
 	VoiceSummaryAlways = "always"
 	VoiceSummaryOff    = "off"
+	VoiceNoiseNormal   = "normal"
+	VoiceNoiseNoisy    = "noisy"
+	// The ranges of pause_ms, start_ms and buffer_ms (VOX-08).
+	MinVoicePauseMs, MaxVoicePauseMs   = 200, 5000
+	MinVoiceStartMs, MaxVoiceStartMs   = 20, 2000
+	MinVoiceBufferMs, MaxVoiceBufferMs = 20, 2000
 )
 
 // VoiceListens and VoiceSummaries are [voice] listen's and summaries'
@@ -191,6 +211,7 @@ const (
 var (
 	VoiceListens   = []string{VoiceListenTap, VoiceListenHold}
 	VoiceSummaries = []string{VoiceSummaryVoice, VoiceSummaryAlways, VoiceSummaryOff}
+	VoiceNoises    = []string{VoiceNoiseNormal, VoiceNoiseNoisy}
 )
 
 // GeminiVoices are Gemini's prebuilt voices, by the names its speech
@@ -223,6 +244,36 @@ func (v VoiceConfig) Idle() time.Duration {
 		return DefaultVoiceIdle * time.Minute
 	}
 	return time.Duration(v.IdleMinutes) * time.Minute
+}
+
+// NoiseMode is noise as it's used: noisy, or normal for anything else.
+func (v VoiceConfig) NoiseMode() string {
+	if v.Noise == VoiceNoiseNoisy {
+		return VoiceNoiseNoisy
+	}
+	return VoiceNoiseNormal
+}
+
+// inRange is n when it's within lo and hi, else 0 (the default).
+func inRange(n, lo, hi int) int {
+	if n < lo || n > hi {
+		return 0
+	}
+	return n
+}
+
+// Pause is pause_ms within its range, 0 for Gemini's own.
+func (v VoiceConfig) Pause() int { return inRange(v.PauseMs, MinVoicePauseMs, MaxVoicePauseMs) }
+
+// Start is start_ms within its range, 0 for Gemini's own.
+func (v VoiceConfig) Start() int { return inRange(v.StartMs, MinVoiceStartMs, MaxVoiceStartMs) }
+
+// Buffer is buffer_ms within its range, else the default, 20.
+func (v VoiceConfig) Buffer() int {
+	if b := inRange(v.BufferMs, MinVoiceBufferMs, MaxVoiceBufferMs); b > 0 {
+		return b
+	}
+	return MinVoiceBufferMs
 }
 
 // DefaultAudioMaxChars is [audio] max_chars when it isn't set.

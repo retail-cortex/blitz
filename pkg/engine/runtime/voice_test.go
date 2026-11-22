@@ -182,7 +182,7 @@ func TestNoLiveModelAnswers(t *testing.T) {
 
 // The check sends the conversation's own settings, the voice among them.
 func TestLiveSetup(t *testing.T) {
-	s := liveSetup("Kore")
+	s := liveSetup("Kore", config.VoiceConfig{})
 	assert.Equal(t, "Kore", s.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig.VoiceName)
 	assert.Equal(t, []genai.Modality{genai.ModalityAudio}, s.ResponseModalities)
 	assert.NotNil(t, s.InputAudioTranscription)
@@ -240,15 +240,34 @@ func TestLiveClientConfig(t *testing.T) {
 // transcribed, resumable; hold to talk turns Gemini's activity detection
 // off.
 func TestVoiceLiveConfig(t *testing.T) {
-	tap := VoiceLiveConfig("Puck", false)
+	tap := VoiceLiveConfig("Puck", config.VoiceConfig{})
 	assert.Equal(t, []genai.Modality{genai.ModalityAudio}, tap.ResponseModalities)
 	assert.Equal(t, "Puck", tap.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig.VoiceName)
 	assert.NotNil(t, tap.InputAudioTranscription)
 	assert.NotNil(t, tap.OutputAudioTranscription)
 	assert.NotNil(t, tap.SessionResumption)
-	assert.Nil(t, tap.RealtimeInputConfig)
-	hold := VoiceLiveConfig("Kore", true)
-	assert.True(t, hold.RealtimeInputConfig.AutomaticActivityDetection.Disabled)
+	assert.Nil(t, tap.RealtimeInputConfig, "Gemini's own detection, untouched")
+	hold := VoiceLiveConfig("Kore", config.VoiceConfig{Listen: config.VoiceListenHold, Noise: config.VoiceNoiseNoisy})
+	assert.True(t, hold.RealtimeInputConfig.AutomaticActivityDetection.Disabled, "hold: the page says when you speak, the rest doesn't apply")
+	assert.Empty(t, hold.RealtimeInputConfig.AutomaticActivityDetection.StartOfSpeechSensitivity)
+}
+
+// Noise, pause and start tune Gemini's hearing (VOX-08): a noisy room
+// wants clearer speech to start; out-of-range values are Gemini's own.
+func TestVoiceDetectionSettings(t *testing.T) {
+	c := VoiceLiveConfig("Kore", config.VoiceConfig{Noise: config.VoiceNoiseNoisy, PauseMs: 1200, StartMs: 300})
+	aad := c.RealtimeInputConfig.AutomaticActivityDetection
+	assert.False(t, aad.Disabled)
+	assert.Equal(t, genai.StartSensitivityLow, aad.StartOfSpeechSensitivity)
+	assert.EqualValues(t, 1200, *aad.SilenceDurationMs)
+	assert.EqualValues(t, 300, *aad.PrefixPaddingMs)
+	off := VoiceLiveConfig("Kore", config.VoiceConfig{PauseMs: 99999, StartMs: 1})
+	assert.Nil(t, off.RealtimeInputConfig, "out of range: Gemini's own")
+	// The model check sends them too, and a change is checked anew.
+	setup := liveSetup("Kore", config.VoiceConfig{Noise: config.VoiceNoiseNoisy})
+	assert.Equal(t, genai.StartSensitivityLow, setup.RealtimeInputConfig.AutomaticActivityDetection.StartOfSpeechSensitivity)
+	cc := &genai.ClientConfig{APIKey: "k"}
+	assert.NotEqual(t, liveKey(cc, liveSetup("Kore", config.VoiceConfig{})), liveKey(cc, setup))
 }
 
 // fakeLive serves the Live API's socket: it reads the setup and accepts it
@@ -289,13 +308,13 @@ func TestProbeLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cc, got := fakeLive(t, "")
-	require.NoError(t, probeLive(ctx, cc, "gemini-3.8-live", liveSetup("Kore")))
+	require.NoError(t, probeLive(ctx, cc, "gemini-3.8-live", liveSetup("Kore", config.VoiceConfig{})))
 	assert.Contains(t, string(*got), "gemini-3.8-live")
 	assert.Contains(t, string(*got), "Kore", "with the conversation's voice")
 	assert.Contains(t, string(*got), "sessionResumption")
 
 	cc, _ = fakeLive(t, "models/gemini-3.8-live is not found for API version v1beta")
-	err := probeLive(ctx, cc, "gemini-3.8-live", liveSetup("Kore"))
+	err := probeLive(ctx, cc, "gemini-3.8-live", liveSetup("Kore", config.VoiceConfig{}))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is not found for API version v1beta", "Google's reason, kept")
 }

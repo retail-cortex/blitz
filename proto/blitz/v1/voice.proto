@@ -72,6 +72,14 @@ message DescribeVoiceResponse {
   string personality_voice = 12;
   // Whether the organization's policy keeps voice off (VOX-52).
   bool org_off = 13;
+  // How Gemini hears you and how replies play (VOX-08): the room
+  // ("normal" or "noisy"), the pause that ends your turn and the speech
+  // that starts one (0: Gemini's own), and how much of a reply is held
+  // before it plays (ms).
+  string noise = 14;
+  int32 pause_ms = 15;
+  int32 start_ms = 16;
+  int32 buffer_ms = 17;
 }
 
 // Request message for VoiceService.Converse.

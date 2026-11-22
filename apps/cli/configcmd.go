@@ -204,6 +204,10 @@ enabled = false   # off: no microphone, nothing sent to Google
 # listen = "tap"        # or "hold": heard only while held
 # summaries = "voice"   # finished work said aloud: voice, always, off
 # idle_minutes = 5      # a quiet conversation ends after this long
+# noise = "normal"      # or "noisy": clearer speech needed to start (tap to talk)
+# pause_ms = 1200       # the silence that ends your turn, 200-5000 (none: Gemini's own)
+# start_ms = 200        # the speech that starts it, 20-2000 (none: Gemini's own)
+# buffer_ms = 20        # a reply held before it plays, 20-2000: more smooths choppy audio
 
 [memory]
 enabled = true

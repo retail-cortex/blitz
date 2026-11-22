@@ -85,6 +85,7 @@ func (h voiceService) DescribeVoice(ctx context.Context, r req[pb.DescribeVoiceR
 	out := &pb.DescribeVoiceResponse{
 		Enabled: v.Enabled, Model: v.Model, Voice: v.Voice, Listen: v.ListenMode(), Summaries: v.SummaryMode(),
 		IdleMinutes: int32(v.Idle().Minutes()), Voices: config.GeminiVoices,
+		Noise: v.NoiseMode(), PauseMs: int32(v.Pause()), StartMs: int32(v.Start()), BufferMs: int32(v.Buffer()),
 	}
 	if dir != "" {
 		h.s.mu.Lock()

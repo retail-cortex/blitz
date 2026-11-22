@@ -18,6 +18,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -93,10 +94,10 @@ func NewVoiceModel(ctx context.Context, cfg *config.Config) (*VoiceModel, error)
 	}
 	voice := cmp.Or(cfg.Voice.Voice, config.DefaultVoice)
 	if name == "" {
-		if name, err = defaultVoiceModel(ctx, cc, voice); err != nil {
+		if name, err = defaultVoiceModel(ctx, cc, voice, cfg.Voice); err != nil {
 			return nil, err
 		}
-	} else if err := probeLive(ctx, cc, name, liveSetup(voice)); err != nil { // said now, not mid-conversation
+	} else if err := probeLive(ctx, cc, name, liveSetup(voice, cfg.Voice)); err != nil { // said now, not mid-conversation
 		return nil, fmt.Errorf("the voice model %s doesn't answer: %w", name, err)
 	}
 	m, err := gemini.NewModel(ctx, name, cc)
@@ -132,7 +133,7 @@ func VoiceModels(ctx context.Context, cfg *config.Config) ([]string, string, err
 		return nil, "", fmt.Errorf("%w (%v)", ErrVoiceNotSetUp, err)
 	}
 	cc = liveClientConfig(cc)
-	models, err := answeringLive(ctx, cc, cmp.Or(cfg.Voice.Voice, config.DefaultVoice))
+	models, err := answeringLive(ctx, cc, cmp.Or(cfg.Voice.Voice, config.DefaultVoice), cfg.Voice)
 	if err != nil {
 		return nil, "", err
 	}
@@ -140,8 +141,8 @@ func VoiceModels(ctx context.Context, cfg *config.Config) ([]string, string, err
 }
 
 // defaultVoiceModel is the best live model that answers (VOX-06a).
-func defaultVoiceModel(ctx context.Context, cc *genai.ClientConfig, voice string) (string, error) {
-	models, err := answeringLive(ctx, cc, voice)
+func defaultVoiceModel(ctx context.Context, cc *genai.ClientConfig, voice string, vc config.VoiceConfig) (string, error) {
+	models, err := answeringLive(ctx, cc, voice, vc)
 	if err != nil {
 		return "", err
 	}
@@ -169,18 +170,21 @@ var (
 )
 
 // liveKey is what the answering models depend on: the backend, the
-// project and region, the key (hashed) and the voice.
-func liveKey(cc *genai.ClientConfig, voice string) string {
+// project and region, the key (hashed), and the live settings they're
+// checked with.
+func liveKey(cc *genai.ClientConfig, setup *genai.LiveConnectConfig) string {
 	sum := sha256.Sum256([]byte(cc.APIKey))
-	return fmt.Sprintf("%v|%s|%s|%x|%s", cc.Backend, cc.Project, cc.Location, sum[:8], voice)
+	s, _ := json.Marshal(setup)
+	return fmt.Sprintf("%v|%s|%s|%x|%s", cc.Backend, cc.Project, cc.Location, sum[:8], s)
 }
 
 // answeringLive is the provider's live models that answer, best first
 // (liveBetter): listed, then each one checked (probeLive), as a listing
 // names models a key can't use (allowlisted previews, a region's absent
 // ones). Kept for liveKeep.
-func answeringLive(ctx context.Context, cc *genai.ClientConfig, voice string) ([]string, error) {
-	key := liveKey(cc, voice)
+func answeringLive(ctx context.Context, cc *genai.ClientConfig, voice string, vc config.VoiceConfig) ([]string, error) {
+	setup := liveSetup(voice, vc)
+	key := liveKey(cc, setup)
 	liveMu.Lock()
 	if f, ok := liveCache[key]; ok && time.Since(f.at) < liveKeep {
 		liveMu.Unlock()
@@ -193,7 +197,7 @@ func answeringLive(ctx context.Context, cc *genai.ClientConfig, voice string) ([
 	}
 	var models []string
 	if err == nil {
-		models, err = probeAll(ctx, cc, listed, liveSetup(voice))
+		models, err = probeAll(ctx, cc, listed, setup)
 	}
 	liveMu.Lock()
 	liveCache[key] = liveFound{models: models, err: err, at: time.Now()}
@@ -278,12 +282,12 @@ func liveCandidates(ctx context.Context, cc *genai.ClientConfig) ([]string, erro
 // liveSetup is the live settings a conversation opens with (VoiceLiveConfig:
 // audio in voice, both sides transcribed, resumable), for checking a model
 // takes them, not just a bare session.
-func liveSetup(voice string) *genai.LiveConnectConfig {
-	r := VoiceLiveConfig(voice, false)
+func liveSetup(voice string, vc config.VoiceConfig) *genai.LiveConnectConfig {
+	r := VoiceLiveConfig(voice, vc)
 	return &genai.LiveConnectConfig{
 		ResponseModalities: r.ResponseModalities, SpeechConfig: r.SpeechConfig,
 		InputAudioTranscription: r.InputAudioTranscription, OutputAudioTranscription: r.OutputAudioTranscription,
-		SessionResumption: r.SessionResumption,
+		SessionResumption: r.SessionResumption, RealtimeInputConfig: r.RealtimeInputConfig,
 	}
 }
 
@@ -373,11 +377,12 @@ func liveBetter(a, b string) int {
 	return strings.Compare(a, b)
 }
 
-// VoiceLiveConfig is the live connection's settings (VOX-07): audio
-// answers in voice, both sides transcribed, Gemini's own activity
-// detection unless hold, when the page says when the person speaks, and
-// resumption, so a connection the server cycles carries on.
-func VoiceLiveConfig(voice string, hold bool) agent.LiveRunConfig {
+// VoiceLiveConfig is the live connection's settings (VOX-07, VOX-08):
+// audio answers in voice, both sides transcribed, resumption, so a
+// connection the server cycles carries on; and how Gemini hears the
+// person: hold to talk turns its activity detection off (the page says
+// when the person speaks); otherwise noise, pause_ms and start_ms tune it.
+func VoiceLiveConfig(voice string, vc config.VoiceConfig) agent.LiveRunConfig {
 	cfg := agent.LiveRunConfig{
 		ResponseModalities: []genai.Modality{genai.ModalityAudio},
 		SpeechConfig: &genai.SpeechConfig{VoiceConfig: &genai.VoiceConfig{
@@ -387,8 +392,22 @@ func VoiceLiveConfig(voice string, hold bool) agent.LiveRunConfig {
 		OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
 		SessionResumption:        &genai.SessionResumptionConfig{},
 	}
-	if hold {
+	if vc.ListenMode() == config.VoiceListenHold {
 		cfg.RealtimeInputConfig = &genai.RealtimeInputConfig{AutomaticActivityDetection: &genai.AutomaticActivityDetection{Disabled: true}}
+		return cfg
+	}
+	aad := &genai.AutomaticActivityDetection{}
+	if vc.NoiseMode() == config.VoiceNoiseNoisy {
+		aad.StartOfSpeechSensitivity = genai.StartSensitivityLow
+	}
+	if ms := int32(vc.Pause()); ms > 0 {
+		aad.SilenceDurationMs = &ms
+	}
+	if ms := int32(vc.Start()); ms > 0 {
+		aad.PrefixPaddingMs = &ms
+	}
+	if *aad != (genai.AutomaticActivityDetection{}) {
+		cfg.RealtimeInputConfig = &genai.RealtimeInputConfig{AutomaticActivityDetection: aad}
 	}
 	return cfg
 }
