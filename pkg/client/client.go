@@ -320,6 +320,21 @@ func (r *Remote) ExportSession(id string) (string, error) {
 	return res.Msg.Markdown, nil
 }
 
+// Reasoning is session id's turns and one turn's reasoning graph
+// (SessionService.GetReasoning).
+func (r *Remote) Reasoning(id string, turn int) (api.Reasoning, error) {
+	req := &pb.GetReasoningRequest{Workspace: r.dir, SessionId: id}
+	if turn >= 0 {
+		t := int32(turn)
+		req.Turn = &t
+	}
+	res, err := r.sessions.GetReasoning(context.Background(), connect.NewRequest(req))
+	if err != nil {
+		return api.Reasoning{}, fromAPI(err)
+	}
+	return reasoningOf(res.Msg), nil
+}
+
 // MoveSession carries session id into this client's workspace in the
 // service and makes it active there (SessionService.MoveSession, /cd).
 func (r *Remote) MoveSession(id string) (api.SessionInfo, error) {

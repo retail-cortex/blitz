@@ -194,3 +194,23 @@ func (s *Settings) SignOut(ctx context.Context, dir, provider, profile string) (
 	}
 	return signInStatus(res.Msg.Status), nil
 }
+
+// ConfigChange is what a settings change did: the file written, and what
+// the open workspaces couldn't take up.
+type ConfigChange struct {
+	Path       string
+	ModelError string
+	Problems   []string
+}
+
+// SetConfigValue sets one settings key, globally (dir "") or for the
+// workspace in dir, and applies it to the workspaces open in the service
+// (ConfigService.SetConfigValue; spec_067_cli_parity CLP-40).
+func (s *Settings) SetConfigValue(ctx context.Context, dir, key, value string) (ConfigChange, error) {
+	r, err := s.c.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Workspace: dir, Key: key, Value: value}))
+	if err != nil {
+		return ConfigChange{}, err
+	}
+	c := r.Msg.GetChange()
+	return ConfigChange{Path: c.GetPath(), ModelError: c.GetModelError(), Problems: c.GetProblems()}, nil
+}

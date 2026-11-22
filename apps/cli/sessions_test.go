@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -141,4 +142,29 @@ func TestSessionsServiceDown(t *testing.T) {
 		_, err := runCLI(t, args...)
 		assert.ErrorContains(t, err, "service down")
 	}
+}
+
+// blitz sessions list and reasoning (spec_067_cli_parity CLP-47, CLP-48).
+func TestSessionsListAndReasoning(t *testing.T) {
+	isolate(t)
+	store, err := session.NewStorage(config.DefaultConfig().Session.StorageDir)
+	require.NoError(t, err)
+	rec, err := store.CreateSession("", "Fix the build", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, store.AddMessage("user", "why does it fail?"))
+
+	out, err := runCLI(t, "sessions", "list", "--all")
+	require.NoError(t, err)
+	assert.Contains(t, out, rec.ID)
+	assert.Contains(t, out, "Fix the build")
+	out, err = runCLI(t, "sessions", "list", "--all", "--json")
+	require.NoError(t, err)
+	var list []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &list))
+	require.NotEmpty(t, list)
+	assert.Equal(t, rec.ID, list[0]["ID"])
+
+	out, err = runCLI(t, "sessions", "reasoning", rec.ID)
+	require.NoError(t, err)
+	assert.Contains(t, out, "No turn to show yet", "no event log yet: nothing to draw")
 }

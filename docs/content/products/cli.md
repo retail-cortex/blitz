@@ -100,6 +100,8 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz docs [page\|words]`, `blitz help "<question>"` | Read the docs of your release, offline: a page (`blitz docs mcp`) or the sections that match; ask how to do something, answered from the docs by your model (or, without one, the matching sections and commands) |
 | `blitz doctor [--online]` | Checks the settings, credentials, sandbox, MCP servers, hooks and skills; `--online` also calls each model and a test search |
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
+| `blitz config get <key>`, `blitz config set <key> <value> [-w]`, `blitz config reference [key]` | One setting: its value here (`--json`), changed for every workspace or (`-w`) this one and taken up at once by the open workspaces, or what each does with its type and default |
+| `blitz config edit [-w]`, `blitz config check [file]` | Open the settings file in `$EDITOR` and check it when you save (with a second go when it has errors), or just check it, by line |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([providers](../guide/providers.md)) |
 | `blitz eval <name>` | [Runs an eval](../guide/evals.md): each case on its agents, scored; exits 1 when it fails, for CI (`--case`, `--json`) |
 | `blitz hook run <pre-commit\|pre-push>` | [Runs the workflows on a git hook](../guide/workflows.md#running-before-a-commit-or-push), on the changes; exits 1 when one fails, which stops the commit or push |
@@ -117,6 +119,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz auth status\|login <provider>\|logout <provider>` | Sign in to or out of Google, Anthropic, AWS or Azure with its own tool ([providers](../guide/providers.md)) |
 | `blitz trust [dir]` | Show a workspace's project settings and trust or decline them |
 | `blitz sessions export <id> [-o file]` | A session as Markdown, or Word for a `.docx` name, without opening the workspace |
+| `blitz sessions list [--all] [--json]`, `blitz sessions reasoning <id> [--turn n] [--full]` | The saved sessions, newest first; a turn's reasoning as a tree (the desktop app's Reasoning view, in the terminal) |
 | `blitz sessions usage <id>` | What a session spent: each model call (when, what for, which model, its tokens and cost), then the totals by model and purpose |
 | `blitz jobs move <name> [--anyway]` | Move a job to your organization's service, saying first what can't run there ([organization](../guide/organization.md)) |
 | `blitz enterprise connect\|disconnect\|login [--browser]\|logout\|status\|terms\|about` | Your [organization's service](../guide/organization.md): connect, sign in, its status, accepting its terms, and what it says about itself (about text, support, privacy notice) |
@@ -131,6 +134,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 - **The banner**: the Blitz wordmark, the version, then the workspace and its git branch, the agent and model, the permission mode (red when unsafe) and the sandbox. `ui.banner = "compact"` keeps it to one line (as do a terminal narrower than 60 columns and a resumed session), `"off"` or `-q` hides it. The hints on steering and keys show the first time; `/help` has them after.
 - **Line editing** with history (`~/.blitz/history`, owner-only) and Ctrl+R search.
 - **Completion**: Tab completes `/commands` at every level (`/skills registry add`, `/permissions allow … --save`), their values (models of every provider, agents, themes, sessions, `/config mode=` and the rest) and `@path` references; several candidates open a menu you move through with Tab or the arrows. As you type a command, the rest of it shows dimmed (→ takes it), then what it does. A slip is forgiven: Tab turns `/pmod` into `/pin_model`, and `/permisions` asks "Did you mean /permissions?". `/help <command>` shows a command's sub-commands, values and flags.
+- **Reasoning**: `/reasoning` draws the last turn as a tree: each model call with its tokens, time and cost, the steps of reasoning it shared, its tools (✓ or ✗) and sub-agents; `/reasoning 3 --full` shows turn 3 with every step's text, `/reasoning turns` lists them.
 - **Help that answers**: `? how do I add an MCP server that needs a token` asks Blitz. It answers from its own docs, which it carries, with the command to type and a link, as an aside the chat doesn't keep; without a model it shows the docs' sections and the commands that match. `/help` with words does the same, `/help <command>` explains one, `/docs` reads the docs.
 - **Shell completion**: `blitz completion install` sets it up for zsh, bash or fish, so `blitz mcp remove <Tab>` offers your servers and `--permission-mode <Tab>` the modes.
 - **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.

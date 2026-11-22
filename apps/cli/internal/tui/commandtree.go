@@ -86,6 +86,7 @@ var Commands = []*Command{
 	{Name: "cost", Aliases: []string{"usage"}, Group: "help.group.session", Help: "help.cost"},
 	{Name: "export", Group: "help.group.session", Usage: "[file]", Help: "help.export", Args: []Source{SrcPaths}},
 	{Name: "fork", Group: "help.group.session", Usage: "[n]", Help: "help.fork"},
+	{Name: "reasoning", Group: "help.group.session", Usage: "[<turn>|turns] [--full]", Help: "help.reasoning", Subs: []*Command{sub("turns")}, Flags: []string{"--full"}},
 	{Name: "rename", Group: "help.group.session", Usage: "<name>", Help: "help.rename"},
 	{Name: "resume", Group: "help.group.session", Usage: "[id]", Help: "help.resume", Args: []Source{SrcSessions}},
 	{Name: "rewind", Group: "help.group.session", Usage: "[n [mode]] [--force]", Help: "help.rewind", Flags: []string{"--force"}},
