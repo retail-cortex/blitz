@@ -795,6 +795,8 @@ body.resizing iframe, body.resizing .cm-editor { pointer-events: none; }
    window it gives way down to 180 px, as the editor does to 160 px. */
 .files-shelf { position: relative; width: 272px; flex: 0 1 auto; min-width: 180px; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); }
 .files-head { padding: 10px 6px 6px 16px; gap: 0; }
+/* A Viewer's clone (EN-60): its files read, never change. */
+.files-read-only { margin: 2px 10px 6px; gap: 6px; font-size: 12px; }
 /* The shelf's tools a size down (about 10%) from the small icon buttons. */
 .files-head .icon-btn.small { width: 29px; height: 29px; }
 .files-head .icon-btn .icon { width: 18px; height: 18px; }

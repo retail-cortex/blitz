@@ -55,7 +55,8 @@ function fakeEnds(failOpen = false) {
       return () => delete listeners[event];
     },
     showTab: (id) => void log.push(`tab ${id}`),
-    openPage: (url, external, profile) => void log.push(`${external ? "external" : "page"} ${url}${profile ? ` ${profile}` : ""}`),
+    openPage: (url, external, profile, reach) =>
+      void log.push(`${external ? "external" : "page"} ${url}${profile ? ` ${profile}` : ""}${external ? "" : ` reach=${reach.allowLocal}:${reach.deny.join(",")}:${reach.sites.join(",")}`}`),
     openFile: (path, line) => void log.push(`file ${path}:${line}`),
     openView: (view) => void log.push(`view ${view}`),
     openPicture: (json) => void log.push(`picture ${json}`),
@@ -128,13 +129,14 @@ describe("the agent's browser relay", () => {
     const f = fakeEnds();
     const ctl = new AbortController();
     const done = runRelay(f.ends, ctl.signal, 1);
-    f.push(cmd({ kind: "page", url: "https://github.com/", profile: "work" }));
+    f.push(cmd({ kind: "page", url: "https://github.com/", profile: "work", denyDomains: ["evil.example"], privateSites: ["*.corp.example"] }));
     f.push(cmd({ kind: "external", url: "https://example.com/" }));
     await settle();
     ctl.abort();
     f.push(null);
     await done;
-    expect(f.log).toEqual(["page https://github.com/ work", "external https://example.com/"]); // signed in with the profile (BP-08)
+    // Signed in with the profile (BP-08), held to its reach (BP-08a).
+    expect(f.log).toEqual(["page https://github.com/ work reach=false:evil.example:*.corp.example", "external https://example.com/"]);
   });
 
   it("opens a workspace file the user asked to see, in the editor (spec_060 DRV-31)", async () => {

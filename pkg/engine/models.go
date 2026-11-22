@@ -234,6 +234,7 @@ func (w *Workspace) Settings() api.Settings {
 		SpeechError:    errText(w.tools.SpeakerErr()),
 		ImageModel:     w.cfg.Images.Model,
 		ImageError:     errText(w.tools.PainterErr()),
+		ReadOnly:       w.files().ReadOnly(),
 	}
 }
 

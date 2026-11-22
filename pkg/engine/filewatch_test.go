@@ -201,3 +201,38 @@ func TestWatchablePaths(t *testing.T) {
 	assert.False(t, ok, ".git")
 	assert.Zero(t, countEntries(filepath.Join(root, "missing")))
 }
+
+// Past the watches the service runs at once, a window polls; one ending
+// makes room (security review service#4).
+func TestWatchStreamsBounded(t *testing.T) {
+	was := watchMaxStreams
+	watchMaxStreams = 1
+	defer func() { watchMaxStreams = was }()
+	root := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	first := make(chan FolderChanges, 4)
+	done := make(chan error, 1)
+	go func() {
+		done <- watchFolders(ctx, root, []string{""}, func(c FolderChanges) error { first <- c; return nil })
+	}()
+	require.False(t, (<-first).Polling, "the first watches")
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	second := make(chan FolderChanges, 1)
+	go func() {
+		_ = watchFolders(ctx2, root, []string{""}, func(c FolderChanges) error { second <- c; return nil })
+	}()
+	assert.True(t, (<-second).Polling, "past the bound: polls")
+	cancel2()
+
+	cancel()
+	require.NoError(t, <-done)
+	require.Eventually(t, func() bool { return watchStreams.Load() == 0 }, 2*time.Second, 10*time.Millisecond)
+	ctx3, cancel3 := context.WithCancel(context.Background())
+	defer cancel3()
+	third := make(chan FolderChanges, 1)
+	go func() {
+		_ = watchFolders(ctx3, root, []string{""}, func(c FolderChanges) error { third <- c; return nil })
+	}()
+	assert.False(t, (<-third).Polling, "room again")
+}

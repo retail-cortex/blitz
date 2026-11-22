@@ -265,3 +265,97 @@ func TestUserUploads(t *testing.T) {
 		assert.NoFileExists(t, filepath.Join(dir, tmp))
 	})
 }
+
+// A read-only workspace (a Viewer's clone, EN-60) refuses every change
+// the person's editor and file tree ask for, as the agent's tools do;
+// reading still works (security review files#6).
+func TestUserFilesReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
+	ws, err := OpenWorkspace(WorkspaceOptions{Dir: dir, ReadOnly: "you're a Viewer of Plans"})
+	require.NoError(t, err)
+	ctx := context.Background()
+	_, err = ws.UserTrash(ctx, "a.txt")
+	tmpErr := err
+	_, upErr := ws.UserCreateUpload("up.txt")
+	for name, err := range map[string]error{
+		"write":   ws.UserWriteFile(ctx, "a.txt", []byte("b"), nil),
+		"mkdir":   ws.UserMkdir("d"),
+		"rename":  ws.UserRename(ctx, "a.txt", "b.txt"),
+		"copy":    ws.UserCopy(ctx, "a.txt", "c.txt"),
+		"upload":  upErr,
+		"finish":  ws.UserFinishUpload(ctx, "x", "up.txt", true),
+		"trash":   tmpErr,
+		"restore": ws.UserRestoreTrashed(ctx, "x", "a.txt"),
+		"remove":  ws.UserRemove(ctx, "a.txt"),
+	} {
+		require.ErrorIs(t, err, ErrReadOnlyPath, name)
+		assert.Contains(t, err.Error(), "you're a Viewer of Plans", name)
+	}
+	b, _, err := ws.UserReadFile("a.txt", 1<<10)
+	require.NoError(t, err, "reading is fine")
+	assert.Equal(t, "a", string(b))
+	assert.NoFileExists(t, filepath.Join(dir, "b.txt"))
+}
+
+// The system's trash takes a path, which a link swapped in on the way
+// could send elsewhere: only the file checked in the workspace goes, and
+// one that turns out not to be it is put back (security review files#3).
+func TestTrashChecked(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "taxes.pdf"), []byte("mine"), 0o644))
+	root, err := os.OpenRoot(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { root.Close() })
+	trash := t.TempDir()
+	var sent []string
+	defer func(was func(context.Context, string) (string, error)) { trashPath = was }(trashPath)
+	trashPath = func(_ context.Context, p string) (string, error) {
+		sent = append(sent, p)
+		where := filepath.Join(trash, filepath.Base(p))
+		return where, os.Rename(p, where)
+	}
+	ctx := context.Background()
+
+	// The path leads elsewhere than the file checked: refused, nothing sent.
+	_, err = trashChecked(ctx, root, "a.txt", filepath.Join(outside, "taxes.pdf"))
+	require.ErrorIs(t, err, ErrTrashMoved)
+	assert.Empty(t, sent)
+	assert.FileExists(t, filepath.Join(outside, "taxes.pdf"))
+
+	// The same file: trashed.
+	where, err := trashChecked(ctx, root, "a.txt", filepath.Join(dir, "a.txt"))
+	require.NoError(t, err)
+	assert.FileExists(t, where)
+	assert.NoFileExists(t, filepath.Join(dir, "a.txt"))
+
+	// Swapped between the check and the trash: what was trashed isn't it,
+	// so it goes back.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644))
+	trashPath = func(_ context.Context, p string) (string, error) {
+		other := filepath.Join(outside, "taxes.pdf")
+		where := filepath.Join(trash, "taxes.pdf")
+		return where, os.Rename(other, where)
+	}
+	_, err = trashChecked(ctx, root, "b.txt", filepath.Join(dir, "b.txt"))
+	require.ErrorIs(t, err, ErrTrashMoved)
+	assert.FileExists(t, filepath.Join(trash, "taxes.pdf"), "something is at the path: it stays in the trash, findable")
+	b, err := os.ReadFile(filepath.Join(dir, "b.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "b", string(b), "never put back over a file")
+
+	// Nothing at the path: it goes back there.
+	require.NoError(t, os.Rename(filepath.Join(trash, "taxes.pdf"), filepath.Join(outside, "taxes.pdf")))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "c.txt"), []byte("c"), 0o644))
+	trashPath = func(_ context.Context, p string) (string, error) {
+		where := filepath.Join(trash, "taxes.pdf")
+		if err := os.Rename(filepath.Join(outside, "taxes.pdf"), where); err != nil {
+			return "", err
+		}
+		return where, os.Remove(p) // the link's way gone too
+	}
+	_, err = trashChecked(ctx, root, "c.txt", filepath.Join(dir, "c.txt"))
+	require.ErrorIs(t, err, ErrTrashMoved)
+	assert.NoFileExists(t, filepath.Join(trash, "taxes.pdf"), "put back")
+}

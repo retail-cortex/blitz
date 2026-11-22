@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,7 +87,8 @@ func TestGenerateImage(t *testing.T) {
 				assert.Contains(t, out["note"], "made a jpg picture, so it is o.jpg")
 			}},
 		{name: ".jpeg is a JPEG's", args: map[string]any{"prompt": "x", "path": "o.jpeg"}, mime: "image/jpeg", network: true, wantOut: "o.jpeg"},
-		{name: "the new name is taken", files: map[string]string{"o.jpg": "old"}, args: map[string]any{"prompt": "x", "path": "o.png"}, mime: "image/jpeg", network: true, wantErr: "'o.jpg' already exists"},
+		// A name of the model's making never replaces a file (N26 tools#8).
+		{name: "the new name is taken", files: map[string]string{"o.jpg": "old"}, args: map[string]any{"prompt": "x", "path": "o.png", "overwrite": true}, mime: "image/jpeg", network: true, wantOut: "o-2.jpg"},
 		{name: "no prompt", args: map[string]any{"prompt": " ", "path": "o.png"}, network: true, wantErr: "prompt is empty"},
 		{name: "a strange shape", args: map[string]any{"prompt": "x", "path": "o.png", "aspect_ratio": "5:1"}, network: true, wantErr: "aspect_ratio is one of"},
 		{name: "a strange size", args: map[string]any{"prompt": "x", "path": "o.png", "size": "8K"}, network: true, wantErr: "size is 1K, 2K or 4K"},
@@ -356,9 +358,26 @@ func TestGenerateImageSeveralNames(t *testing.T) {
 	ws, dir := newTestWorkspace(t)
 	writeFile(t, filepath.Join(dir, "fox-2.png"), "old")
 	out := runTool(t, toolOf(t)(NewGenerateImageTool(ws, allowAll(), &paint{paintState: paintState{painter: &catalogPainter{info: imagen}}}, true, nil)), map[string]any{"prompt": "x", "path": "fox.png", "count": 2})
-	assert.Contains(t, errOf(out), "'fox-2.png' already exists")
+	require.Empty(t, errOf(out), "a taken name of the tool's making takes a free one")
+	assert.Equal(t, []any{"fox.png", "fox-2-2.png"}, out["paths"])
+	assert.Contains(t, out["note"], "fox-2.png already exists, so picture 2 is fox-2-2.png")
+	// overwrite replaces only the path approved, never a name it made
+	// (N26 tools#8).
+	writeFile(t, filepath.Join(dir, "cat-2.png"), "old")
 	out = runTool(t, toolOf(t)(NewGenerateImageTool(ws, allowAll(), &paint{paintState: paintState{painter: &catalogPainter{info: imagen}}}, true, nil)), map[string]any{"prompt": "x", "path": "cat.png", "count": 2, "overwrite": true})
 	require.Empty(t, errOf(out))
+	for _, f := range []string{"fox-2.png", "cat-2.png"} {
+		b, err := os.ReadFile(filepath.Join(dir, f))
+		require.NoError(t, err)
+		assert.Equal(t, "old", string(b), f+" kept")
+	}
+	ws2, dir2 := newTestWorkspace(t)
+	writeFile(t, filepath.Join(dir2, "p.png"), "x")
+	for i := 2; i <= 100; i++ {
+		writeFile(t, filepath.Join(dir2, fmt.Sprintf("p-%d.png", i)), "x")
+	}
+	_, ok := freePicturePath(ws2, "p.png")
+	assert.False(t, ok, "no free name after 100")
 	assert.Nil(t, out["picture_session"], "no keeper, no session")
 }
 

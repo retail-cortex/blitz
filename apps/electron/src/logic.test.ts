@@ -76,8 +76,7 @@ import {
   unsaved,
   waitForPrint,
   windowMethods,
-  withTimeout,
-} from "./logic";
+  withTimeout, within } from "./logic";
 
 // The host's daily ping, sent through the system's network (spec_054
 // AI-14): a ping line is read only when whole, and its proxy field says
@@ -727,5 +726,20 @@ describe("withTimeout", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// A dropped file that's really inside the workspace (the copy just made,
+// by another spelling) is never trashed (security review files#2).
+describe("within", () => {
+  it.each([
+    ["/Users/r/Projects/app/notes.md", "/Users/r/Projects/app", true, true],
+    ["/Users/r/Projects/app", "/Users/r/Projects/app", true, true],
+    ["/users/r/projects/APP/notes.md", "/Users/r/Projects/app", true, true],
+    ["/users/r/projects/APP/notes.md", "/Users/r/Projects/app", false, false],
+    ["/Users/r/Projects/app-old/notes.md", "/Users/r/Projects/app", true, false],
+    ["/Users/r/Downloads/notes.md", "/Users/r/Projects/app", true, false],
+  ])("%s in %s (fold case %s): %s", (p, root, fold, want) => {
+    expect(within(p, root, path.posix, fold)).toBe(want);
   });
 });

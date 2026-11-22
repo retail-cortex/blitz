@@ -48,6 +48,7 @@ A developer keeps a terminal open beside their files: to run a build, check git,
 - **TRM-13** `WriteTerminal(id, data)` writes to the shell's input: keys, pastes, as bytes.
 - **TRM-13a** *2026-11-12.* **Input never blocks.** Each terminal has one writer, fed by a queue of 64 writes, so a shell that stops reading its input (a hung program, an `ssh` whose network went) blocks the writer, never the call: a write that finds no room for 5 s fails with `TERMINAL_NOT_READING`, and one for a shell that has exited with `TERMINAL_EXITED`. Until then a write to a full PTY blocked `WriteTerminal` for good, and every key the window queued behind it waited.
 - **TRM-14** `ListTerminals` answers the workspace's terminals, oldest first. `CloseTerminal(id)` ends one (TRM-03).
+- **TRM-14a** *2026-11-21 (security review terminal#4, #6, #7).* A workspace closed opens no terminal after (its closed manager stays, even one never used). A shell that has ended is closed without a signal (its process group's ID may be another's by then). A terminal opened in a folder starts in the folder checked, its links resolved, so a link swapped in after can't move it.
 - **TRM-15** **Errors**, with SVC-30's ErrorInfo reasons:
   - `UNKNOWN_TERMINAL`: no such id, or it's been closed;
   - `TOO_MANY_TERMINALS`;

@@ -154,9 +154,12 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 		kept := LoadCatalog(dir)
 		var r struct{ Code, Message string }
 		_ = json.Unmarshal(data, &r)
-		if r.Code == CatalogRemoved {
+		if r.Code == CatalogRemoved && policyTookOver(dir) {
 			// The service retired its catalog (its policy comes from
 			// /api/v1/policy, EN-38): one kept from before goes, quietly.
+			// Unsigned, so only once a signed policy from the policy API
+			// is kept: before that, anyone on the way could say it and
+			// drop the locked servers and connectors (EN-33a).
 			return nil, kept != nil, dropCatalog(dir, kept != nil)
 		}
 		if kept == nil {

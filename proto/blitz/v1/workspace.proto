@@ -1105,6 +1105,10 @@ message GetSettingsResponse {
   // a local model would review its own actions (spec_005_approvals
   // APR-14c). "" otherwise.
   string mode_note = 17;
+  // Why the workspace's files can only be read (a Viewer's clone of the
+  // organization's repository, spec_053 EN-60): the editor and the file
+  // tree change nothing. "" when they can.
+  string read_only = 18;
 }
 
 // AcceptedMedia is a kind of attachment a model takes.

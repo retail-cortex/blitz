@@ -588,12 +588,49 @@ func writeInPlace(r *os.Root, rel string, data []byte) error {
 // The checkpoint keeps its text either way, for Undo.
 func (w *Workspace) remove(ctx context.Context, loc location) error {
 	if w.systemTrash {
-		_, err := ostrash.Trash(ctx, loc.abs())
+		_, err := trashChecked(ctx, loc.root.root, loc.rel, loc.abs())
 		if !errors.Is(err, ostrash.ErrUnavailable) {
 			return err
 		}
 	}
 	return loc.root.root.Remove(loc.rel)
+}
+
+// trashPath is the system's trash (replaced in tests, which never send
+// anything there).
+var trashPath = ostrash.Trash
+
+// ErrTrashMoved refuses to trash a path that no longer leads to the file
+// checked in the workspace: a folder on its way was swapped for a link
+// (security review files#3).
+var ErrTrashMoved = errors.New("not moved to the Trash: the path changed while it was being deleted (a folder on its way became a link)")
+
+// trashChecked sends rel's file, in root, to the system's trash by its
+// path abs, the only way the system's trash takes it, and makes sure it's
+// the same file: the path checked through root (which no link leaves)
+// and abs must lead to the same file before, and the item trashed must be
+// it after; one that isn't is put back where abs led, and refused.
+func trashChecked(ctx context.Context, root *os.Root, rel, abs string) (string, error) {
+	want, err := root.Lstat(rel)
+	if err != nil {
+		return "", err
+	}
+	if got, err := os.Lstat(abs); err != nil || !os.SameFile(want, got) {
+		return "", ErrTrashMoved
+	}
+	where, err := trashPath(ctx, abs)
+	if err != nil || where == "" {
+		return where, err
+	}
+	if got, err := os.Lstat(where); err == nil && !os.SameFile(want, got) {
+		// Back where it came from, unless something is there now: then it
+		// stays in the trash, where it can be found, never over a file.
+		if _, err := os.Lstat(abs); errors.Is(err, fs.ErrNotExist) {
+			_ = os.Rename(where, abs)
+		}
+		return "", ErrTrashMoved
+	}
+	return where, nil
 }
 
 // UsesSystemTrash reports whether deletions go to the system's trash

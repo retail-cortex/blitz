@@ -24,6 +24,7 @@ import (
 	goruntime "runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -46,7 +47,14 @@ type FolderChanges struct {
 var (
 	watchMaxFolders = 256
 	watchMaxEntries = 4000
+	// watchMaxStreams bounds the watches running at once across every
+	// window and workspace (each holds its own files open): past it a
+	// window polls (security review service#4).
+	watchMaxStreams int64 = 16
 )
+
+// watchStreams counts the watches running.
+var watchStreams atomic.Int64
 
 // watchSettle is how long a burst of changes settles before they're sent
 // together (a build writing many files is one message).
@@ -67,6 +75,15 @@ func (w *Workspace) WatchFolders(ctx context.Context, folders []string, send fun
 
 // watchFolders is WatchFolders for the workspace at root.
 func watchFolders(ctx context.Context, root string, folders []string, send func(FolderChanges) error) error {
+	if watchStreams.Add(1) > watchMaxStreams {
+		watchStreams.Add(-1)
+		if err := send(FolderChanges{Polling: true}); err != nil {
+			return err
+		}
+		<-ctx.Done()
+		return nil
+	}
+	defer watchStreams.Add(-1)
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		slog.Warn("watching the workspace's folders", "error", err)

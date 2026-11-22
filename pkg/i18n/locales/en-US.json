@@ -1624,6 +1624,7 @@
     "desktop.switcher.working": "Working",
     "desktop.drop": "Drop images to attach them",
     "desktop.files.title": "Files",
+    "desktop.files.read_only": "Read only: {why}",
     "desktop.files.show": "Show files",
     "desktop.files.hide": "Minimize files",
     "desktop.files.editor": "Editor",

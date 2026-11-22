@@ -764,6 +764,12 @@ func Save(dir string, f Flow, previous string) (string, []string, error) {
 	return target, nil, nil
 }
 
+// Text is f as Save writes it: what an approval shows as its diff.
+func Text(f Flow) (string, error) {
+	data, err := yaml.Marshal(f)
+	return string(data), err
+}
+
 // saveChecks are what keep a workflow from being saved: its name, IDs,
 // types and links. A step not filled in yet, or a coming-soon one, is
 // saved (a draft), and is the workflow's problem until it's fixed.

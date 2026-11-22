@@ -135,7 +135,7 @@ export function useShelfDragDrop({
     try {
       const { added, done } = await importDrop(files, dir, inc.into, inc.items, inc.taken, onConflict);
       let failed: string[] = [];
-      if (inc.move) failed = await trashDropped(done.map((d) => inc.paths[d.index]).filter(Boolean));
+      if (inc.move) failed = await trashDropped(done.map((d) => inc.paths[d.index]).filter(Boolean), dir);
       if (inc.into) setTree((tr) => setExpanded(tr, inc.into, true));
       await load(inc.into);
       if (added[0]) setSelected(added[0]);

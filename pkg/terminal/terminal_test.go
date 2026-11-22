@@ -294,3 +294,20 @@ func TestManagerRunningAndClosedWhileStarting(t *testing.T) {
 		t.Fatal("Open hung after the manager closed")
 	}
 }
+
+// A shell that has ended is closed without a signal: its group may be
+// another's by then (security review terminal#6).
+func TestTerminalCloseAfterExit(t *testing.T) {
+	m := NewManager(2, 0)
+	t.Cleanup(m.CloseAll)
+	term := open(t, m, "-c", "true")
+	select {
+	case <-term.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the shell didn't end")
+	}
+	assert.True(t, term.exited())
+	started := time.Now()
+	require.NoError(t, m.Close(term.Info().ID))
+	assert.Less(t, time.Since(started), time.Second, "no wait for a hangup")
+}

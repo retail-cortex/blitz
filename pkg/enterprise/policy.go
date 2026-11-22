@@ -162,11 +162,20 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("encoding policy state: %w", err)
 	}
+	prev, hadPrev := os.ReadFile(filepath.Join(dir, PolicyFile))
 	if err := writeFile(dir, PolicyFile, state); err != nil {
 		return false, err
 	}
 	if err := swapPolicy(dir, next); err != nil {
-		return true, err
+		// The old policy/ is back in place (swapPolicy): so is the
+		// policy.json that goes with it (EN-33c, security review
+		// enterprise#10).
+		if hadPrev == nil {
+			_ = writeFile(dir, PolicyFile, prev)
+		} else {
+			_ = os.Remove(filepath.Join(dir, PolicyFile))
+		}
+		return false, err
 	}
 	if err := writeFile(dir, policyETag, []byte(res.Header.Get("ETag"))); err != nil {
 		return true, err
@@ -215,9 +224,19 @@ func swapPolicy(dir, next string) error {
 		}
 	}
 	if err := os.Rename(next, cur); err != nil {
+		// Never no policy/ at all: the old one goes back.
+		if _, statErr := os.Stat(old); statErr == nil {
+			_ = os.Rename(old, cur)
+		}
 		return err
 	}
 	return os.RemoveAll(old)
+}
+
+// policyTookOver reports whether dir keeps a policy from the policy API
+// (/api/v1/policy, EN-38): its ETag, and the policy it stands for.
+func policyTookOver(dir string) bool {
+	return fileExists(filepath.Join(dir, policyETag)) && fileExists(filepath.Join(dir, PolicyFile))
 }
 
 // itemRoot is where an asset of kind named name keeps its files, as a

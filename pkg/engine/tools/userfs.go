@@ -82,6 +82,17 @@ func (w *Workspace) AgentRule(rel string) string {
 	return ""
 }
 
+// userWritable refuses the person's changes to a read-only workspace (a
+// Viewer's clone of the organization's repository, EN-60): the editor and
+// the file tree change nothing there, as the agent's tools don't
+// (security review files#6).
+func (w *Workspace) userWritable() error {
+	if w.readOnly != "" {
+		return fmt.Errorf("%w: %s", ErrReadOnlyPath, w.readOnly)
+	}
+	return nil
+}
+
 // UserReadDir lists the directory rel.
 func (w *Workspace) UserReadDir(rel string) ([]fs.DirEntry, error) {
 	return fs.ReadDir(w.userRoot().FS(), filepath.ToSlash(rel))
@@ -128,6 +139,9 @@ var ErrTooLarge = errors.New("file too large")
 // set, runs under the lock with the file's current content (nil, false
 // when it doesn't exist) and can refuse the write.
 func (w *Workspace) UserWriteFile(ctx context.Context, rel string, data []byte, check func(current []byte, exists bool) error) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return errors.New("path must name a file")
 	}
@@ -151,6 +165,9 @@ func (w *Workspace) UserWriteFile(ctx context.Context, rel string, data []byte, 
 
 // UserMkdir creates the folder rel (and missing parents); it must not exist.
 func (w *Workspace) UserMkdir(rel string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return fs.ErrExist
 	}
@@ -162,6 +179,9 @@ func (w *Workspace) UserMkdir(rel string) error {
 
 // UserRename moves from to to, which must not exist.
 func (w *Workspace) UserRename(ctx context.Context, from, to string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if from == "." || to == "." {
 		return errors.New("can't rename the workspace")
 	}
@@ -187,6 +207,9 @@ func (w *Workspace) UserRename(ctx context.Context, from, to string) error {
 // which must not exist; a symbolic link is copied as a link. Folders are
 // made as the copy goes, and a copy that fails partway is taken back.
 func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if from == "." || to == "." {
 		return errors.New("can't copy the workspace")
 	}
@@ -265,6 +288,9 @@ func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
 // file beside it (its folders made), which UserAppend fills and
 // UserFinishUpload puts in place. It returns the hidden file's path.
 func (w *Workspace) UserCreateUpload(rel string) (string, error) {
+	if err := w.userWritable(); err != nil {
+		return "", err
+	}
 	if rel == "." {
 		return "", errors.New("path must name a file")
 	}
@@ -299,6 +325,9 @@ func (w *Workspace) UserAppend(tmp string, data []byte) error {
 // UserFinishUpload puts the upload tmp at rel, under rel's lock. rel must
 // not exist unless replace, and a folder is never replaced.
 func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, replace bool) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	unlock, err := w.lockPaths(ctx, rel)
 	if err != nil {
 		return err
@@ -347,6 +376,9 @@ func (w *Workspace) UserDiscardUpload(tmp string) {
 // ostrash.ErrUnavailable when there's none. The folders above it must be
 // the workspace's own, not links out of it.
 func (w *Workspace) UserTrash(ctx context.Context, rel string) (string, error) {
+	if err := w.userWritable(); err != nil {
+		return "", err
+	}
 	if rel == "." {
 		return "", errors.New("can't delete the workspace")
 	}
@@ -355,19 +387,19 @@ func (w *Workspace) UserTrash(ctx context.Context, rel string) (string, error) {
 		return "", err
 	}
 	defer unlock()
-	if _, err := w.userRoot().Lstat(rel); err != nil {
-		return "", err
-	}
 	abs, err := w.userAbs(rel)
 	if err != nil {
 		return "", err
 	}
-	return ostrash.Trash(ctx, abs)
+	return trashChecked(ctx, w.userRoot(), rel, abs)
 }
 
 // UserRestoreTrashed puts what UserTrash moved to where back at rel,
 // which must not exist.
 func (w *Workspace) UserRestoreTrashed(ctx context.Context, where, rel string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return errors.New("can't restore over the workspace")
 	}
@@ -406,6 +438,9 @@ func (w *Workspace) userAbs(rel string) (string, error) {
 
 // UserRemove deletes rel, a folder with everything in it.
 func (w *Workspace) UserRemove(ctx context.Context, rel string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return errors.New("can't delete the workspace")
 	}

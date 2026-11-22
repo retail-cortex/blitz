@@ -62,7 +62,9 @@ func (w *Workspace) OpenTerminal(dir string, cols, rows uint16, version string) 
 	if fi, err := os.Stat(real); err != nil || !fi.IsDir() {
 		return nil, fmt.Errorf("%w: %s isn't a folder", ErrBadPath, dir)
 	}
-	t, err := w.Terminals().Open(terminal.Options{Dir: abs, Cols: cols, Rows: rows, Version: version})
+	// The folder checked is the folder the shell starts in (security
+	// review terminal#7): a link swapped in after can't move it.
+	t, err := w.Terminals().Open(terminal.Options{Dir: real, Cols: cols, Rows: rows, Version: version})
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +80,12 @@ func (w *Workspace) OpenTerminal(dir string, cols, rows uint16, version string) 
 // closeTerminals ends the workspace's terminals as it closes.
 func (w *Workspace) closeTerminals() {
 	w.termsMu.Lock()
+	// A closed manager stays, so Terminals() after Close opens none
+	// (security review terminal#4).
+	if w.terms == nil {
+		w.terms = terminal.NewManager(0, 0)
+	}
 	m := w.terms
 	w.termsMu.Unlock()
-	if m != nil {
-		m.CloseAll()
-	}
+	m.CloseAll()
 }

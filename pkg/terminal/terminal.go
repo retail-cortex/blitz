@@ -452,6 +452,13 @@ func (t *Terminal) finish() {
 	}
 }
 
+// exited reports whether the shell has ended and been waited for.
+func (t *Terminal) exited() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.info.Exited
+}
+
 // wake tells the watchers there's news; t.mu is held.
 func (t *Terminal) wake() {
 	close(t.changed)
@@ -461,11 +468,18 @@ func (t *Terminal) wake() {
 // close hangs the shell up, kills it if it hasn't ended in killAfter, and
 // waits for it.
 func (t *Terminal) close() {
-	hangUp(t.cmd)
+	// Only a live shell is signalled: once it's reaped and its group is
+	// empty, the group's ID may be another's (security review
+	// terminal#6).
+	if !t.exited() {
+		hangUp(t.cmd)
+	}
 	select {
 	case <-t.done:
 	case <-time.After(killAfter):
-		kill(t.cmd)
+		if !t.exited() {
+			kill(t.cmd)
+		}
 		<-t.done
 	}
 	_ = t.pty.Close()

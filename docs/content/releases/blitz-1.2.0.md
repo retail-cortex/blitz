@@ -22,7 +22,10 @@ See how the agent thinks. The new **Reasoning** view draws each turn as a map: e
 - **Your git setup is off limits to the agent.** It can't change a repository's git config or hooks, so nothing it writes runs later behind your back.
 - **Language servers ask first.** Before a folder's own code runs for code intelligence (its Python environment, its build tool), Blitz asks you once. Until you say yes, the language servers still work, just without that folder's code.
 - **Private addresses ask first.** Opening a page on your local network or an internal host asks before it goes.
+- **Your sign-ins stay yours.** When the agent opens a page signed in with one of your browser profiles, a site outside that profile's own asks first, with **Allow for this chat**.
+- **Approvals show everything.** Saving a skill shows exactly what changes, saving a workflow shows its schedule, its mode and every step, and only you can confirm a change, never a command the agent runs.
 - **Your organization, your models.** When you connect to an organization, its models come from the organization, and your local Ollama models stay available. Disconnect and your own providers are back.
+- **Viewers can't change files.** In an organization workspace you can only view, the editor and file tree say so and change nothing.
 - **Steadier all round.** Many fixes for races, lost settings edits, lost usage records, terminals that could hang, and files that could be overwritten, each with a test so it stays fixed.
 
 ### Good to know

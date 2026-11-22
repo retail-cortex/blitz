@@ -22,7 +22,7 @@
 // browser (AB-10).
 import { workspaces } from "./api";
 import { agentBrowser, canPreview, openURL } from "./desktop";
-import { openFile, openSettings, openWeb, showView } from "./events";
+import { openFile, openSettings, openWeb, showView, type PageReach } from "./events";
 import type { AgentBrowserCommand } from "./gen/blitz/v1/workspace_pb";
 
 /** What the relay needs of the window and the service (replaced in tests). */
@@ -36,7 +36,7 @@ export interface RelayEnds {
   /** Shows the watched view id as a tab. */
   showTab: (id: string) => void;
   /** Opens a page the user asked to see (AB-10): in a web tab, or the system's browser when external. */
-  openPage: (url: string, external: boolean, profile: string) => unknown;
+  openPage: (url: string, external: boolean, profile: string, reach: PageReach) => unknown;
   /** Opens a workspace file in the editor, at a line (spec_060 DRV-31). */
   openFile: (path: string, line: number) => unknown;
   /** Opens a view: "studio:<section>", "settings:<section>", or changes, processes, pictures (DRV-31). */
@@ -55,7 +55,7 @@ export function relayEnds(dir: string, showTab: (id: string) => void): RelayEnds
     close: agentBrowser.close,
     on: agentBrowser.on,
     showTab,
-    openPage: (url, external, profile) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url, profile })),
+    openPage: (url, external, profile, reach) => (external || !canPreview() ? openURL(url).catch(() => undefined) : openWeb({ dir, url, profile, reach })),
     openFile: (path, line) => openFile({ dir, path, line: line || undefined }),
     openView: (view) => {
       const [where, section] = view.split(":", 2);
@@ -122,7 +122,7 @@ export async function runRelay(ends: RelayEnds, signal: AbortSignal, retry = 200
               if (mine.delete(c.browserId)) void reply(c.browserId, [], true, e instanceof Error ? e.message : String(e));
             });
           } else if (c.kind === "page" || c.kind === "external") {
-            ends.openPage(c.url, c.kind === "external", c.profile);
+            ends.openPage(c.url, c.kind === "external", c.profile, { allowLocal: c.allowLocal, deny: c.denyDomains, sites: c.privateSites });
           } else if (c.kind === "file") {
             ends.openFile(c.path, c.line);
           } else if (c.kind === "view") {

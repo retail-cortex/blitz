@@ -20,6 +20,7 @@ import {
   mdiClose,
   mdiCollapseAllOutline,
   mdiEyeOffOutline,
+  mdiLockOutline,
   mdiEyeOutline,
   mdiFilePlusOutline,
   mdiFilterVariant,
@@ -84,8 +85,11 @@ export function FilesShelf({
   onClose,
   width,
   onResize,
+  readOnly = "",
 }: {
   dir: string;
+  /** Why the workspace's files can only be read (a Viewer's clone, EN-60); "" when they can change. */
+  readOnly?: string;
   /** Its width in pixels; dragging its edge sets another. */
   width: number;
   onResize: (w: number) => void;
@@ -409,8 +413,8 @@ export function FilesShelf({
       <ResizeHandle width={width} edge="right" min={200} max={() => Math.min(560, window.innerWidth - 600)} label={t("desktop.files.resize")} onResize={onResize} />
       <div className="panel-head files-head">
         <span className="t-title-sm spacer">{t("desktop.files.title")}</span>
-        <IconButton icon={mdiFilePlusOutline} label={t("desktop.files.new_file")} small onClick={() => void startNew("file")} />
-        <IconButton icon={mdiFolderPlusOutline} label={t("desktop.files.new_folder")} small onClick={() => void startNew("folder")} />
+        {!readOnly && <IconButton icon={mdiFilePlusOutline} label={t("desktop.files.new_file")} small onClick={() => void startNew("file")} />}
+        {!readOnly && <IconButton icon={mdiFolderPlusOutline} label={t("desktop.files.new_folder")} small onClick={() => void startNew("folder")} />}
         {advanced && (
           <>
             <IconButton icon={mdiRefresh} label={t("desktop.files.refresh")} small onClick={() => void reloadAll()} />
@@ -421,6 +425,12 @@ export function FilesShelf({
         <IconButton icon={mdiFilterVariant} label={t("desktop.files.filter")} small selected={filter !== null} onClick={() => setFilter((f) => (f === null ? "" : null))} />
         <IconButton icon={mdiChevronDoubleLeft} label={t("desktop.files.hide")} small onClick={onClose} />
       </div>
+      {readOnly && (
+        <div className="notice info row files-read-only" role="note">
+          <Icon path={mdiLockOutline} size="sm" />
+          <span>{t("desktop.files.read_only", { why: readOnly })}</span>
+        </div>
+      )}
       {filter !== null && (
         <div className="files-filter">
           <input

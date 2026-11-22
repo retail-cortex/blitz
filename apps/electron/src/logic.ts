@@ -893,3 +893,16 @@ export function pagePermission(permission: string, requesting: string, origin: s
   if (permission !== "media") return false;
   return !!origin && originOf(requesting) === origin && mediaTypes.length > 0 && mediaTypes.every((t) => t === "audio");
 }
+
+/**
+ * Whether p is root or inside it, both real paths, compared as the disk
+ * compares them (case-insensitively on macOS and Windows): a dropped file
+ * inside the workspace is never moved to the Trash (security review
+ * files#2).
+ */
+export function within(p: string, root: string, paths: { relative(from: string, to: string): string; isAbsolute(p: string): boolean }, foldCase = process.platform !== "linux"): boolean {
+  const norm = (s: string) => (foldCase ? s.toLowerCase() : s);
+  const rel = paths.relative(norm(root), norm(p));
+  return rel === "" || (!rel.startsWith("..") && !paths.isAbsolute(rel));
+}
+

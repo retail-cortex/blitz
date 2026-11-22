@@ -332,15 +332,24 @@ func NewGenerateImageTool(ws *Workspace, hooks *Hooks, p *paint, allowNetwork bo
 						notes = append(notes, fmt.Sprintf("%s made a %s picture, so it is %s.", painter.Model(), strings.TrimPrefix(ext, "."), out))
 					}
 				}
+				// overwrite replaces only the path approved: a name of the
+				// model's making (another extension, a number) never
+				// replaces a file, it takes a free name beside it.
+				replace := input.Overwrite && out == rel
 				if out != rel {
-					if _, err := ws.Stat(out); err == nil && !input.Overwrite {
-						return fail(fmt.Sprintf("file '%s' already exists; set overwrite=true to replace it", out))
+					free, ok := freePicturePath(ws, out)
+					if !ok {
+						return fail(fmt.Sprintf("no free name beside '%s' for picture %d", out, i+1))
+					}
+					if free != out {
+						notes = append(notes, fmt.Sprintf("%s already exists, so picture %d is %s.", out, i+1, free))
+						out = free
 					}
 					if effect, rule := hooks.Rules().Decide(RuleWrite, []string{out}); effect == EffectDeny {
 						return fail(fmt.Sprintf("%s is denied by the permission rule deny %s", out, rule))
 					}
 				}
-				if err := writePicture(ctx, ws, out, p.Data, input.Overwrite); err != nil {
+				if err := writePicture(ctx, ws, out, p.Data, replace); err != nil {
 					return fail(err.Error())
 				}
 				outs = append(outs, out)
@@ -361,6 +370,23 @@ func NewGenerateImageTool(ws *Workspace, hooks *Hooks, p *paint, allowNetwork bo
 			return done, nil
 		},
 	)
+}
+
+// freePicturePath is out, or the first of out-2, out-3 … (before its
+// extension) that isn't a file yet; ok false after 100 tries.
+func freePicturePath(ws *Workspace, out string) (string, bool) {
+	ext := path.Ext(out)
+	base := strings.TrimSuffix(out, ext)
+	for n := 1; n <= 100; n++ {
+		try := out
+		if n > 1 {
+			try = fmt.Sprintf("%s-%d%s", base, n, ext)
+		}
+		if _, err := ws.Stat(try); err != nil {
+			return try, true
+		}
+	}
+	return "", false
 }
 
 // catalogOf is what painter's model can do, when it says (PIC-81).

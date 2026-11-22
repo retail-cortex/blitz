@@ -200,6 +200,11 @@ func TestSavePicture(t *testing.T) {
 	p5, err := w.SavePicture(ctx, s.ID, pic, "hero")
 	require.NoError(t, err)
 	assert.Equal(t, "hero.png", p5, "at the workspace's top")
+	for _, bad := range []string{".git/hooks/pre-commit", ".git/", ".GIT/x.png", "../out.png"} {
+		_, err = w.SavePicture(ctx, s.ID, pic, bad)
+		assert.ErrorIs(t, err, ErrBadPath, "%s: never .git or outside (security review files#7)", bad)
+	}
+	assert.NoFileExists(t, filepath.Join(w.Dir(), ".git", "hooks", "pre-commit"))
 	again, err := w.PictureSession(s.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{p1, p2, p3, p4, p5}, again.Turns[0].Pictures[0].Saved)

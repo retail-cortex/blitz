@@ -685,6 +685,13 @@ func TestOrgConnections(t *testing.T) {
 	_, refused, err := connectors.Save(cat, d, connectors.Connection{Name: "scratch", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": "/tmp/s.db"}}, nil, "")
 	require.NoError(t, err)
 	assert.Contains(t, refused, "your organization doesn't allow sqlite connections (the organization's policy decides it)", "it says who decided (EN-39)")
+	// Sent to be tested or queried, not saved: held to the same rules
+	// (EN-35b, security review databases#5).
+	scratch := connectors.Connection{Name: "scratch", Category: "databases", Scope: connectors.ScopeWorkspace, Kind: "sqlite", Settings: map[string]string{"database": "/tmp/s.db"}}
+	_, err = connectors.TestConnection(context.Background(), cat, connectors.Env{Dirs: d}, scratch)
+	assert.ErrorContains(t, err, "doesn't allow sqlite connections")
+	_, err = connectors.RunQuery(context.Background(), cat, connectors.Env{Dirs: d}, scratch, connectors.QueryRun{Statement: "select 1"})
+	assert.ErrorContains(t, err, "doesn't allow sqlite connections")
 
 	// Served: the organization's locked one even when turned off, with the
 	// person's global secrets; the person's refused ones not.

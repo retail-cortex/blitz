@@ -888,6 +888,15 @@ func TestCatalog(t *testing.T) {
 	// A service that retired its catalog: the kept one goes, quietly; then
 	// nothing more to say. A folder it can't be removed from says so.
 	s.CatalogRemoved = true
+	// Unsigned, it's believed only once the policy API's signed policy is
+	// kept (EN-33a, security review enterprise#8): before that it's a
+	// refusal, and the catalog stays.
+	kept, changed, err = c.RefreshCatalog(ctx, dir)
+	require.ErrorAs(t, err, &refusal)
+	assert.False(t, changed)
+	require.NotNil(t, kept)
+	assert.DirExists(t, filepath.Join(dir, "catalog"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, policyETag), []byte(`"v1"`), 0o600))
 	require.NoError(t, os.Chmod(dir, 0o500))
 	_, _, err = c.RefreshCatalog(ctx, dir)
 	assert.Error(t, err, "can't remove it")
@@ -1356,4 +1365,23 @@ func TestPolicyNewerSchemaRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assert.FileExists(t, filepath.Join(dir, "policy.json"))
+}
+
+// A swap that can't put the new policy in place puts the old one back:
+// never no policy/ at all (EN-33c, security review enterprise#10).
+func TestSwapPolicyFailureKeepsTheOld(t *testing.T) {
+	dir := t.TempDir()
+	cur := filepath.Join(dir, policyDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(cur, "rules"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(cur, "rules", "kept.md"), []byte("x"), 0o600))
+	err := swapPolicy(dir, filepath.Join(dir, "no-such-next"))
+	require.Error(t, err)
+	assert.FileExists(t, filepath.Join(cur, "rules", "kept.md"), "the old policy is back")
+	assert.NoDirExists(t, filepath.Join(dir, policyDir+".old"))
+
+	next := filepath.Join(dir, "staged")
+	require.NoError(t, os.MkdirAll(filepath.Join(next, "rules"), 0o700))
+	require.NoError(t, swapPolicy(dir, next))
+	assert.NoFileExists(t, filepath.Join(cur, "rules", "kept.md"), "swapped")
+	assert.False(t, policyTookOver(dir), "no ETag, no policy.json")
 }

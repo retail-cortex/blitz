@@ -238,6 +238,11 @@ var ErrUnsafeNotHere = errors.New("unsafe mode runs commands outside the sandbox
 // it's never kept, so the workspace opens in default.
 var ErrUnsafeChosenEachTime = errors.New("unsafe mode isn't kept in settings: choose it each time, with /mode unsafe or the window's mode menu")
 
+// ErrConfirmWhileAgentWorks refuses a change confirmed from outside the
+// window (blitz do) while the agent is at work in the workspace: the
+// confirmation may be the agent's own command (spec_060 DRV-04a).
+var ErrConfirmWhileAgentWorks = errors.New("not changed: the agent is working in this workspace, so a change confirmed from the command line waits until it finishes (or approve it in the window)")
+
 // ErrUnsafeWhileAgentWorks refuses unsafe mode while the agent is at work
 // in the workspace (a turn, a background task, a background process it
 // started): only the person switches to it, when the agent isn't acting.

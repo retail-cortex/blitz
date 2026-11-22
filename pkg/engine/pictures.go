@@ -783,6 +783,11 @@ func (w *Workspace) SavePicture(ctx context.Context, id, picture, p string) (str
 			}
 		}
 	}
+	// Where the person's file operations may write: never .git (FIL-61b,
+	// security review files#7).
+	if _, _, err := userPath(rel); err != nil {
+		return "", err
+	}
 	if folder != "" {
 		if err := w.files().UserMkdir(filepath.FromSlash(folder)); err != nil && !errors.Is(err, fs.ErrExist) {
 			return "", err

@@ -111,7 +111,7 @@ type AppMethods = {
   PruneUpdateDownloads(keep: number): Promise<UpdateDownloads>;
   Quit(): Promise<void>;
   OpenApp(): Promise<void>;
-  PreviewOpen(id: string, url: string, profile?: string): Promise<string>;
+  PreviewOpen(id: string, url: string, profile?: string, allowLocal?: boolean, deny?: string[], sites?: string[]): Promise<string>;
   PreviewBounds(id: string, b: PreviewBounds): Promise<void>;
   PreviewVisible(id: string, visible: boolean): Promise<void>;
   PreviewNavigate(id: string, step: string): Promise<void>;
@@ -122,7 +122,7 @@ type AppMethods = {
   PreviewPrintPDF(id: string, pageSize: string): Promise<string>;
   PreviewPicture(id: string, url: string): Promise<{ ext: string; data: string }>;
   DragOut(paths: string[]): Promise<boolean>;
-  TrashDropped(paths: string[]): Promise<string[]>;
+  TrashDropped(paths: string[], workspace?: string): Promise<string[]>;
   SignInWindow(profile: string, url: string): Promise<void>;
   AgentBrowserOpen(id: string, show: string, profile: string, allowLocal: boolean, deny: string[], sites: string[]): Promise<void>;
   AgentBrowserSend(id: string, message: string): Promise<void>;
@@ -466,7 +466,8 @@ export const dragOut = (paths: string[]) => app().DragOut(paths);
  * Moves dropped files (droppedPaths') to the trash, once they're copied
  * into the workspace; returns those it couldn't.
  */
-export const trashDropped = (paths: string[]) => app().TrashDropped(paths);
+/** Moves dropped files to the Trash once copied, never one that's really inside workspace (the copy itself, by another spelling). */
+export const trashDropped = (paths: string[], workspace: string) => app().TrashDropped(paths, workspace);
 
 /**
  * The agent's browser in the app (spec_050_agent_browser, EL-17): the
@@ -648,7 +649,8 @@ export const canPreview = () => windowHas("PreviewOpen");
  * Opens web preview id at an address (a bare host gets http:// or
  * https://), or points it there when it's open; resolves with the address.
  */
-export const previewOpen = (id: string, url: string, profile = "") => app().PreviewOpen(id, url, profile);
+export const previewOpen = (id: string, url: string, profile = "", reach?: { allowLocal: boolean; deny: string[]; sites: string[] }) =>
+  reach ? app().PreviewOpen(id, url, profile, reach.allowLocal, reach.deny, reach.sites) : app().PreviewOpen(id, url, profile);
 /** Places web preview id over the page's placeholder. */
 export const previewBounds = (id: string, b: PreviewBounds) => (canPreview() ? app().PreviewBounds(id, b).catch(() => {}) : Promise.resolve());
 /** Shows or hides web preview id (hidden under a menu, a dialog, a drawer, or another tab). */

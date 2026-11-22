@@ -23,7 +23,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -73,6 +73,7 @@ import {
   profilePartition,
   previewStep,
   addressURL,
+  within,
   previewURL,
   printCheckScript,
   printLoadScript,
@@ -646,7 +647,9 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       // Signed in with a browser profile (BP-08): an agent's open_page that named one.
       const profile = a[2] === "" || a[2] === undefined ? undefined : profileName(a[2]);
       if (a[2] && !profile) throw new Error(`not a browser profile: ${JSON.stringify(a[2])}`);
-      openPreview(id, url, profile);
+      // A page the agent opened (BP-08a): held to its reach, as the agent's views are (EL-17).
+      const reach = a.length > 3 ? { allowLocal: a[3] === true, deny: stringList(a[4]), sites: stringList(a[5]) } : undefined;
+      openPreview(id, url, profile, reach);
       return url;
     }
     case "PreviewBounds": {
@@ -712,8 +715,17 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
     case "TrashDropped": {
       // A move from the computer into the workspace, once copied: only
       // files the preload read from a drop (EL-15).
+      // Never one that's really in the workspace: the copy just made, by
+      // another spelling of its path (security review files#2); it's
+      // said not trashed.
       const failed: string[] = [];
+      const workspace = typeof a[1] === "string" && path.isAbsolute(a[1]) ? await realpath(a[1]).catch(() => a[1] as string) : undefined;
       for (const p of dropped.take(absolutePaths(a[0], path.isAbsolute))) {
+        const real = await realpath(p).catch(() => p);
+        if (workspace === undefined || within(real, workspace, path)) {
+          failed.push(p);
+          continue;
+        }
         await shell.trashItem(p).catch(() => failed.push(p));
       }
       return failed;
@@ -916,8 +928,12 @@ function preview(a: unknown[]) {
   return p;
 }
 
-/** Opens (or points) preview id at url, hidden until the page places and shows it; in profile's session when given (BP-08). */
-function openPreview(id: string, url: string, profile?: string) {
+/**
+ * Opens (or points) preview id at url, hidden until the page places and
+ * shows it; in profile's session when given (BP-08). A page the agent
+ * opened has a reach: the session's request filter holds it (BP-08a).
+ */
+function openPreview(id: string, url: string, profile?: string, reach?: AgentReach) {
   if (!win) return;
   let p = previews.get(id);
   if (!p) {
@@ -929,6 +945,12 @@ function openPreview(id: string, url: string, profile?: string) {
     p = { view, errors: [] };
     previews.set(id, p);
     watchPreview(id, p);
+  }
+  if (reach) {
+    const wc = p.view.webContents;
+    filterAgentRequests(wc.session, reach);
+    if (!agentReach.has(wc.id)) wc.once("destroyed", () => agentReach.delete(wc.id));
+    agentReach.set(wc.id, reach);
   }
   // A page that won't load shows Chromium's error page, and its error.
   p.view.webContents.loadURL(url).catch(() => {});

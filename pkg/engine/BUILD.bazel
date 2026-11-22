@@ -382,6 +382,7 @@ go_test(
         "//pkg/plugins",
         "//pkg/redact",
         "//pkg/secrets",
+        "//pkg/terminal",
         "//pkg/textutil",
         "@com_github_a2aproject_a2a_go_v2//a2a",
         "@com_github_a2aproject_a2a_go_v2//a2asrv",

@@ -70,7 +70,7 @@ export function WebPreview({ tab, model }: { tab: Tab & { web: NonNullable<Tab["
   const go = async (to: string) => {
     setError("");
     try {
-      const url = await previewOpen(id, to, web.profile ?? "");
+      const url = await previewOpen(id, to, web.profile ?? "", web.reach);
       opened.add(id);
       setStarted(true);
       model.setWeb(tab.path, { url, loading: true });

@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -271,6 +272,9 @@ func (r *Registry) openPage(ctx context.Context, u, profile string) (string, err
 		if where != PageEmbedded {
 			profile = ""
 		}
+		if err := r.askProfileSite(ctx, u, profile); err != nil {
+			return "", err
+		}
 		err := opener(ctx, u, where, profile)
 		switch {
 		case err == nil:
@@ -317,4 +321,52 @@ func (r *Registry) pageWhere(ctx context.Context, u string) string {
 	p.where[session] = v
 	p.mu.Unlock()
 	return v
+}
+
+// askProfileSite asks before a page outside profile's own sites opens
+// signed in with it (BP-08a): its sign-ins go with the page's requests,
+// as the browser asks for such a site (BP-04). Allowed for the chat, a
+// site isn't asked about again. Its own sites, and no profile, open
+// without asking.
+func (r *Registry) askProfileSite(ctx context.Context, u, profile string) error {
+	if profile == "" || profile == config.AnonymousBrowserProfile {
+		return nil
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return err
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, p := range r.browserProfiles().All {
+		if p.Name == profile && matchDomain(p.Allow, host) {
+			return nil
+		}
+	}
+	return r.hooks.Approve(ctx, api.ApprovalRequest{
+		Tool: "open_page", Kind: api.ActionNetwork,
+		Detail:  fmt.Sprintf("open %s signed in with your browser profile %s (a site outside its own)", u, profile),
+		Targets: []string{host},
+		Key:     "open_page:profile:" + profile + ":" + host, KeyLabel: fmt.Sprintf("opening %s signed in as %s", host, profile),
+	})
+}
+
+// PageReach is what a page open_page shows may reach (BP-08a), held by
+// the window's network filter as the agent's browser is (EL-17):
+// private addresses only with browser.allow_local, never
+// web.deny_domains, and profile's own sites (names) on the private
+// network.
+func (r *Registry) PageReach(profile string) (allowLocal bool, deny, sites []string) {
+	if r.browser != nil {
+		allowLocal = r.browser.cfg.AllowLocal
+	}
+	deny = slices.Clone(r.web.DenyDomains)
+	if profile == "" {
+		return allowLocal, deny, nil
+	}
+	for _, p := range r.browserProfiles().All {
+		if p.Name == profile {
+			sites = profileSiteNames(p.Allow)
+		}
+	}
+	return allowLocal, deny, sites
 }

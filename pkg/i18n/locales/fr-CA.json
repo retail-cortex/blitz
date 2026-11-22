@@ -1624,6 +1624,7 @@
     "desktop.switcher.working": "Au travail",
     "desktop.drop": "Déposez des images pour les joindre",
     "desktop.files.title": "Fichiers",
+    "desktop.files.read_only": "Lecture seule : {why}",
     "desktop.files.show": "Afficher les fichiers",
     "desktop.files.hide": "Réduire les fichiers",
     "desktop.files.editor": "Éditeur",

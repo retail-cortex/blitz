@@ -139,6 +139,11 @@ func (w *Workspace) askChange(ctx context.Context, c api.BlitzCommand, detail, d
 		if !run.confirmed {
 			return &errConfirm{detail: detail, diff: diff, asks: asks}
 		}
+		// Confirmed by whoever called: while the agent is at work here
+		// that may be its own command (DRV-04a), so its change waits.
+		if w.agentAtWork() {
+			return api.ErrConfirmWhileAgentWorks
+		}
 		return nil
 	}
 	return w.tools.Hooks().Approve(ctx, api.ApprovalRequest{
@@ -808,10 +813,20 @@ func (w *Workspace) cmdWorkflowSave(ctx context.Context, c api.BlitzCommand, arg
 	for _, n := range f.Nodes {
 		steps = append(steps, fmt.Sprintf("%s (%s)", firstOf(n.Title, n.ID), n.Type))
 	}
-	if err := w.askChange(ctx, c, fmt.Sprintf("Save the workflow %s: %s", f.Name, strings.Join(steps, ", ")), ""); err != nil {
+	// What decides what it does, spelled out, and the file itself as a
+	// diff against the one it replaces: every step's prompt and contents.
+	previous := str(args, "previous")
+	text, err := flows.Text(f)
+	if err != nil {
 		return nil, err
 	}
-	saved, problems, err := w.SaveWorkflow(f, str(args, "previous"))
+	old, _ := os.ReadFile(filepath.Join(w.ProjectWorkflowsDir(), firstOf(previous, f.Name)+flows.Suffix))
+	detail := fmt.Sprintf("Save the workflow %s, running in mode %s, on %s: %s", f.Name, string(flows.ModeOf(f)), strings.Join(firstList(f.Triggers, []string{flows.TriggerManual}), ", "), strings.Join(steps, ", "))
+	rel := ".agents/workflows/" + f.Name + flows.Suffix
+	if err := w.askChange(ctx, c, detail, fileDiff(rel, string(old), text)); err != nil {
+		return nil, err
+	}
+	saved, problems, err := w.SaveWorkflow(f, previous)
 	if err != nil {
 		return nil, err
 	}
@@ -819,6 +834,14 @@ func (w *Workspace) cmdWorkflowSave(ctx context.Context, c api.BlitzCommand, arg
 		return nil, errors.New(strings.Join(problems, "; "))
 	}
 	return map[string]any{"saved": saved.Name, "note": "Studio › Workflows shows it; it runs when the person runs or schedules it."}, nil
+}
+
+// firstList is a unless it's empty, else b.
+func firstList(a, b []string) []string {
+	if len(a) > 0 {
+		return a
+	}
+	return b
 }
 
 // firstOf is a unless it's empty, else b.
@@ -865,12 +888,14 @@ func (w *Workspace) cmdSkillList(context.Context, api.BlitzCommand, map[string]a
 
 func (w *Workspace) cmdSkillSave(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	spec := api.SkillSpec{Name: str(args, "name"), Description: str(args, "description"), Instructions: str(args, "instructions")}
-	if err := w.askChange(ctx, c, "Save the skill "+spec.Name+": "+spec.Description, fileDiff(".agents/skills/"+spec.Name+"/SKILL.md", "", spec.Instructions)); err != nil {
-		return nil, err
-	}
-	previous, hash := "", ""
+	// The skill it replaces, read before asking: the diff shows what
+	// changes, and the save is held to the version shown (its hash).
+	previous, hash, old := "", "", ""
 	if cur, err := w.GetSkillFile(spec.Name); err == nil && cur.Editable {
-		previous, hash = spec.Name, cur.Hash
+		previous, hash, old = spec.Name, cur.Hash, cur.Spec.Instructions
+	}
+	if err := w.askChange(ctx, c, "Save the skill "+spec.Name+": "+spec.Description, fileDiff(".agents/skills/"+spec.Name+"/SKILL.md", old, spec.Instructions)); err != nil {
+		return nil, err
 	}
 	f, problems, err := w.SaveSkill(spec, previous, hash)
 	if err != nil {

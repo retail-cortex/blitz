@@ -123,10 +123,33 @@ func TestBlitzStudioSaves(t *testing.T) {
 		assert.Error(t, err, "an agent step needs instructions")
 	})
 	t.Run("a workflow", func(t *testing.T) {
-		out, err := runCmd(t, w, "workflow save", map[string]any{"workflow": map[string]any{"name": "nightly",
+		out, err := runCmd(t, w, "workflow save", map[string]any{"workflow": map[string]any{"name": "nightly", "triggers": []any{"schedule", "git.pre_push"}, "mode": "accept-edits",
 			"nodes": []any{map[string]any{"id": "a", "type": "agent", "title": "Check", "instructions": "Check the build."}}}})
 		require.NoError(t, err)
 		assert.Equal(t, "nightly", out.(map[string]any)["saved"])
+		// Its approval says what decides what it does, and shows the file
+		// (N26 tools#7).
+		last := (*asked)[len(*asked)-1]
+		assert.Contains(t, last.Detail, "mode accept-edits")
+		assert.Contains(t, last.Detail, "on schedule, git.pre_push")
+		assert.Contains(t, last.Diff, "Check the build.")
+		assert.Contains(t, last.Diff, "+++ b/.agents/workflows/nightly.flow.yaml")
+	})
+	t.Run("a skill replaced shows what changes", func(t *testing.T) {
+		_, err := runCmd(t, w, "skill save", map[string]any{"name": "greet", "description": "Greets people", "instructions": "Greet them briefly."})
+		require.NoError(t, err)
+		diff := (*asked)[len(*asked)-1].Diff
+		assert.Contains(t, diff, "-Greet them warmly.", "the old text (N26 tools#6)")
+		assert.Contains(t, diff, "+Greet them briefly.")
+		assert.NotContains(t, diff, "/dev/null")
+	})
+	t.Run("confirmed from the command line while the agent works", func(t *testing.T) {
+		w.turnStarted("s1")
+		_, err := w.RunBlitzCommand(context.Background(), "rule save", map[string]any{"name": "late", "text": "x"}, true, nil)
+		require.ErrorIs(t, err, api.ErrConfirmWhileAgentWorks, "may be the agent's own confirmation (DRV-04a)")
+		w.turnEnded("s1")
+		_, err = w.RunBlitzCommand(context.Background(), "rule save", map[string]any{"name": "late", "text": "x"}, true, nil)
+		require.NoError(t, err)
 	})
 }
 
