@@ -166,3 +166,13 @@ func TestTheREPLAsks(t *testing.T) {
 	assert.Equal(t, "? how do I resume a chat", (*turns)[1].Text)
 	assert.Contains(t, out, "/mode [auto|default|", "/help mode is the command's help")
 }
+
+// On a terminal, a page is rendered: its heading styled, not "# ".
+func TestRenderMarkdown(t *testing.T) {
+	md := "# MCP servers\n\nAdd one with `blitz mcp add`.\n"
+	assert.Equal(t, md, RenderMarkdown(md, "dark", 80, false), "plain without a terminal")
+	got := RenderMarkdown(md, "dark", 80, true)
+	assert.NotContains(t, got, "# MCP servers")
+	assert.Contains(t, stripANSI(got), "MCP servers")
+	assert.Contains(t, stripANSI(got), "blitz mcp add")
+}

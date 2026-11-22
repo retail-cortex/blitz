@@ -223,3 +223,72 @@ func TestServiceLogsFollow(t *testing.T) {
 	require.NoError(t, <-done)
 	assert.Equal(t, 1, strings.Count(out.String(), "first"), "printed once")
 }
+
+// Signing in another way reads no key; --keep-default leaves the provider
+// in use; -w is the workspace's own; --no-check doesn't ask the provider.
+func TestProvidersAddOptions(t *testing.T) {
+	keys := fakeProviders(t, true)
+	cfg, ws := t.TempDir(), t.TempDir()
+	_, err := runBlitzIn(t, "", "-c", cfg, "providers", "add", "gemini", "--auth", "adc", "--project", "p1", "--location", "us-central1")
+	require.NoError(t, err)
+	assert.Empty(t, *keys, "no key read or checked")
+	c, err := config.Load(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, config.AuthADC, c.LLM.Gemini.Auth)
+	assert.Equal(t, "p1", c.LLM.Gemini.ProjectID)
+
+	_, err = runBlitzIn(t, "sk-ant\n", "-c", cfg, "providers", "add", "anthropic", "--keep-default", "--no-check")
+	require.NoError(t, err)
+	assert.Empty(t, *keys, "--no-check: not asked")
+	c, _ = config.Load(cfg)
+	assert.Equal(t, "gemini", c.LLM.Provider, "still the one in use")
+
+	_, err = runBlitz(t, "-c", cfg, "-d", ws, "providers", "use", "-w", "anthropic")
+	require.NoError(t, err)
+	wc, err := config.LoadWorkspace(cfg, ws)
+	require.NoError(t, err)
+	assert.Equal(t, "anthropic", wc.LLM.Provider, "this workspace's own")
+	c, _ = config.Load(cfg)
+	assert.Equal(t, "gemini", c.LLM.Provider, "the global one stays")
+
+	assert.Contains(t, shellComplete(t, "providers", "add", ""), "anthropic")
+}
+
+// blitz jobs remove removes a job through the service; a script needn't
+// say yes (CLP-34, CLP-52).
+func TestJobsRemove(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	addWorker(t, ws, "hello", "---\nschedule: daily at noon\n---\nSay hello.\n")
+	out, err := runCLI(t, "-d", ws, "jobs", "remove", "hello")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "Removed the job hello.")
+	assert.NoDirExists(t, filepath.Join(ws, "workers", "hello"))
+	_, err = runCLI(t, "-d", ws, "jobs", "rm", "hello")
+	assert.Error(t, err, "gone")
+}
+
+// The log as JSON, and a note when -n cuts it.
+func TestServiceLogsJSONAndLimit(t *testing.T) {
+	cfg, logs := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cfg, ".env.toml"), []byte("[log]\nlevel = \"info\"\ndir = \""+logs+"\"\n"), 0o600))
+	var lines strings.Builder
+	for i := range 5 {
+		lines.WriteString(`{"time":"2026-11-22T10:00:0` + string(rune('0'+i)) + `Z","level":"INFO","msg":"tick"}` + "\n")
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(logs, "blitz-2026-11-22.jsonl"), []byte(lines.String()), 0o600))
+	out, err := runBlitz(t, "-c", cfg, "service", "logs", "-n", "2")
+	require.NoError(t, err)
+	assert.Equal(t, 2, strings.Count(out, "tick"))
+	assert.Contains(t, out, "Showing the newest 2 of 5")
+	out, err = runBlitz(t, "-c", cfg, "service", "logs", "--json")
+	require.NoError(t, err)
+	var page map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &page))
+	assert.EqualValues(t, 5, page["Matched"])
+	out, err = runBlitz(t, "-c", cfg, "service", "logs", "--days", "--json")
+	require.NoError(t, err)
+	assert.JSONEq(t, `["2026-11-22"]`, out)
+	_, err = runBlitz(t, "-c", cfg, "service", "logs", "--day", "not-a-day")
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+}

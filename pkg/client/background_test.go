@@ -171,3 +171,14 @@ func TestRemoteReasoning(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, none.Turns, "a session without a log has no turns")
 }
+
+// CheckAPIKey refuses what it can't check: no key, or a provider that
+// takes none (a real key's check is the provider's, not tested here).
+func TestCheckAPIKeyRefuses(t *testing.T) {
+	_, url := attachURL(t, nil)
+	s := AttachSettingsHTTP(http.DefaultClient, url)
+	_, err := s.CheckAPIKey(context.Background(), "", "gemini", " ")
+	assert.ErrorContains(t, err, "no key to check")
+	_, err = s.CheckAPIKey(context.Background(), "", "ollama", "k")
+	assert.ErrorContains(t, err, "takes no API key")
+}

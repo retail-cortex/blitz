@@ -258,6 +258,12 @@ func TestNewCompleter(t *testing.T) {
 	assert.Contains(t, complete("/processes "), "log")
 	assert.Contains(t, complete("/search "), "documents")
 	assert.Contains(t, complete("/search "), "reindex")
+	// Styles, personalities and skills complete from the workspace's own
+	// lists, built-ins too (CLP-11).
+	for line, want := range map[string]string{"/style ": "default", "/personality ": "friendly", "/skills show ": "blitz"} {
+		assert.Contains(t, complete(line), want, line)
+	}
+	assert.Empty(t, complete("/tasks show "), "no background tasks yet")
 	got, _ := c.Do([]rune("look at @db:"), len("look at @db:")) // asks the workspace for its connections (DAT-45)
 	assert.Empty(t, got, "no connections: no mentions")
 }

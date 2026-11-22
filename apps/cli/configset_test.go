@@ -185,3 +185,25 @@ func TestConfigReferenceAndValues(t *testing.T) {
 	_, err = runBlitz(t, "-c", cfg, "config", "check", filepath.Join(cfg, "none.toml"))
 	assert.ErrorIs(t, err, os.ErrNotExist, "a file that isn't there is said so")
 }
+
+// A save with errors offers another go on a terminal: yes reopens the
+// file until it's fixed (CLP-40).
+func TestConfigEditAgain(t *testing.T) {
+	old := stdoutIsTerminal
+	stdoutIsTerminal = func() bool { return true }
+	t.Cleanup(func() { stdoutIsTerminal = old })
+	cfg := t.TempDir()
+	count := filepath.Join(t.TempDir(), "count")
+	// The first save is broken, the second fixed.
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", `sh -c 'if [ -f "`+count+`" ]; then printf "[ui]\ntheme = \"light\"\n" > "$0"; else touch "`+count+`"; printf "[ui\n" > "$0"; fi'`)
+	out, err := runBlitzIn(t, "y\n", "-c", cfg, "config", "edit")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, "Open it again to fix them? [y/N]")
+	assert.Contains(t, out, "is fine")
+	// No: the problems stay, said.
+	require.NoError(t, os.Remove(count))
+	_, err = runBlitzIn(t, "n\n", "-c", cfg, "config", "edit")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "problems")
+}

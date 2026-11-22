@@ -15,11 +15,15 @@
 package engine
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -212,4 +216,74 @@ func TestConfigureCommand(t *testing.T) {
 		}
 	}
 	t.Fatal("no /configure")
+}
+
+// No value typed for a secret: nothing is saved, neither the secret nor
+// the server (DRV-05); a name a global server has is refused.
+func TestMCPAddWithoutTheSecret(t *testing.T) {
+	w, asked, questions := blitzWorkspace(t, api.DecisionOnce, "", nil)
+	_, err := runCmd(t, w, "mcp add", map[string]any{"name": "gh", "command": "true", "env": map[string]any{"GITHUB_TOKEN": "${GITHUB_TOKEN}"}})
+	require.ErrorContains(t, err, "no value was typed")
+	require.Len(t, *asked, 1)
+	require.Len(t, *questions, 1)
+	own, _, _, err := config.ScopeMCP(w.cfg.Dir, w.Dir())
+	require.NoError(t, err)
+	assert.Empty(t, own, "the server isn't saved")
+	_, ok := config.Vault(w.cfg.Dir).Lookup(config.SecretScope(w.cfg.Dir, w.Dir()), "GITHUB_TOKEN")
+	assert.False(t, ok)
+}
+
+func TestMCPAddRefusesAGlobalName(t *testing.T) {
+	w, asked, _ := blitzWorkspace(t, api.DecisionOnce, "", func(c *config.Config) {
+		c.MCP.Servers = []config.MCPServerConfig{{Name: "docs", URL: "http://127.0.0.1:1/mcp", Disabled: true}}
+	})
+	_, err := runCmd(t, w, "mcp add", map[string]any{"name": "docs", "url": "http://127.0.0.1:1/other"})
+	assert.ErrorContains(t, err, "comes from your global settings or the project")
+	assert.Empty(t, *asked)
+}
+
+// echoIn is the test server's tool's input.
+type echoIn struct {
+	Text string `json:"text"`
+}
+
+// mcp add against a server that answers: saved, its tools listed in what
+// the agent gets back, and mcp test says the same (CLP-30, CLP-31).
+func TestMCPAddAServerThatAnswers(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "docs", Version: "1"}, nil)
+	mcp.AddTool(srv, &mcp.Tool{Name: "search_docs"}, func(_ context.Context, _ *mcp.CallToolRequest, in echoIn) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: in.Text}}}, nil, nil
+	})
+	ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil))
+	t.Cleanup(ts.Close)
+	t.Cleanup(func() {
+		for ss := range srv.Sessions() {
+			ss.Close()
+		}
+	})
+	w, _, _ := blitzWorkspace(t, api.DecisionOnce, "tok", nil)
+	out, err := runCmd(t, w, "mcp add", map[string]any{"name": "docs", "url": ts.URL, "headers": map[string]any{"X-Api-Key": "literal-value"}})
+	require.NoError(t, err)
+	m := out.(map[string]any)
+	require.Contains(t, m, "tools", "it answered: %v", m["test"])
+	assert.Contains(t, fmt.Sprint(m["tools"]), "search_docs")
+	assert.Contains(t, m["note"], "X-Api-Key were asked of the person", "the agent is told its value wasn't used")
+
+	tested, err := runCmd(t, w, "mcp test", map[string]any{"name": "docs"})
+	require.NoError(t, err)
+	assert.Equal(t, true, tested.(map[string]any)["ok"])
+	assert.Contains(t, fmt.Sprint(tested.(map[string]any)["tools"]), "search_docs")
+}
+
+// Declined, mcp remove keeps the server.
+func TestMCPRemoveDeclined(t *testing.T) {
+	w, _, _ := blitzWorkspace(t, api.DecisionOnce, "", nil)
+	_, err := runCmd(t, w, "mcp add", map[string]any{"name": "gh", "command": "true"})
+	require.NoError(t, err)
+	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionDeny, nil }, nil)
+	_, err = runCmd(t, w, "mcp remove", map[string]any{"name": "gh"})
+	require.Error(t, err)
+	own, _, _, err := config.ScopeMCP(w.cfg.Dir, w.Dir())
+	require.NoError(t, err)
+	assert.Len(t, own, 1, "still there")
 }

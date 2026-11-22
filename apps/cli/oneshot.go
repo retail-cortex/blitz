@@ -272,7 +272,9 @@ func collectHandler(calls *[]toolCallJSON) func(api.Event) {
 	}
 }
 
-func stdoutIsTerminal() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
+// stdoutIsTerminal reports whether standard output is a terminal (a
+// variable for tests).
+var stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 
 func terminalWidth() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {

@@ -217,3 +217,21 @@ func TestRemoteStopWorkerRun(t *testing.T) {
 		t.Fatal("the stopped run didn't end")
 	}
 }
+
+// DeleteWorker removes a job's folder through the service; one that isn't
+// there is an error (CLP-34).
+func TestRemoteDeleteWorker(t *testing.T) {
+	sock := runService(t)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	wd := filepath.Join(dir, "workers", "report")
+	require.NoError(t, os.MkdirAll(wd, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "WORKER.md"), []byte("---\nschedule: Daily at 6 AM\n---\nWrite the report.\n"), 0o644))
+	w := AttachWorkers(sock, dir)
+	require.NoError(t, w.DeleteWorker("report"))
+	assert.NoDirExists(t, wd)
+	list, err := w.ListWorkers()
+	require.NoError(t, err)
+	assert.Empty(t, list)
+	assert.Error(t, w.DeleteWorker("report"), "gone")
+}
