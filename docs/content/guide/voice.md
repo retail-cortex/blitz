@@ -30,7 +30,7 @@ While the microphone is open, the bar above the chat box shows what's heard and 
 | Setting | What it does |
 |---|---|
 | **Voice** | On or off. Off, there's no microphone, no shortcut, nothing sent to Google, and the microphone is never used. |
-| **Model** | The Gemini Live model. The default is the newest native-audio model your provider lists. |
+| **Model** | The Gemini Live model. Blitz lists the live models your provider offers, checks which ones your key or Google Cloud project can actually use, and offers only those; the default is the newest of them. If none answers, it says why here. |
 | **Voice** | One of Gemini's voices, with **Play** to hear a sample. A [personality](agents.md#personality) can bring its own voice. |
 | **Microphone** | Which microphone, with a level meter. This one is kept by the window, not the settings file. |
 | **Listening** | **Tap to talk** (click to start, click to stop; Gemini hears when you start and stop speaking) or **Hold to talk** (Blitz hears you only while you hold the microphone or ⌥⌘V: for noisy rooms). |
@@ -42,7 +42,7 @@ They're the `[voice]` table of your settings file (`~/.blitz/.env.toml`), which 
 ```toml
 [voice]
 enabled = true
-model = "gemini/gemini-2.5-flash-native-audio-preview-09-2025"  # optional
+model = "gemini/<a live model>"   # optional: one Settings › Voice lists
 voice = "Puck"                                                   # optional
 listen = "tap"        # or "hold"
 summaries = "voice"   # or "always", "off"

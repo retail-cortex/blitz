@@ -103,11 +103,14 @@ func (h voiceService) DescribeVoice(ctx context.Context, r req[pb.DescribeVoiceR
 	out.ModelInUse = v.Model
 	if r.Msg.ListModels {
 		models, def, err := runtime.VoiceModels(ctx, cfg)
-		if err == nil {
+		switch {
+		case err != nil: // none answers: why, in Settings › Voice (VOX-06a)
+			out.NotSetUp = err.Error()
+		default:
 			out.Models = models
-		}
-		if out.ModelInUse == "" {
-			out.ModelInUse = "gemini/" + def
+			if out.ModelInUse == "" {
+				out.ModelInUse = "gemini/" + def
+			}
 		}
 	}
 	return ok(out)

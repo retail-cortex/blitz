@@ -16,10 +16,13 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -43,6 +46,37 @@ func listing(t *testing.T, models string) {
 	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
 }
 
+// answering makes these models answer a live check, and no others, with
+// nothing kept from another test.
+func answering(t *testing.T, models ...string) *[]string {
+	t.Helper()
+	old := probeLive
+	var asked []string
+	var mu sync.Mutex
+	probeLive = func(_ context.Context, _ *genai.ClientConfig, m string, setup *genai.LiveConnectConfig) error {
+		if setup == nil || setup.SpeechConfig == nil || setup.SessionResumption == nil || setup.OutputAudioTranscription == nil {
+			return errors.New("checked without the conversation's settings")
+		}
+		mu.Lock()
+		asked = append(asked, m)
+		mu.Unlock()
+		if slices.Contains(models, m) {
+			return nil
+		}
+		return errors.New("models/" + m + " is not found for API version v1beta")
+	}
+	liveMu.Lock()
+	liveCache = map[string]liveFound{}
+	liveMu.Unlock()
+	t.Cleanup(func() {
+		probeLive = old
+		liveMu.Lock()
+		liveCache = map[string]liveFound{}
+		liveMu.Unlock()
+	})
+	return &asked
+}
+
 // noGoogle leaves Gemini with no way to sign in.
 func noGoogle(t *testing.T) {
 	t.Helper()
@@ -56,26 +90,30 @@ func noGoogle(t *testing.T) {
 const liveModels = `{"name":"models/gemini-2.5-flash","supportedGenerationMethods":["generateContent"]},
 	{"name":"models/gemini-live-2.5-flash-preview","supportedGenerationMethods":["bidiGenerateContent"]},
 	{"name":"models/gemini-2.5-flash-native-audio-preview-09-2025","supportedGenerationMethods":["bidiGenerateContent"]},
-	{"name":"models/gemini-2.5-flash-native-audio-preview-12-2025","supportedGenerationMethods":["bidiGenerateContent"]}`
+	{"name":"models/gemini-2.5-flash-native-audio-preview-12-2025","supportedGenerationMethods":["bidiGenerateContent"]},
+	{"name":"models/gemini-3.8-live","supportedGenerationMethods":["bidiGenerateContent"]},
+	{"name":"models/gemini-3.8-live-extended-thinking","supportedGenerationMethods":["bidiGenerateContent"]}`
 
-// The voice's model (spec_063_voice VOX-05, VOX-06): [voice] model when
-// set, else the newest native-audio model listed, else any live one, else
-// the backend's default; a model that isn't Gemini's is refused; no way to
-// sign in is "not set up".
+// The voice's model (spec_063_voice VOX-05, VOX-06, VOX-06a): [voice]
+// model when set and it answers; else the best of the listed live models
+// that answer for the key, by version, not by how names sort; a listed
+// model the key can't use isn't offered; none answering says why.
 func TestNewVoiceModel(t *testing.T) {
 	ctx := context.Background()
 	for name, tc := range map[string]struct {
-		models, model, want string
+		answer      []string
+		model, want string
 	}{
-		"newest native audio": {liveModels, "", "gemini-2.5-flash-native-audio-preview-12-2025"},
-		"any live":            {`{"name":"models/gemini-live-a","supportedGenerationMethods":["bidiGenerateContent"]},{"name":"models/gemini-live-b","supportedGenerationMethods":["bidiGenerateContent"]}`, "", "gemini-live-b"},
-		"none listed":         {`{"name":"models/gemini-2.5-flash","supportedGenerationMethods":["generateContent"]}`, "", DefaultVoiceModelGeminiAPI},
-		"set":                 {liveModels, "gemini/gemini-live-2.5-flash-preview", "gemini-live-2.5-flash-preview"},
+		"the best that answers":     {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-12-2025", "gemini-3.8-live"}, "", "gemini-3.8-live"},
+		"not one the key can't use": {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-09-2025"}, "", "gemini-2.5-flash-native-audio-preview-09-2025"},
+		"native audio at a version": {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-12-2025"}, "", "gemini-2.5-flash-native-audio-preview-12-2025"},
+		"set, and it answers":       {[]string{"gemini-live-2.5-flash-preview"}, "gemini/gemini-live-2.5-flash-preview", "gemini-live-2.5-flash-preview"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			noGoogle(t)
 			t.Setenv("GEMINI_API_KEY", "a-key")
-			listing(t, tc.models)
+			listing(t, liveModels)
+			answering(t, tc.answer...)
 			cfg := config.DefaultConfig()
 			cfg.Voice.Model = tc.model
 			m, err := NewVoiceModel(ctx, cfg)
@@ -89,15 +127,23 @@ func TestNewVoiceModel(t *testing.T) {
 	noGoogle(t)
 	t.Setenv("GEMINI_API_KEY", "a-key")
 	listing(t, liveModels)
+	asked := answering(t, "gemini-3.8-live", "gemini-2.5-flash-native-audio-preview-12-2025")
 	cfg := config.DefaultConfig()
 	cfg.Voice.Model = "openai/gpt-realtime"
 	_, err := NewVoiceModel(ctx, cfg)
 	assert.ErrorIs(t, err, ErrVoiceModel)
+	cfg.Voice.Model = "gemini/gemini-3.8-live-extended-thinking"
+	_, err = NewVoiceModel(ctx, cfg)
+	assert.ErrorContains(t, err, "doesn't answer", "a set model the key can't use is said at once")
 
 	models, def, err := VoiceModels(ctx, config.DefaultConfig())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-12-2025", "gemini-2.5-flash-native-audio-preview-09-2025"}, models, "live ones, newest first")
-	assert.Equal(t, "gemini-2.5-flash-native-audio-preview-12-2025", def)
+	assert.Equal(t, []string{"gemini-3.8-live", "gemini-2.5-flash-native-audio-preview-12-2025"}, models, "only those that answer, best first")
+	assert.Equal(t, "gemini-3.8-live", def)
+	n := len(*asked)
+	_, _, err = VoiceModels(ctx, config.DefaultConfig())
+	require.NoError(t, err)
+	assert.Len(t, *asked, n, "kept: not checked again")
 	backend, err := VoiceBackend(ctx, config.DefaultConfig())
 	require.NoError(t, err)
 	assert.Equal(t, "gemini", backend)
@@ -111,12 +157,80 @@ func TestNewVoiceModel(t *testing.T) {
 	assert.ErrorIs(t, err, ErrVoiceNotSetUp)
 }
 
+// None of the listed models answers, or none is listed: why, with the
+// provider's reason, rather than a model that fails mid-conversation.
+func TestNoLiveModelAnswers(t *testing.T) {
+	ctx := context.Background()
+	noGoogle(t)
+	t.Setenv("GEMINI_API_KEY", "a-key")
+	listing(t, liveModels)
+	answering(t)
+	_, _, err := VoiceModels(ctx, config.DefaultConfig())
+	require.ErrorIs(t, err, ErrNoLiveModel)
+	assert.Contains(t, err.Error(), "is not found for API version")
+	_, err = NewVoiceModel(ctx, config.DefaultConfig())
+	assert.ErrorIs(t, err, ErrNoLiveModel)
+
+	listing(t, `{"name":"models/gemini-2.5-flash","supportedGenerationMethods":["generateContent"]}`)
+	answering(t, "gemini-2.5-flash")
+	_, _, err = VoiceModels(ctx, config.DefaultConfig())
+	assert.ErrorContains(t, err, "lists no live models")
+}
+
+// The check sends the conversation's own settings, the voice among them.
+func TestLiveSetup(t *testing.T) {
+	s := liveSetup("Kore")
+	assert.Equal(t, "Kore", s.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig.VoiceName)
+	assert.Equal(t, []genai.Modality{genai.ModalityAudio}, s.ResponseModalities)
+	assert.NotNil(t, s.InputAudioTranscription)
+	assert.NotNil(t, s.OutputAudioTranscription)
+	assert.NotNil(t, s.SessionResumption)
+}
+
+// Live models in order of what they are: version, native audio, date,
+// released before preview.
+func TestLiveBetter(t *testing.T) {
+	got := []string{
+		"gemini-live-2.5-flash-preview",
+		"gemini-2.5-flash-native-audio-preview-09-2025",
+		"gemini-3.1-flash-live-preview",
+		"gemini-2.5-flash-native-audio-preview-12-2025",
+		"gemini-3.8-live",
+		"gemini-3.1-flash-live",
+	}
+	slices.SortFunc(got, liveBetter)
+	assert.Equal(t, []string{
+		"gemini-3.8-live",
+		"gemini-3.1-flash-live",
+		"gemini-3.1-flash-live-preview",
+		"gemini-2.5-flash-native-audio-preview-12-2025",
+		"gemini-2.5-flash-native-audio-preview-09-2025",
+		"gemini-live-2.5-flash-preview",
+	}, got)
+}
+
+// On Vertex AI, which lists no actions, a model whose name says live or
+// native audio is a candidate.
+func TestVertexLiveCandidates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"models":[{"name":"publishers/google/models/gemini-2.5-pro"},{"name":"publishers/google/models/gemini-live-2.5-flash"},{"name":"publishers/google/models/gemini-2.5-flash-native-audio"}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	cc := &genai.ClientConfig{Backend: genai.BackendVertexAI, Project: "p", Location: "us-central1", HTTPOptions: genai.HTTPOptions{BaseURL: srv.URL}, Credentials: nil}
+	cc.HTTPClient = srv.Client()
+	got, err := liveCandidates(context.Background(), cc)
+	if err != nil {
+		t.Skipf("the SDK wants credentials for Vertex AI here: %v", err)
+	}
+	assert.Equal(t, []string{"gemini-2.5-flash-native-audio", "gemini-live-2.5-flash"}, got)
+}
+
 // The Live API wants its version named, per backend; one named stays.
 func TestLiveClientConfig(t *testing.T) {
 	assert.Equal(t, "v1beta", liveClientConfig(&genai.ClientConfig{Backend: genai.BackendGeminiAPI}).HTTPOptions.APIVersion)
 	assert.Equal(t, "v1beta1", liveClientConfig(&genai.ClientConfig{Backend: genai.BackendVertexAI}).HTTPOptions.APIVersion)
 	assert.Equal(t, "v1alpha", liveClientConfig(&genai.ClientConfig{HTTPOptions: genai.HTTPOptions{APIVersion: "v1alpha"}}).HTTPOptions.APIVersion)
-	assert.Equal(t, DefaultVoiceModelVertex, defaultVoiceModel(context.Background(), &genai.ClientConfig{Backend: genai.BackendVertexAI}))
 }
 
 // The live connection's settings (VOX-07): audio in the voice, both sides

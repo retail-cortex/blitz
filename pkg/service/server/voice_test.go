@@ -211,6 +211,7 @@ func TestVoiceDescribeAndReasons(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
 	t.Setenv("GEMINI_API_KEY", "a-key")
+	t.Cleanup(runtime.UseLiveProbe(func(string) error { return nil })) // every listed live model answers
 	_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: "voice.enabled", Value: "true"}))
 	require.NoError(t, err)
 

@@ -199,7 +199,7 @@ max_chars = 9000   # about ten minutes
 [voice]
 # Talking to Blitz in the desktop app, with Google's Gemini Live (Settings › Personality › Voice sets these too).
 enabled = false   # off: no microphone, nothing sent to Google
-# model = "gemini/gemini-2.5-flash-native-audio-preview-09-2025"   # none: the newest live model listed
+# model = "gemini/<a live model>"   # none: the best live model that answers for your key or project
 # voice = "Puck"        # none: the personality's, else Kore
 # listen = "tap"        # or "hold": heard only while held
 # summaries = "voice"   # finished work said aloud: voice, always, off
