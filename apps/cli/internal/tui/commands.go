@@ -170,6 +170,11 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 		fmt.Println()
 
+	case "docs":
+		ShowDocs(os.Stdout, "/docs", strings.Join(args, " "), func(md string) string {
+			return RenderMarkdown(md, app.Printer.Theme, app.Printer.Width, app.Printer.Markdown)
+		})
+
 	case "exit", "quit":
 		return true, ErrExit
 

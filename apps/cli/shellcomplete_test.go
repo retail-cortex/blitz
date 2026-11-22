@@ -16,11 +16,14 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -147,4 +150,41 @@ func TestCompletionInstallCommand(t *testing.T) {
 func TestShellQuote(t *testing.T) {
 	assert.Equal(t, `'/home/a b/x'`, shellQuote("/home/a b/x"))
 	assert.Equal(t, `'it'\''s'`, shellQuote("it's"))
+}
+
+// blitz help names a command's help; blitz docs reads the docs offline.
+func TestHelpAndDocsCommands(t *testing.T) {
+	run := func(args ...string) string {
+		root := newRootCommand()
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetArgs(args)
+		require.NoError(t, root.Execute())
+		return out.String()
+	}
+	assert.Contains(t, run("help", "mcp", "add"), "blitz mcp add <name>")
+	assert.Contains(t, run("help"), "Setup and maintenance:")
+	assert.Contains(t, run("docs", "mcp"), "MCP servers")
+	assert.Contains(t, run("docs", "add", "an", "mcp", "server"), "blitz docs guide/mcp")
+	assert.Contains(t, shellComplete(t, "docs", "guide/m"), "guide/mcp")
+	assert.Contains(t, shellComplete(t, "help", "mc"), "mcp")
+}
+
+func TestErrorText(t *testing.T) {
+	notFound := connect.NewError(connect.CodeNotFound, errors.New("no MCP server named github"))
+	cases := map[string]struct {
+		err   error
+		debug bool
+		want  string
+	}{
+		"the service's message":    {notFound, false, "no MCP server named github"},
+		"what wraps it stays":      {fmt.Errorf("mcp remove: %w", notFound), false, "mcp remove: no MCP server named github"},
+		"gRPC's words go":          {errors.New("rpc error: code = Unavailable desc = the service isn't running"), false, "the service isn't running"},
+		"a plain error is itself":  {errors.New("no such file"), false, "no such file"},
+		"BLITZ_DEBUG keeps it all": {notFound, true, "not_found: no MCP server named github"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) { assert.Equal(t, c.want, errorText(c.err, c.debug)) })
+	}
 }

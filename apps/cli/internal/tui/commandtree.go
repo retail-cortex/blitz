@@ -151,8 +151,9 @@ var Commands = []*Command{
 
 	// Settings
 	{Name: "config", Aliases: []string{"set", "show"}, Group: "help.group.settings", Usage: "[key=value [--save]]", Help: "help.set", Args: []Source{SrcConfig}, Flags: []string{"--save"}},
+	{Name: "docs", Group: "help.group.settings", Usage: "[page|words]", Help: "help.docs_cli"},
 	{Name: "exit", Aliases: []string{"quit"}, Group: "help.group.settings", Help: "help.exit"},
-	{Name: "help", Group: "help.group.settings", Usage: "[command|keys]", Help: "help.help", Args: []Source{SrcCommands}, Choices: []string{"keys"}},
+	{Name: "help", Group: "help.group.settings", Usage: "[command|keys|question]", Help: "help.help", Args: []Source{SrcCommands}, Choices: []string{"keys"}},
 	{Name: "license", Group: "help.group.settings", Usage: "[full|third-party]", Help: "help.license", Subs: []*Command{sub("full"), sub("third-party")}},
 	{Name: "locale", Aliases: []string{"lang", "language"}, Group: "help.group.settings", Usage: "[code]", Help: "help.locale", Args: []Source{SrcLocales}},
 	{Name: "theme", Group: "help.group.settings", Usage: "[name [--save]]", Help: "help.theme", Args: []Source{SrcThemes}, Flags: []string{"--save"}},

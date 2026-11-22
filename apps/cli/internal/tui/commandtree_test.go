@@ -164,5 +164,5 @@ func TestHelpForOneCommand(t *testing.T) {
 	assert.Contains(t, out, "auto, default, accept-edits, plan, dont-ask, bypass, unsafe")
 	assert.Contains(t, help("/help keys"), "Shift+Tab")
 	assert.Contains(t, help("/help modle"), "Did you mean /model?")
-	assert.True(t, strings.Contains(help("/help"), "/help [command|keys]"))
+	assert.True(t, strings.Contains(help("/help"), "/help [command|keys|question]"))
 }

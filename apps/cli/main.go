@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -39,6 +40,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
+	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -52,10 +54,13 @@ var version = "dev"
 
 // rootOptions are the flags of the main (prompt/REPL) command.
 type rootOptions struct {
-	global       globalFlags
-	prompt       string
-	interactive  bool
-	quiet        bool // --quiet: no banner (CLP-02)
+	global      globalFlags
+	prompt      string
+	interactive bool
+	quiet       bool // --quiet: no banner (CLP-02)
+	// ask is blitz help's question: the run answers it from the docs, as
+	// an aside (spec_067_cli_parity CLP-22).
+	ask          string
 	version      bool
 	resume       string
 	cont         bool
@@ -103,7 +108,7 @@ func main() {
 	stopPrivate() // a run's own service stops with it
 	waitForPing()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, i18n.T("repl.error", "error", err))
+		fmt.Fprintln(os.Stderr, i18n.T("repl.error", "error", errorText(err, os.Getenv("BLITZ_DEBUG") != "")))
 	}
 	os.Exit(exitCodeFor(err))
 }
@@ -157,7 +162,8 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand(), newDocsCommand(&o.global))
+	root.SetHelpCommand(newHelpCommand(root, o))
 	addShellCompletion(root, &o.global)
 	groupHelp(root)
 	return root
@@ -444,6 +450,10 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	if merr := w.ModelErr(); merr != nil {
 		msg := i18n.T("startup.model_failed", "error", modelErrorText(merr, cfg))
+		if o.ask != "" { // blitz help "<question>" without a model: the docs answer (CLP-23)
+			tui.AnswerOffline(os.Stdout, o.ask, i18n.T("ask.no_model"))
+			return nil
+		}
 		if oneShot {
 			// Every turn would fail; say why at once, with an exit code.
 			return withCode(exitFailure, fmt.Errorf("%s (run 'blitz doctor')", msg))
@@ -524,7 +534,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			warnFn(i18n.T("startup.cost_unpriced", "model", model))
 		}
 		run := oneShotOptions{
-			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan,
+			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan, aside: o.ask != "", send: askPrompt(o.ask),
 			maxCostUSD: o.maxCostUSD, timeout: o.timeout, command: o.command,
 			input: input, stdinTTY: stdinTTY && !stdinUsed && !streamIn, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
@@ -868,4 +878,76 @@ func themeFor(theme string) string {
 		return "notty"
 	}
 	return theme
+}
+
+// askPrompt is what blitz help sends the model for a question ("" for none).
+func askPrompt(question string) string {
+	if question == "" {
+		return ""
+	}
+	return tui.HelpPrompt(question)
+}
+
+// newHelpCommand is blitz help: a command's help, or, for words that name
+// no command, Blitz's answer to them from its docs (spec_067_cli_parity
+// CLP-22), or the docs' and commands' matches without a model (CLP-23).
+func newHelpCommand(root *cobra.Command, o *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "help [command | question]",
+		Short: "Help about any command, or ask Blitz how to do something",
+		Long: "With a command, its help. With a question, Blitz answers it from its docs using your model, in a session kept nowhere; " +
+			"without a model set up, it shows the docs' sections and the commands that match.",
+		Example: "  blitz help mcp add\n  blitz help \"how do I add an MCP server that needs a token?\"",
+		ValidArgsFunction: func(c *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			cmd, _, err := root.Find(args)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			var names []string
+			for _, sub := range cmd.Commands() {
+				if sub.IsAvailableCommand() && strings.HasPrefix(sub.Name(), toComplete) {
+					names = append(names, sub.Name())
+				}
+			}
+			return names, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return root.Help()
+			}
+			if target, rest, err := root.Find(args); err == nil && target != root && len(rest) == 0 {
+				return target.Help()
+			}
+			o.ask = strings.Join(args, " ")
+			o.noPersist = true // the question's session is kept nowhere
+			err := runRoot(c, o, []string{"? " + o.ask})
+			if err != nil && exitCodeFor(err) != exitUsage { // the model failed: the docs answer (CLP-23)
+				tui.AnswerOffline(c.OutOrStdout(), o.ask, i18n.T("ask.model_failed", "error", tui.FirstLine(err.Error())))
+				return nil
+			}
+			return err
+		},
+	}
+}
+
+// rpcPrefix is how a gRPC status reads in an error's text.
+var rpcPrefix = regexp.MustCompile(`rpc error: code = \w+ desc = `)
+
+// errorText is what the person reads for err (spec_067_cli_parity
+// CLP-24): the service's own message, without the RPC's code ("not_found:
+// …", "rpc error: code = …"), which BLITZ_DEBUG=1 keeps, with the rest of
+// the chain.
+func errorText(err error, debug bool) string {
+	if debug {
+		return err.Error()
+	}
+	var ce *connect.Error
+	if errors.As(err, &ce) && ce.Message() != "" {
+		text := err.Error()
+		if i := strings.Index(text, ce.Error()); i > 0 { // what wraps it, then its message
+			return text[:i] + ce.Message()
+		}
+		return ce.Message()
+	}
+	return rpcPrefix.ReplaceAllString(err.Error(), "")
 }

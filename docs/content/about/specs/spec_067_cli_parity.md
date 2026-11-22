@@ -7,7 +7,7 @@ weight: 67
 
 | | |
 |---|---|
-| Status | **Phases 1–2 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built), phases 3–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
+| Status | **Phases 1–3 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built) and CLP-20–24 (help from the tree, the docs in the binary, ask Blitz from them, the offline answer, errors; `help.model` and `--debug` aren't built), phases 4–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
 | Source | `apps/cli/` (cobra commands, `helpgroups.go`, `configcmd.go`, `mcp.go`, `do.go`); `apps/cli/internal/tui/` (`repl.go`, `render.go`, `terminal.go`, `commands.go`, `commands_extra.go`, `status.go`, `theme.go`); `pkg/api/blitzcommands.go` (the catalog), `pkg/engine/blitzcommands.go` (its handlers), `pkg/engine/tools/blitz.go`; `pkg/config/mcpedit.go`, `providers.go` (`SetValue`); `pkg/i18n/locales/` |
 | Tests | Listed with each phase (§4). Every phase ends with the CLI's tests, `tools/check_format.sh`, and the journey tests of §4.8 |
 | Depends on | [spec_019_tui](spec_019_tui.md), [spec_020_cli](spec_020_cli.md), [spec_060_blitz_tools](spec_060_blitz_tools.md) (the catalog, approvals, `blitz do`), [spec_009_mcp](spec_009_mcp.md), [spec_004_i18n](spec_004_i18n.md), [spec_008_web](spec_008_web.md) |
@@ -99,23 +99,23 @@ This spec fixes that in phases small enough to land one at a time, each with its
 
 - **CLP-20** **`/help` from the tree.** `/help` lists the groups with one line per command. `/help <command>` shows its usage, sub-commands, flags, two or three examples and a link to its page on the docs site. `/help keys` shows the key bindings, and `/help topics` the guide pages. `blitz help <command>` and `--help` do the same for the cobra commands: Examples on every command, and a "Learn more:" link.
 - **CLP-21** **The docs in the binary.**
-  - The user docs (getting started, guide, tutorials and releases; no images) are embedded in the Go binary as Markdown. This uses the same `//docs:user_docs` target the desktop page bundles, so one source feeds both.
-  - A small full-text index is built at compile time (title, headings, body), adding at most 2 MB to the binary. The `docs.test` check fails if it grows past that.
-  - `blitz docs [topic|search terms]` and `/docs …` show a page rendered with glamour, or the best matches with their headings.
-- **CLP-22** **Ask Blitz.** `/help <question>` (anything that isn't a command), `? <question>` in the REPL, and `blitz help "<question>"` ask the built-in **blitz-help** agent.
-  - Its tools are read-only: `docs_search`, `docs_read`, `blitz help`, `settings show`, `doctor`.
-  - It answers from the docs and the person's own settings, with the command to type, and links the pages it used.
-  - It doesn't take part in the chat's history: an aside, like `/btw`.
-  - It uses the session's model, or `help.model` when set (a cheap one, say `gemini-flash`).
-- **CLP-23** **Offline fallback.** When no provider is set up (`ModelErr()` or `ConfiguredProviders` is empty), or the model fails, the question is answered without a model:
-  - the best matching docs sections (CLP-21) and commands (CLP-10), each with its first paragraph
-  - "Set up a model to ask in your own words: `/setup models`"
+  - The user docs (getting started, guide, tutorials, products and releases; no pictures) are embedded in the Go binaries as Markdown, by `//docs` (`docs/embed.go`), from the same files the desktop page bundles. They add about 0.6 MB.
+  - `pkg/userdocs` reads them once, on first use: each page split into sections at its headings, searched by BM25, with words in a page's title or the heading counting more and release notes counting less.
+  - `blitz docs [page|words]` and `/docs …` list the pages, show one (rendered with glamour, its links pointing at the site), or the best matches with their headings and addresses.
+- **CLP-22** **Ask Blitz.** `? <question>` in the REPL, `/help <question>` (words that name no command and aren't a slip of one), and `blitz help "<question>"` ask Blitz.
+  - The question goes to the session's model as an aside: recorded nowhere, its tools read-only. Its prompt carries the docs' sections that best match the question (at most 14,000 characters), and asks for the command to type and a link to the page used, with no invented commands.
+  - The docs travel in the prompt rather than through a docs tool. Each built-in agent lists its tools and only `blitz` has the `blitz` tool, so this way any agent and any model, a small local one too, can answer.
+  - `blitz help "<question>"` runs in a session kept nowhere.
+  - `help.model`, a model of its own for help, is for later; for now it's the session's model (the owner's choice).
+- **CLP-23** **Offline fallback.** When no model can be built (`ModelErr`) or the call fails, the question is answered without a model:
+  - the best matching docs sections (CLP-21) and commands (CLP-10, a word in the name counting more than one in the description), each with its first lines
+  - how to set up a model to ask in your own words
 
   A help question never fails just because there is no model.
 - **CLP-24** **Errors that help.**
-  - An error shows as one sentence of what went wrong and what to do (the i18n messages of spec_021), not `Error: rpc error: code = …`. With `--debug` the full chain is shown.
-  - An unknown command suggests the nearest ("Did you mean `/permissions`?"), as does an unknown sub-command, which today does nothing.
-  - A usage error prints that command's usage, not the whole help.
+  - An error shows the service's own message, without the RPC's code (`not_found: …`, `rpc error: code = … desc = …`). `BLITZ_DEBUG=1` prints it whole; a `--debug` flag is for later.
+  - An unknown command suggests the nearest ("Did you mean /permissions?"; a swap of two letters counts as one edit). So does an unknown sub-command, which used to do nothing.
+  - Turning every raw `%v` in the REPL into one sentence of what to do is phase 6's.
 
 ### 3.4 Configuring through the agent (phase 4)
 

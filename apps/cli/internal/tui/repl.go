@@ -425,6 +425,15 @@ func RunREPL(ctx context.Context, app *App) error {
 			runShellPassthrough(ctx, app, cmd, interrupts)
 			continue
 		}
+		// ? <question> and /help <question> ask Blitz about Blitz (CLP-22).
+		if q, ok := strings.CutPrefix(line, "?"); ok && (q == "" || q[0] == ' ') {
+			askBlitz(ctx, app, q, interrupts)
+			continue
+		}
+		if q, ok := strings.CutPrefix(line, "/help "); ok && isHelpQuestion(app, q) {
+			askBlitz(ctx, app, q, interrupts)
+			continue
+		}
 		if q, ok := strings.CutPrefix(line, "/btw"); ok && (q == "" || q[0] == ' ') {
 			active, ok := app.Workspace.ActiveSession()
 			switch {
@@ -533,6 +542,9 @@ type turnOptions struct {
 	command bool
 	// grants are URLs the agent may fetch without asking (/search web).
 	grants []string
+	// onFail, when set, is told the turn failed (not stopped) instead of
+	// the error being printed: ? falls back to the docs (CLP-23).
+	onFail func(error)
 }
 
 // runTurn sends one prompt to the agent and renders the result.
@@ -610,6 +622,8 @@ func runTurn(ctx context.Context, app *App, sessionID, line string, interrupts <
 	switch {
 	case streamErr != nil && turnInterrupted:
 		fmt.Printf("\n%s%s%s\n", Yellow, i18n.T("repl.interrupted"), Reset)
+	case streamErr != nil && o.onFail != nil:
+		o.onFail(streamErr)
 	case streamErr != nil:
 		fmt.Printf("\n%s✗ %s%s\n", Red, i18n.T("repl.error", "error", safe(streamErr.Error())), Reset)
 	default:
