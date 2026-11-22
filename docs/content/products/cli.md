@@ -96,6 +96,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz security`, `blitz security fix-apparmor` | Whether the OS sandbox for the agent's commands works here; on Linux, where AppArmor stops bubblewrap, install an AppArmor profile that lets bwrap alone through (asks for your password with sudo) |
 | `blitz security scan-secrets --staged`, `blitz security scan-secrets <file>…` | Look for API keys and other secrets in what the commit being made adds, or in the files named; exits 1 naming each file and line (the value masked). The pre-commit hook runs it |
 | `blitz security install-hook [dir]` | Add the pre-commit hook that stops commits adding secrets (`.githooks/pre-commit`, `core.hooksPath`) to the repository, unless it uses other hooks |
+| `blitz configure <what>` | Hand a setup to Blitz's agent: "the MCP server at https://…", "use the dracula theme"; it reads the page, shows each change before making it, and asks secrets of you, hidden |
 | `blitz docs [page\|words]`, `blitz help "<question>"` | Read the docs of your release, offline: a page (`blitz docs mcp`) or the sections that match; ask how to do something, answered from the docs by your model (or, without one, the matching sections and commands) |
 | `blitz doctor [--online]` | Checks the settings, credentials, sandbox, MCP servers, hooks and skills; `--online` also calls each model and a test search |
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |

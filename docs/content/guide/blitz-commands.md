@@ -10,7 +10,7 @@ Ask the agent to change Blitz itself, in words: "create a SQLite database of my 
 | Group | Commands |
 |---|---|
 | `connector` | `list`, `save` (a database connection, its file shown before it's written), `enable`, `disable` |
-| `settings` | `show`, `set` (the model, image or speech model, effort, or the permission mode, only ever stricter) |
+| `settings` | `show`, `set` (the model, image or speech model, effort, the permission mode, only ever stricter, and this workspace's look, search and models), `reference` (what every setting does, and which the agent may set) |
 | `doctor` | what works here and what doesn't: the model, the providers, Ollama, the mode, the sandbox, MCP servers, connections, language servers |
 | `org` | `policy` (what your organization allows and locks), `status` |
 | `open` | `file` (in the editor), `studio`, `settings`, `view` (changes, processes, Pictures); a web page is the agent's `open_page` |
@@ -18,7 +18,9 @@ Ask the agent to change Blitz itself, in words: "create a SQLite database of my 
 | `eval`, `spec`, `job` | run an agent's evals (asked first: they cost), check, verify and plan a spec, list and create jobs |
 | `memory`, `chat`, `process`, `approval`, `secret` | what Blitz remembers, new and past chats, background processes, saved approvals, secrets' names |
 | `workflow`, `agent`, `skill`, `rule`, `guardrail`, `command` | list them, and add or change this workspace's |
-| `mcp`, `hook`, `plugin` | list them; add an MCP server, or turn one on or off |
+| `mcp`, `hook`, `plugin` | list them; add an MCP server with its environment or headers (a secret you type yourself), change, test or remove one, or turn one on or off |
+
+`/configure <what>` in a session, or `blitz configure <what>` in a shell, hands a setup to Blitz's own agent: "the MCP server at <page>", "use the dracula theme and turn workspace search on". It reads the page you name, makes the change with these commands, and checks it worked.
 
 `blitz do help` lists them all, and `blitz do help connector save` gives one command's arguments.
 

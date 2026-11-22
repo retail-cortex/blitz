@@ -722,6 +722,9 @@ func typedValue(kind, key, value string) (string, any, error) {
 	return "", nil, fmt.Errorf("%s: unknown kind %q", key, kind)
 }
 
+// Settable reports whether SetValue sets key.
+func Settable(key string) bool { return settableValues[key] || typedValues[key] != "" }
+
 // SetValue sets one of the form's settings in a scope (value "" removes it,
 // so a workspace follows the global setting again). It returns the file
 // written.

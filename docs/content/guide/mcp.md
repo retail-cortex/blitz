@@ -11,6 +11,8 @@ For PostgreSQL, AlloyDB, SQLite and BigQuery there's no server to add: Blitz has
 
 ## Add a server
 
+The quickest way: ask. In a session, `/configure the MCP server at https://github.com/github/github-mcp-server` (or `blitz configure …` in a shell) has Blitz read the page, find the server's command or address and what it needs, and add it to this workspace. You see every setting before it's saved, with the page it came from; a token or key it needs you type yourself, hidden, and it's kept as a [Blitz secret](../guide/configuration.md) the settings name as `{secrets:NAME}`. Then it checks the server answers and lists its tools. Asking in plain words works too: "add the Linear MCP server, its docs are at linear.app/docs/mcp".
+
 Blitz speaks the two current transports: **stdio** (a command it starts) and **streamable HTTP** (a URL). The older SSE transport isn't supported.
 
 ```sh

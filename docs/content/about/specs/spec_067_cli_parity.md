@@ -7,7 +7,7 @@ weight: 67
 
 | | |
 |---|---|
-| Status | **Phases 1–3 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built) and CLP-20–24 (help from the tree, the docs in the binary, ask Blitz from them, the offline answer, errors; `help.model` and `--debug` aren't built), phases 4–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
+| Status | **Phases 1–4 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built) and CLP-20–24 (help from the tree, the docs in the binary, ask Blitz from them, the offline answer, errors; `help.model` and `--debug` aren't built) and CLP-30–32, 35 (`/configure` and `blitz configure`, MCP servers from a page with env, headers and secrets, the settings the agent may set; providers, CLP-33, and the deletes, CLP-34, go to phase 5), phases 5–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
 | Source | `apps/cli/` (cobra commands, `helpgroups.go`, `configcmd.go`, `mcp.go`, `do.go`); `apps/cli/internal/tui/` (`repl.go`, `render.go`, `terminal.go`, `commands.go`, `commands_extra.go`, `status.go`, `theme.go`); `pkg/api/blitzcommands.go` (the catalog), `pkg/engine/blitzcommands.go` (its handlers), `pkg/engine/tools/blitz.go`; `pkg/config/mcpedit.go`, `providers.go` (`SetValue`); `pkg/i18n/locales/` |
 | Tests | Listed with each phase (§4). Every phase ends with the CLI's tests, `tools/check_format.sh`, and the journey tests of §4.8 |
 | Depends on | [spec_019_tui](spec_019_tui.md), [spec_020_cli](spec_020_cli.md), [spec_060_blitz_tools](spec_060_blitz_tools.md) (the catalog, approvals, `blitz do`), [spec_009_mcp](spec_009_mcp.md), [spec_004_i18n](spec_004_i18n.md), [spec_008_web](spec_008_web.md) |
@@ -119,22 +119,21 @@ This spec fixes that in phases small enough to land one at a time, each with its
 
 ### 3.4 Configuring through the agent (phase 4)
 
-- **CLP-30** **Ask to configure.** In the REPL, a request like "look at https://example.com/docs/mcp and set up its MCP server here" just works:
-  1. The `blitz` agent (or the session's agent, which has the `blitz` tool) reads the page with `web_fetch`, which asks for the host as today.
-  2. It finds the server's command or URL and what it needs: env vars, headers, OAuth.
-  3. It calls `blitz mcp add` with everything. The person sees **one approval** with the server's TOML as a diff, its scope (this workspace by default, global when they say so) and the secrets it will ask for.
-  4. On yes, it asks each secret as hidden input, saves, reloads MCP, lists the server's tools to show it works, and offers `blitz mcp login` when the server uses OAuth.
-
-  `/setup <what>` (e.g. `/setup mcp https://…`, `/setup models`, `/setup connector postgres`) is the same request, sent to the `blitz` agent.
+- **CLP-30** **Ask to configure.** `/configure <what>` (a bundled command run by the `blitz` agent, which has `web_fetch` and the `blitz` tool) and `blitz configure <what>` set Blitz up as asked. `/setup` was already the project's setup, hence the name. For "the MCP server described at https://…":
+  1. It reads the page with `web_fetch`, which asks for the host as usual.
+  2. It finds the server's command or URL and what it needs: env vars or headers, and which are secrets.
+  3. It calls `mcp add` with all of it and the page as `source`. The person sees one approval: the server's `[[mcp.servers]]` entry as a diff, where it came from, and the secrets it'll ask for.
+  4. On yes, it asks each secret not yet kept, hidden, saves them as the workspace's Blitz secrets and the server, reloads MCP, lists the server's tools (`mcp test`), and says when it signs in with OAuth (`blitz mcp login <name>`).
 - **CLP-31** **`mcp` through the tool, completed.**
-  - `mcp add` takes `env`, `headers`, `prefix`, `agents`, `tools`, `timeout_seconds` and `scope` (workspace or global).
-  - Values that look like secrets (a key, a token, `Authorization`), and any value the agent marks `secret`, are asked as hidden input, then saved in the secret store and written as `{secrets:<name>}`. The agent never sees them.
-  - New: `mcp remove`, `mcp edit` (replace, with a real old/new diff), `mcp login`, and `mcp test`, which starts the server and lists its tools.
+  - `mcp add` and `mcp edit` take `env`, `headers` (an address's only), `prefix`, `agents`, `tools`, `timeout_seconds` and `source`.
+  - A value with `${NAME}` (or `{secrets:NAME}`) names a secret. A literal value of a secret-looking name (a token, key, secret, password, `Authorization`) is dropped and asked, named from the server and the variable (`LINEAR_API_TOKEN`, `Bearer ` kept). Either way the settings hold `{secrets:NAME}`, and the agent never sees the value.
+  - `mcp edit` diffs the old entry against the new. `mcp remove` shows what goes. `mcp test` connects and lists the tools (`MCPManager.ToolNames`).
+  - Workspace scope only, as the tool's changes are (DRV-06): the person moves one to every workspace (`blitz mcp make-global`, Settings).
 - **CLP-32** **Settings through the tool.**
-  - `settings set` takes every key `config.SetValue` allows (spec_020's allowlist and typed checks) at either scope.
+  - `settings set` takes, besides its five, the workspace's settings an agent may change: `ui.*`, `search.*`, the models (`llm.*.model`, `llm.*.models`, `blitz.default_model`, `images.model`, `audio.model`, `health.model`), `audio.voice`, `llm.provider`, `llm.providers` and `blitz.default_agent`.
+  - It never takes what loosens limits (the mode beyond tightening, agency, jobs' policy), what redirects requests (base URLs, auth, projects and locations), what writes elsewhere (folders), or the person's own (`profile.*`). Those are refused with the `blitz config set` command the person can run.
   - The mode still only tightens, and unsafe is never reachable (spec_060, 63d9fb62).
-  - `settings get <key>` and `settings reference [key]` show what a key does and its allowed values.
-  - The approval shows the settings file's diff.
+  - `settings reference [key|prefix]` lists the sections, or each key's type, default, what it does, and whether the agent may set it.
 - **CLP-33** **Providers through the tool.**
   - `provider list`, `provider add <name>` (the provider, its base URL, project or location; the key asked as hidden input and stored like `config set-key`), `provider check <name>` (`CheckApiKey`), and `provider remove`.
   - `provider add` is always asked, and it's refused while an organization provides the models (org policy).

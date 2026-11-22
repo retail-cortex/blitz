@@ -162,7 +162,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand(), newDocsCommand(&o.global))
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newConfigureCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand(), newDocsCommand(&o.global))
 	root.SetHelpCommand(newHelpCommand(root, o))
 	addShellCompletion(root, &o.global)
 	groupHelp(root)
@@ -219,6 +219,27 @@ func newInitCommand(root *rootOptions) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.global = root.global // persistent flags (--dir, --config)
 			o.prompt, o.command = "/setup", true
+			return runRoot(cmd, o, nil)
+		},
+	}
+}
+
+// newConfigureCommand is blitz configure: Blitz set up by asking its
+// agent (/configure, spec_067_cli_parity CLP-30), every change asked in
+// this terminal.
+func newConfigureCommand(root *rootOptions) *cobra.Command {
+	o := &rootOptions{requirePrompt: true, outputFormat: formatText}
+	return &cobra.Command{
+		Use:   "configure <what to set up>",
+		Short: "Set Blitz up by asking: an MCP server from its docs page, a model or setting, a connection (/configure)",
+		Long: "Blitz's agent reads the page you name, finds what the setup needs and makes the change with Blitz's own commands. " +
+			"Each change is shown and asked first; secrets are asked of you, hidden, and kept as Blitz secrets.",
+		Example: "  blitz configure the MCP server described at https://github.com/github/github-mcp-server\n" +
+			"  blitz configure use the dracula theme and turn workspace search on",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.global = root.global // persistent flags (--dir, --config)
+			o.prompt, o.command = "/configure "+strings.Join(args, " "), true
 			return runRoot(cmd, o, nil)
 		},
 	}

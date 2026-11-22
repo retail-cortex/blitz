@@ -96,6 +96,21 @@ var (
 	argPath = CommandArg{Name: "path", Type: "string", Description: "The workspace file, relative to the workspace", Required: true}
 )
 
+// mcpServerArgs are an MCP server's settings, as mcp add and mcp edit take
+// them (spec_067_cli_parity CLP-31).
+var mcpServerArgs = []CommandArg{argName,
+	{Name: "command", Type: "string", Description: "The program that serves it (stdio)"},
+	{Name: "args", Type: "list", Description: "Its arguments"},
+	{Name: "url", Type: "string", Description: "Or its address (HTTP)"},
+	{Name: "env", Type: "object", Description: "Environment variables for the command, by name; a secret as \"${NAME}\" (\"${GITHUB_TOKEN}\"), asked of the person"},
+	{Name: "headers", Type: "object", Description: "HTTP headers for the address, by name; a secret as \"${NAME}\" (\"Bearer ${API_TOKEN}\"), asked of the person"},
+	{Name: "prefix", Type: "string", Description: "What its tools' names start with (default: the server's name)"},
+	{Name: "agents", Type: "list", Description: "Only these agents get its tools (default: every agent)"},
+	{Name: "tools", Type: "list", Description: "Only these of its tools (default: all)"},
+	{Name: "timeout_seconds", Type: "number", Description: "How long a call may take"},
+	{Name: "source", Type: "string", Description: "Where these settings came from (the page's address), shown to the person"},
+}
+
 // BlitzCommands is the catalog, in the order help lists it.
 var BlitzCommands = []BlitzCommand{
 	{Name: "help", Summary: "The commands, or one command's arguments", Effect: EffectReads, Phase: 1,
@@ -114,11 +129,13 @@ var BlitzCommands = []BlitzCommand{
 	{Name: "connector disable", Summary: "Turn a connection off in this workspace", Effect: EffectChanges, Phase: 1, Args: []CommandArg{argName}},
 
 	{Name: "settings show", Summary: "The model (the conversation's and the workspace's), image and speech models, effort, permission mode and agent", Effect: EffectReads, Phase: 1},
-	{Name: "settings set", Summary: "Change one setting: the model, image or speech model, effort, or the permission mode (only to a stricter one)", Effect: EffectChanges, Phase: 1,
+	{Name: "settings set", Summary: "Change one setting of this workspace: the model, image or speech model, effort, the permission mode (only to a stricter one), or a setting settings reference lists as yours to set (models, the default agent and provider, ui.*, search.*)", Effect: EffectChanges, Phase: 1,
 		Args: []CommandArg{
-			{Name: "key", Type: "string", Description: "What to change", Required: true, Values: []string{"model", "image_model", "speech_model", "effort", "mode"}},
+			{Name: "key", Type: "string", Description: "What to change: model, image_model, speech_model, effort, mode, or a settings key (ui.theme, search.enabled, llm.gemini.model, …)", Required: true},
 			{Name: "value", Type: "string", Description: "The new value (a model as provider/name)", Required: true},
 		}},
+	{Name: "settings reference", Summary: "What settings there are: each key's type, default and what it does, and whether settings set can change it", Effect: EffectReads, Phase: 4,
+		Args: []CommandArg{{Name: "key", Type: "string", Description: "A key, or the start of some (ui., mcp.servers); empty: the sections"}}},
 	{Name: "doctor", Summary: "Check Blitz here: the model and its provider, Ollama, the mode, the sandbox, MCP servers, connections, language servers", Effect: EffectReads, Phase: 1},
 	{Name: "org policy", Summary: "What your organization's policy allows and locks", Effect: EffectReads, Phase: 1},
 	{Name: "org status", Summary: "Your organization: signed in or not, its catalog's version, problems", Effect: EffectReads, Phase: 1},
@@ -189,11 +206,12 @@ var BlitzCommands = []BlitzCommand{
 			{Name: "instructions", Type: "string", Description: "Its body", Required: true}}},
 
 	{Name: "mcp list", Summary: "The MCP servers, on or off, and their state", Effect: EffectReads, Phase: 4},
-	{Name: "mcp add", Summary: "Add an MCP server to this workspace: it runs code, so it's asked with the exact command or address", Effect: EffectChanges, BringsCode: true, Phase: 4,
-		Args: []CommandArg{argName,
-			{Name: "command", Type: "string", Description: "The program that serves it (stdio)"},
-			{Name: "args", Type: "list", Description: "Its arguments"},
-			{Name: "url", Type: "string", Description: "Or its address (HTTP)"}}},
+	{Name: "mcp add", Summary: "Add an MCP server to this workspace (from its docs page, say): it runs code, so it's asked with its settings in full; a secret goes as ${NAME} and its value is asked of the person, never given here", Effect: EffectChanges, BringsCode: true, Phase: 4,
+		Args: mcpServerArgs},
+	{Name: "mcp edit", Summary: "Change an MCP server of this workspace, asked with what changes; secrets as for mcp add", Effect: EffectChanges, BringsCode: true, Phase: 4,
+		Args: mcpServerArgs},
+	{Name: "mcp remove", Summary: "Remove an MCP server of this workspace, asked first", Effect: EffectChanges, Phase: 4, Args: []CommandArg{argName}},
+	{Name: "mcp test", Summary: "Connect to an MCP server and list its tools: the check after adding one", Effect: EffectReads, Phase: 4, Args: []CommandArg{argName}},
 	{Name: "mcp enable", Summary: "Turn an MCP server on here: it runs code, so it's asked", Effect: EffectChanges, BringsCode: true, Phase: 4, Args: []CommandArg{argName}},
 	{Name: "mcp disable", Summary: "Turn an MCP server off here", Effect: EffectChanges, Phase: 4, Args: []CommandArg{argName}},
 	{Name: "rule list", Summary: "The workspace's rules", Effect: EffectReads, Phase: 4},

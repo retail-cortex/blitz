@@ -563,3 +563,28 @@ func requestedSchema(v any) *elicitSchema {
 	}
 	return &s
 }
+
+// ToolNames connects to the server named name, if it isn't yet, and lists
+// its tools' names: the check after a server is set up
+// (spec_067_cli_parity CLP-31).
+func (m *MCPManager) ToolNames(ctx context.Context, name string) ([]string, error) {
+	s, err := m.server(name)
+	if err != nil {
+		return nil, err
+	}
+	if ok, retryIn := s.health.Allow(); !ok {
+		return nil, fmt.Errorf("MCP server %q is unavailable after repeated failures; retrying in %s", name, retryIn.Round(time.Second))
+	}
+	lctx, cancel := context.WithTimeout(ctx, mcpListTimeout)
+	defer cancel()
+	ts, err := s.toolset.Tools(readonlyWith{Context: lctx})
+	if err != nil {
+		m.recordFailure(ctx, s, err)
+		return nil, err
+	}
+	names := make([]string, 0, len(ts))
+	for _, t := range ts {
+		names = append(names, t.Name())
+	}
+	return names, nil
+}
