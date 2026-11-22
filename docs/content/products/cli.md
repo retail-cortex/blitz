@@ -32,6 +32,7 @@ The flags a run takes, on `blitz` and on `blitz exec`:
 |---|---|
 | `-d, --dir DIR`, `-c, --config DIR` | The workspace (default the current directory) and the folder of the settings file (default `~/.blitz`); every command takes them |
 | `-p, --prompt TEXT` (`-` reads stdin), `-i, --interactive` | A one-shot prompt; `-i` (on `blitz`, not `exec`) opens the interactive session even when a prompt is given |
+| `-q, --quiet`, `--color auto\|always\|never` | Open the interactive session without the banner; colour the output on a terminal (`auto`, the default, also honours `NO_COLOR`, `CLICOLOR_FORCE`, `FORCE_COLOR` and `TERM=dumb`) |
 | `-a, --agent NAME`, `-m, --model REF`, `--agency LEVEL`, `--effort LEVEL` | The agent, the model, how much it does on its own (`low`…`extreme`), and the reasoning effort |
 | `-r, --resume [ID\|NAME]`, `-C, --continue`, `--fork`, `--name TITLE` | Resume a session (or start one from a snapshot), continue the latest; `--fork` continues in a copy of it, leaving it as it was; `--name` names the new session |
 | `--allow RULE`, `--deny RULE` | A [permission rule](../guide/safety.md) for this run only, such as `--allow "shell(go test *)"` or `--deny "shell(git push *)"` (repeatable) |
@@ -125,6 +126,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 
 ## The interactive session
 
+- **The banner**: the Blitz wordmark, the version, then the workspace and its git branch, the agent and model, the permission mode (red when unsafe) and the sandbox. `ui.banner = "compact"` keeps it to one line (as do a terminal narrower than 60 columns and a resumed session), `"off"` or `-q` hides it. The hints on steering and keys show the first time; `/help` has them after.
 - **Line editing** with history (`~/.blitz/history`, owner-only), Ctrl+R search, and Tab completion for `/commands`, their arguments and `@path` references.
 - **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.
 - **Streaming Markdown**, a progress spinner, and a usage line after each turn: `↳ 12.4k in · 1.2k out · context 12.3k · $0.0023`.

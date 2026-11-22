@@ -60,6 +60,17 @@ type App struct {
 	Notify Notifier
 	// StatusLine is ui.status_line: "default", a command, or "" for none.
 	StatusLine string
+	// Banner is ui.banner: BannerFull ("" too), BannerCompact or BannerOff
+	// (spec_067_cli_parity CLP-02).
+	Banner string
+	// Width is the terminal's width in columns (0: unknown).
+	Width int
+	// StateDir is where the CLI keeps what it remembers between runs (the
+	// start-up hints shown, CLP-04); "" keeps nothing.
+	StateDir string
+	// AfterBanner, when set, prints under the banner before the first
+	// prompt (a resumed session's recap).
+	AfterBanner func()
 	// Follow, when set, shows a background run until it ends before the
 	// first prompt (blitz attach), answering what it asks; FollowID names
 	// it.
@@ -290,16 +301,11 @@ func reflectHint(w api.Backend) string {
 // RunREPL runs the interactive REPL prompt loop until /exit, EOF, or ctx is cancelled.
 func RunREPL(ctx context.Context, app *App) error {
 	applyTheme(app, app.Printer.Theme)
-	PrintBanner(app.Version, app.Workspace.ActiveAgent().Name, app.Workspace.Model().Name)
-	if sandbox := app.Workspace.SandboxSummary(); len(sandbox) > 0 {
-		fmt.Printf("%s%s%s\n", Dim, safe(sandbox[0]), Reset)
-		fmt.Printf("   %s%s%s\n", Dim, i18n.T("repl.hint"), Reset)
-		if _, ok := app.Input.(steerInput); ok {
-			fmt.Printf("   %s%s%s\n", Dim, i18n.T("steer.hint"), Reset)
-			fmt.Printf("   %s%s%s\n", Dim, i18n.T("keys.hint"), Reset)
-		}
-		fmt.Println()
+	printBanner(app)
+	if app.AfterBanner != nil {
+		app.AfterBanner()
 	}
+	printFirstHints(app)
 
 	printModeNote(app)
 	if hint := reflectHint(app.Workspace); hint != "" {

@@ -1256,6 +1256,7 @@ var choices = []struct {
 	{"ui.notify", []string{"both", "bell", "desktop", "off"}, func(c *Config) *string { return &c.UI.Notify }},
 	{"ui.task_alerts", []string{"notify", "open", "off"}, func(c *Config) *string { return &c.UI.TaskAlerts }},
 	{"ui.editor", []string{"emacs", "vim"}, func(c *Config) *string { return &c.UI.Editor }},
+	{"ui.banner", []string{"full", "compact", "off"}, func(c *Config) *string { return &c.UI.Banner }},
 	{"tools.trash", []string{TrashSystem, TrashWorkspace}, func(c *Config) *string { return &c.Tools.Trash }},
 }
 

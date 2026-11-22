@@ -54,6 +54,7 @@ type rootOptions struct {
 	global       globalFlags
 	prompt       string
 	interactive  bool
+	quiet        bool // --quiet: no banner (CLP-02)
 	version      bool
 	resume       string
 	cont         bool
@@ -132,6 +133,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 		// AI-01, AI-03), but --version (this root's own flag) and help
 		// (Cobra's, a command like any other); --help doesn't run this.
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			tui.SetColor(tui.ColorWanted(o.global.color, stdoutIsTerminal(), nil), nil) // CLP-03
 			if v, err := cmd.Flags().GetBool("version"); (err == nil && v) || cmd.Name() == "help" {
 				return
 			}
@@ -146,9 +148,11 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	pf := root.PersistentFlags()
 	pf.StringVarP(&o.global.config, "config", "c", "", "Directory containing .env.toml config (default ~/.blitz)")
 	pf.StringVarP(&o.global.dir, "dir", "d", "", "Workspace directory to start in (default: current directory)")
+	pf.StringVar(&o.global.color, "color", "auto", "Colour the output: auto (on a terminal, unless NO_COLOR is set), always or never")
 
 	f := root.Flags()
 	f.BoolVarP(&o.interactive, "interactive", "i", false, "Start the interactive REPL even when a prompt is given")
+	f.BoolVarP(&o.quiet, "quiet", "q", false, "Start the interactive REPL without the banner")
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
@@ -522,7 +526,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			maxCostUSD: o.maxCostUSD, timeout: o.timeout, command: o.command,
 			input: input, stdinTTY: stdinTTY && !stdinUsed && !streamIn, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
-			usageLines: pretty, images: attached, theme: cfg.UI.Theme, schema: schema,
+			usageLines: pretty, images: attached, theme: themeFor(cfg.UI.Theme), schema: schema,
 		}
 		if streamIn {
 			return runStreamInput(ctx, w, run, os.Stdin)
@@ -533,14 +537,24 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if resumed && sess.Workspace != "" && sess.Workspace != w.Dir() {
 		warnFn(i18n.T("resume.other_workspace_id", "id", sess.ID, "workspace", sess.Workspace))
 	}
+	banner := cfg.UI.Banner
+	var recap func()
+	if o.quiet {
+		banner = tui.BannerOff
+	}
 	if resumed {
+		if banner != tui.BannerOff {
+			banner = tui.BannerCompact // then the recap (CLP-02)
+		}
 		msg := i18n.T("resume.starting", "id", sess.ID, "messages", i18n.N("session.messages", sess.MessageCount))
 		if o.resume != "" && o.resume != "latest" && o.resume != sess.ID { // a snapshot name
 			msg = i18n.T("snapshot.branched", "id", sess.ID, "name", o.resume, "messages", i18n.N("session.messages", sess.MessageCount))
 		}
-		fmt.Printf("%s%s%s\n", tui.Green, msg, tui.Reset)
-		tui.PrintRecap(sess.Messages, 3)
-		fmt.Println()
+		recap = func() {
+			fmt.Printf("%s%s%s\n", tui.Green, msg, tui.Reset)
+			tui.PrintRecap(sess.Messages, 3)
+			fmt.Println()
+		}
 	}
 	return tui.RunREPL(ctx, &tui.App{
 		Workspace:     w,
@@ -554,6 +568,10 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		ConfigDir:     o.global.config,
 		Notify:        notifier(cfg, pretty),
 		StatusLine:    statusLine(cfg, pretty),
+		Banner:        banner,
+		Width:         terminalWidth(),
+		StateDir:      config.Dir(),
+		AfterBanner:   recap,
 		Follow:        follower(w, o.attachRun),
 		FollowID:      o.attachRun,
 		FirstPrompt:   prompt, // -i with a prompt: sent first (N26 cli-2#4)
@@ -584,7 +602,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			}, nil
 		},
 		Printer: tui.PrinterOptions{
-			Out: os.Stdout, Markdown: pretty && cfg.UI.Markdown, Theme: cfg.UI.Theme,
+			Out: os.Stdout, Markdown: pretty && cfg.UI.Markdown, Theme: themeFor(cfg.UI.Theme),
 			Width: terminalWidth(), Spinner: pretty && cfg.UI.Spinner,
 		},
 	})
@@ -802,4 +820,13 @@ func startLog(cfg *config.Config, warn func(string)) func() {
 	slog.SetDefault(logger)
 	slog.Info("start", "version", version, "socket", socket.DefaultSocket())
 	return func() { f.Close() }
+}
+
+// themeFor is the Markdown style to render with: notty, without colour,
+// when colour is off (NO_COLOR, --color=never; CLP-03).
+func themeFor(theme string) string {
+	if !tui.ColorOn() {
+		return "notty"
+	}
+	return theme
 }

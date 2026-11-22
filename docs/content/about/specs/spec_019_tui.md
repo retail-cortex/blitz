@@ -20,7 +20,7 @@ The REPL is a thin front end over `api.Backend`: it reads input, dispatches slas
 
 ## 2. Presentation
 
-- **TUI-01** Banner: one line `Blitz <version>  agent <name> · model <name>`, then a dim hint (`/help`, Ctrl+C); then the first sandbox summary line, a hint line, and (when steering is available) a steering hint and a keys hint (Shift+Tab, Ctrl+G, Esc Esc).
+- **TUI-01** Banner (spec_067_cli_parity CLP-01–04): the Blitz wordmark in the lightning gradient with "powered by Retail Cortex" and the version, or one line (`ui.banner = "compact"`, under 60 columns, colour off, an organization's own app name, a resumed session); then the workspace and its git branch, the agent and model (or that none is set up), the mode and the shell sandbox, and one hint line (`/help`, Tab, Ctrl+C). `ui.banner = "off"` and `-q` print none. The input, steering and keys hints show the first time the REPL opens on a terminal (`~/.blitz/cli-hints-shown`).
 - **TUI-02** Prompt: bold green `<agent> ›`, with `[mode]` after the agent when the permission mode isn't `default` (yellow; red for `bypass`). Status marks only `✓ ✗ ! ↳`; no mascot or persona.
 - **TUI-03** Model text streams; with `ui.markdown` on a TTY it is rendered as Markdown (glamour, theme `ui.theme`: auto/dark/light/notty), falling back to plain text on error. Thought text and final text that repeats streamed chunks are not printed.
 - **TUI-04** Tool calls and results are printed as compact one-line summaries; a spinner (`ui.spinner`, TTY only) shows "thinking"/"working" with elapsed time.

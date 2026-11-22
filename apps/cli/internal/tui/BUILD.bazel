@@ -19,6 +19,7 @@ go_library(
     name = "tui",
     srcs = [
         "attach.go",
+        "banner.go",
         "cd.go",
         "commands.go",
         "commands_extra.go",
@@ -96,6 +97,7 @@ go_test(
     size = "small",
     srcs = [
         "attach_test.go",
+        "banner_test.go",
         "btw_test.go",
         "cd_test.go",
         "choose_test.go",

@@ -7,7 +7,7 @@ weight: 67
 
 | | |
 |---|---|
-| Status | **Planned** (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
+| Status | **Phase 1 built** (CLP-01–04: the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached), phases 2–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
 | Source | `apps/cli/` (cobra commands, `helpgroups.go`, `configcmd.go`, `mcp.go`, `do.go`); `apps/cli/internal/tui/` (`repl.go`, `render.go`, `terminal.go`, `commands.go`, `commands_extra.go`, `status.go`, `theme.go`); `pkg/api/blitzcommands.go` (the catalog), `pkg/engine/blitzcommands.go` (its handlers), `pkg/engine/tools/blitz.go`; `pkg/config/mcpedit.go`, `providers.go` (`SetValue`); `pkg/i18n/locales/` |
 | Tests | Listed with each phase (§4). Every phase ends with the CLI's tests, `tools/check_format.sh`, and the journey tests of §4.8 |
 | Depends on | [spec_019_tui](spec_019_tui.md), [spec_020_cli](spec_020_cli.md), [spec_060_blitz_tools](spec_060_blitz_tools.md) (the catalog, approvals, `blitz do`), [spec_009_mcp](spec_009_mcp.md), [spec_004_i18n](spec_004_i18n.md), [spec_008_web](spec_008_web.md) |
@@ -231,7 +231,7 @@ Phase 5 is the longest and can be cut at any noun. What isn't done by the end of
 
 Each phase also updates:
 - spec_019 and spec_020 where it changes them
-- the guide: a new CLI guide page (the banner, completion, help, configure by asking), with `mcp.md`, `configuration.md` and `blitz-commands.md` updated
+- the guide: the CLI page, `docs/content/products/cli.md` (the banner, completion, help, configure by asking), with `mcp.md`, `configuration.md` and `blitz-commands.md` updated
 - the three locales, edited line by line
 - the 1.3.0 release notes
 
@@ -242,9 +242,9 @@ Each phase also updates:
 - Git commit, branches and sync from the REPL: `!git` is there, and the agent has git.
 - A terminal workflow canvas: workflows are edited as files and run from the CLI.
 
-## 6. Decisions for the owner
+## 6. Decisions (the owner, 2026-11-22)
 
-1. **The wordmark**: block letters (█-style, about 5 lines) or a slimmer figlet font. And the tagline's exact words: "powered by Retail Cortex".
-2. **Renames** (CLP-50, 51): `blitz agents` → `blitz runs` and `-w` → `--workspace`, with one release of hidden aliases.
-3. **Docs in the binary** (CLP-21): about 1–2 MB more for offline help, or online-only help (the site) with the agent fetching pages.
-4. **`help.model`**: ask Blitz with the session's model, or a cheaper default when one is set up.
+1. **The wordmark**: block letters (█-style, 5 lines) with "⚡ powered by Retail Cortex · v<version>" under them.
+2. **Renames** (CLP-50, 51): yes — `blitz agents` → `blitz runs`, `-w` → `--workspace`, with one release of hidden aliases.
+3. **Docs in the binary** (CLP-21): yes, embedded for offline help.
+4. **Ask Blitz's model**: the session's model; `help.model` overrides it.

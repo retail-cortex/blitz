@@ -62,6 +62,10 @@ type UIConfig struct {
 	StatusLine string `toml:"status_line"`
 	// Editor is how the prompt edits: emacs (the default) or vim.
 	Editor string `toml:"editor"`
+	// Banner is what the interactive CLI shows when it starts: "full" (the
+	// Blitz wordmark, then the workspace, agent, model and mode), "compact"
+	// (one line, then the same) or "off" (spec_067_cli_parity CLP-02).
+	Banner string `toml:"banner"`
 	// Keybindings is the file that rebinds the REPL's keys.
 	Keybindings string `toml:"keybindings"`
 }
@@ -882,6 +886,7 @@ func applyFeatureDefaults(c *Config) {
 		Notify:        "both",
 		TaskAlerts:    "notify",
 		Editor:        "emacs",
+		Banner:        "full",
 		Keybindings:   filepath.Join(dir, "keybindings.toml"),
 	}
 	c.Memory = MemoryConfig{

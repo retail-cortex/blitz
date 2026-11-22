@@ -417,6 +417,7 @@ func TestREPLSteerOutcomes(t *testing.T) {
 			}
 			app.Input = in
 			app.Interrupts = make(chan os.Signal, 1)
+			app.StateDir = t.TempDir() // the hints show the first time (CLP-04)
 			out := captureStdout(t, func() { require.NoError(t, RunREPL(context.Background(), app)) })
 			assert.Contains(t, out, "just start typing", "the steering hint is shown")
 			for _, w := range c.want {
