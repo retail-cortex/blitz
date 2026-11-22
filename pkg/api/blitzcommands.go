@@ -128,6 +128,8 @@ var BlitzCommands = []BlitzCommand{
 	{Name: "connector enable", Summary: "Turn a connection on in this workspace", Effect: EffectChanges, Phase: 1, Args: []CommandArg{argName}},
 	{Name: "connector disable", Summary: "Turn a connection off in this workspace", Effect: EffectChanges, Phase: 1, Args: []CommandArg{argName}},
 
+	{Name: "connector remove", Summary: "Remove a connection of this workspace, asked with its file", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
+	{Name: "connector test", Summary: "Connect with a connection's saved settings and list its tools", Effect: EffectReads, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "settings show", Summary: "The model (the conversation's and the workspace's), image and speech models, effort, permission mode and agent", Effect: EffectReads, Phase: 1},
 	{Name: "settings set", Summary: "Change one setting of this workspace: the model, image or speech model, effort, the permission mode (only to a stricter one), or a setting settings reference lists as yours to set (models, the default agent and provider, ui.*, search.*)", Effect: EffectChanges, Phase: 1,
 		Args: []CommandArg{
@@ -191,9 +193,11 @@ var BlitzCommands = []BlitzCommand{
 	{Name: "secret set", Summary: "Set a secret of this workspace: its value is asked of the person, never given here", Effect: EffectChanges, Phase: 2,
 		Args: []CommandArg{argName}},
 
+	{Name: "secret remove", Summary: "Remove a secret of this workspace, asked first: what names it stops working", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "workflow list", Summary: "This workspace's workflows and their steps", Effect: EffectReads, Phase: 3},
 	{Name: "workflow save", Summary: "Add or change a workflow (its file, as Studio writes it), asked first", Effect: EffectChanges, Phase: 3,
 		Args: []CommandArg{{Name: "workflow", Type: "object", Description: "The workflow as JSON, as workflow list shows one", Required: true}, {Name: "previous", Type: "string", Description: "Its name before, when renaming"}}},
+	{Name: "workflow remove", Summary: "Remove a workflow of this workspace, asked with its file", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "agent list", Summary: "The agents, with their tools and models", Effect: EffectReads, Phase: 3},
 	{Name: "agent save", Summary: "Add or change an agent of this workspace (its file), asked first", Effect: EffectChanges, Phase: 3,
 		Args: []CommandArg{argName, argDesc,
@@ -205,6 +209,7 @@ var BlitzCommands = []BlitzCommand{
 		Args: []CommandArg{argName, {Name: "description", Type: "string", Description: "When to use it: what makes an agent load it", Required: true},
 			{Name: "instructions", Type: "string", Description: "Its body", Required: true}}},
 
+	{Name: "skill remove", Summary: "Remove a skill of this workspace and its folder, asked with its SKILL.md", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "mcp list", Summary: "The MCP servers, on or off, and their state", Effect: EffectReads, Phase: 4},
 	{Name: "mcp add", Summary: "Add an MCP server to this workspace (from its docs page, say): it runs code, so it's asked with its settings in full; a secret goes as ${NAME} and its value is asked of the person, never given here", Effect: EffectChanges, BringsCode: true, Phase: 4,
 		Args: mcpServerArgs},
@@ -217,12 +222,14 @@ var BlitzCommands = []BlitzCommand{
 	{Name: "rule list", Summary: "The workspace's rules", Effect: EffectReads, Phase: 4},
 	{Name: "rule save", Summary: "Add or change a rule, asked first", Effect: EffectChanges, Phase: 4,
 		Args: []CommandArg{argName, argDesc, {Name: "text", Type: "string", Description: "The rule", Required: true}}},
+	{Name: "rule remove", Summary: "Remove a rule of this workspace, asked with its file", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "guardrail list", Summary: "The workspace's guardrails", Effect: EffectReads, Phase: 4},
 	{Name: "guardrail save", Summary: "Add or change a guardrail, asked first", Effect: EffectChanges, Phase: 4,
 		Args: []CommandArg{argName, argDesc,
 			{Name: "stage", Type: "string", Description: "What it checks: the person's message, a tool's result, the answer, or an action", Required: true, Values: []string{"input", "tool_result", "output", "action"}},
 			{Name: "action", Type: "string", Description: "What it does when it catches something (block: the default)", Values: []string{"block", "warn"}},
 			{Name: "check", Type: "string", Description: "What to catch, in words", Required: true}}},
+	{Name: "guardrail remove", Summary: "Remove a guardrail of this workspace (not a built-in one), asked with its file", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "command list", Summary: "The slash commands", Effect: EffectReads, Phase: 4},
 	{Name: "command save", Summary: "Add or change a slash command of this workspace (its file), asked first", Effect: EffectChanges, Phase: 4,
 		Args: []CommandArg{argName, argDesc, {Name: "prompt", Type: "string", Description: "The prompt it runs ($ARGUMENTS for what's typed after it)", Required: true}}},

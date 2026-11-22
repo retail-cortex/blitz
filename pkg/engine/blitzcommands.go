@@ -102,6 +102,13 @@ func init() {
 		"mcp edit":           (*Workspace).cmdMCPSave,
 		"mcp remove":         (*Workspace).cmdMCPRemove,
 		"mcp test":           (*Workspace).cmdMCPTest,
+		"rule remove":        (*Workspace).cmdRuleRemove,
+		"guardrail remove":   (*Workspace).cmdGuardrailRemove,
+		"connector remove":   (*Workspace).cmdConnectorRemove,
+		"connector test":     (*Workspace).cmdConnectorTest,
+		"secret remove":      (*Workspace).cmdSecretRemove,
+		"workflow remove":    (*Workspace).cmdWorkflowRemove,
+		"skill remove":       (*Workspace).cmdSkillRemove,
 		"settings reference": (*Workspace).cmdSettingsReference,
 		"mcp enable":         (*Workspace).cmdMCPOn,
 		"mcp disable":        (*Workspace).cmdMCPOn,
@@ -969,7 +976,11 @@ func (w *Workspace) cmdRuleList(context.Context, api.BlitzCommand, map[string]an
 
 func (w *Workspace) cmdRuleSave(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	spec := RuleSpec{Name: str(args, "name"), Description: str(args, "description"), Text: str(args, "text")}
-	if err := w.askChange(ctx, c, "Save the rule "+spec.Name, fileDiff(".agents/rules/"+spec.Name+".md", "", spec.Text)); err != nil {
+	old := ""
+	if i := slices.IndexFunc(w.Rules(), func(r gates.Rule) bool { return r.Name == spec.Name }); i >= 0 {
+		old = fileBody(w.Rules()[i].Path) // a change shows what it changes (CLP-34)
+	}
+	if err := w.askChange(ctx, c, "Save the rule "+spec.Name, fileDiff(".agents/rules/"+spec.Name+".md", old, spec.Text)); err != nil {
 		return nil, err
 	}
 	r, problems, err := w.SaveRule(spec, w.existingRule(spec.Name))
@@ -995,7 +1006,11 @@ func (w *Workspace) cmdGuardrailList(context.Context, api.BlitzCommand, map[stri
 
 func (w *Workspace) cmdGuardrailSave(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	spec := GuardrailSpec{Name: str(args, "name"), Description: str(args, "description"), Stage: str(args, "stage"), Action: str(args, "action"), Text: str(args, "check")}
-	if err := w.askChange(ctx, c, fmt.Sprintf("Save the guardrail %s (%s, %s)", spec.Name, spec.Stage, firstOf(spec.Action, "block")), fileDiff(".agents/guardrails/"+spec.Name+".md", "", spec.Text)); err != nil {
+	old := ""
+	if i := slices.IndexFunc(w.Guardrails(), func(g gates.Guardrail) bool { return g.Name == spec.Name && g.Builtin == "" }); i >= 0 {
+		old = fileBody(w.Guardrails()[i].Path)
+	}
+	if err := w.askChange(ctx, c, fmt.Sprintf("Save the guardrail %s (%s, %s)", spec.Name, spec.Stage, firstOf(spec.Action, "block")), fileDiff(".agents/guardrails/"+spec.Name+".md", old, spec.Text)); err != nil {
 		return nil, err
 	}
 	previous := ""

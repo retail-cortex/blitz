@@ -59,6 +59,7 @@ By phase. Each group's commands are listed by `blitz help`.
 | `process` | `process list`, `process stop` | `stop` asks | 2 |
 | `approval` | `approval list`, `approval forget` (saved "always allow" rules) | `forget` changes, only ever making Blitz ask more | 2 |
 | `secret` | `secret list` (names only), `secret set <name>` (the value asked in the form, DRV-05) | `set` changes | 2 |
+| `remove` (spec_067 CLP-34) | `connector remove`, `connector test`, `rule remove`, `guardrail remove`, `secret remove`, `workflow remove`, `skill remove` | each asked with the file that goes; this workspace's own only; `connector test` reads | 5 |
 | `mcp` | `mcp list`, `mcp add`, `mcp edit`, `mcp remove`, `mcp test`, `mcp enable`, `mcp disable` | `add`, `edit` and `enable` run code: asked with the server's settings in full and their source (DRV-75); `env` and `headers` take secrets as `${NAME}`, asked of the person and kept as `{secrets:NAME}` (spec_067 CLP-31) | 4 |
 | `rule`, `guardrail`, `command`, `hook` | `list`, `save` (Studio's other items) | `save` changes; a hook runs code (DRV-75) | 4 |
 | `plugin` | `plugin list`, `plugin install`, `plugin remove` | `install` brings code from elsewhere (DRV-75) | 4 |
