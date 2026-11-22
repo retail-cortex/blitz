@@ -188,3 +188,11 @@ func TestErrorText(t *testing.T) {
 		t.Run(name, func(t *testing.T) { assert.Equal(t, c.want, errorText(c.err, c.debug)) })
 	}
 }
+
+// config get, set and reference complete settings keys, not tables.
+func TestConfigKeysComplete(t *testing.T) {
+	got := shellComplete(t, "config", "set", "ui.th")
+	assert.Contains(t, got, "ui.theme")
+	assert.NotContains(t, shellComplete(t, "config", "get", ""), "ui", "a table isn't a key")
+	assert.Empty(t, shellComplete(t, "config", "set", "ui.theme", ""), "the value is yours")
+}

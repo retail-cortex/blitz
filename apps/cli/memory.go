@@ -68,7 +68,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 			if listJSON { // CLP-53
-				return writeJSON(cmd.OutOrStdout(), list)
+				return writeJSON(cmd.OutOrStdout(), nonNil(list))
 			}
 			out := cmd.OutOrStdout()
 			if len(list) == 0 {

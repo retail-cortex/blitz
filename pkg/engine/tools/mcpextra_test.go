@@ -178,3 +178,29 @@ func TestMCPElicitationCallOwner(t *testing.T) {
 	endB()
 	assert.Nil(t, s.currentCall())
 }
+
+// ToolNames connects to a server just set up and lists what it offers:
+// mcp test's check (spec_067_cli_parity CLP-31).
+func TestMCPToolNames(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	mcp.AddTool(srv, &mcp.Tool{Name: "echo"}, func(_ context.Context, _ *mcp.CallToolRequest, in echoArgs) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: in.Text}}}, nil, nil
+	})
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+	t.Cleanup(func() {
+		for ss := range srv.Sessions() {
+			ss.Close()
+		}
+	})
+	m, err := NewMCPManager([]config.MCPServerConfig{{Name: "srv", URL: ts.URL}}, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(m.Close)
+	names, err := m.ToolNames(context.Background(), "srv")
+	require.NoError(t, err)
+	require.Len(t, names, 1)
+	assert.Contains(t, names[0], "echo")
+	_, err = m.ToolNames(context.Background(), "nope")
+	assert.ErrorContains(t, err, `no MCP server "nope"`)
+}

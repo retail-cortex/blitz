@@ -476,7 +476,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if merr := w.ModelErr(); merr != nil {
 		msg := i18n.T("startup.model_failed", "error", modelErrorText(merr, cfg))
 		if o.ask != "" { // blitz help "<question>" without a model: the docs answer (CLP-23)
-			tui.AnswerOffline(os.Stdout, o.ask, i18n.T("ask.no_model"))
+			tui.AnswerOffline(cmd.OutOrStdout(), o.ask, i18n.T("ask.no_model"))
 			return nil
 		}
 		if oneShot {

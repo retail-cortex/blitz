@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -161,4 +162,26 @@ func TestListsAsJSON(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "gh", rows[0]["name"])
 	assert.NotContains(t, out, "ghp_secret")
+}
+
+func TestConfigReferenceAndValues(t *testing.T) {
+	cfg := t.TempDir()
+	out, err := runBlitz(t, "-c", cfg, "config", "reference", "ui", "--json")
+	require.NoError(t, err)
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &rows))
+	assert.Greater(t, len(rows), 5)
+	out, err = runBlitz(t, "-c", cfg, "config", "reference")
+	require.NoError(t, err)
+	assert.Contains(t, out, "ui.theme")
+	_, err = runBlitz(t, "-c", cfg, "config", "reference", "nope")
+	assert.Error(t, err)
+	out, err = runBlitz(t, "-c", cfg, "config", "get", "search.sources")
+	require.NoError(t, err)
+	assert.Equal(t, strings.Join(config.DefaultConfig().Search.Sources, ", ")+"\n", out, "a list, comma-joined")
+	out, err = runBlitz(t, "-c", cfg, "config", "get", "ui")
+	require.NoError(t, err)
+	assert.Contains(t, out, "theme =", "a table as TOML")
+	_, err = runBlitz(t, "-c", cfg, "config", "check", filepath.Join(cfg, "none.toml"))
+	assert.ErrorIs(t, err, os.ErrNotExist, "a file that isn't there is said so")
 }

@@ -15,8 +15,10 @@
 package engine
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +26,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/gates"
 )
 
 // Removing this workspace's items: asked with the file that goes, then
@@ -100,4 +103,25 @@ func TestFileBody(t *testing.T) {
 	require.NoError(t, os.WriteFile(p, []byte("No front matter."), 0o600))
 	assert.Equal(t, "No front matter.", fileBody(p))
 	assert.Empty(t, fileBody(filepath.Join(dir, "none.md")))
+}
+
+func TestWorkflowRemove(t *testing.T) {
+	w, asked, _ := blitzWorkspace(t, api.DecisionOnce, "", nil)
+	_, err := runCmd(t, w, "workflow save", map[string]any{"workflow": map[string]any{"name": "nightly", "nodes": []any{map[string]any{"id": "a", "type": "agent", "instructions": "Check."}}}})
+	require.NoError(t, err)
+	_, err = runCmd(t, w, "workflow remove", map[string]any{"name": "nightly"})
+	require.NoError(t, err)
+	assert.Contains(t, (*asked)[len(*asked)-1].Diff, "Check.")
+	assert.Empty(t, w.Workflows())
+}
+
+// Declined, a remove leaves the item where it was.
+func TestDeclinedRemoveKeepsIt(t *testing.T) {
+	w, _, _ := blitzWorkspace(t, api.DecisionOnce, "", nil)
+	_, err := runCmd(t, w, "rule save", map[string]any{"name": "tidy", "description": "Tidy", "text": "Keep it tidy."})
+	require.NoError(t, err)
+	w.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionDeny, nil }, nil)
+	_, err = runCmd(t, w, "rule remove", map[string]any{"name": "tidy"})
+	require.Error(t, err)
+	assert.True(t, slices.ContainsFunc(w.Rules(), func(r gates.Rule) bool { return r.Name == "tidy" }), "still there")
 }

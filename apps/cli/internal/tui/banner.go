@@ -94,6 +94,11 @@ func SetColor(on bool, getenv func(string) string) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
+	ct := strings.ToLower(getenv("COLORTERM"))
+	tc := on && (ct == "truecolor" || ct == "24bit")
+	if on == colorOn && tc == truecolor && (on == (Reset != "")) {
+		return // as it is: nothing written while another goroutine prints
+	}
 	colorOn = on
 	for i, c := range colorCodes {
 		if on {
@@ -102,8 +107,7 @@ func SetColor(on bool, getenv func(string) string) {
 			*c = ""
 		}
 	}
-	ct := strings.ToLower(getenv("COLORTERM"))
-	truecolor = on && (ct == "truecolor" || ct == "24bit")
+	truecolor = tc
 }
 
 // ColorOn reports whether output is coloured.
@@ -146,35 +150,43 @@ func RenderBanner(b BannerInfo) string {
 	}
 	full := b.Form != BannerCompact && colorOn && (b.Width == 0 || b.Width >= wordmarkMin) && i18n.AppName() == i18n.Product
 	sb.WriteByte('\n')
+	orange, gold := brand(255, 140, 0, 208), brand(255, 212, 0, 220)
 	if full {
 		for _, line := range wordmark {
 			sb.WriteString("  ")
 			sb.WriteString(gradient(line))
 			sb.WriteByte('\n')
 		}
-		fmt.Fprintf(&sb, "  %s⚡ %s%s%s%s%s\n\n", Yellow, Reset, powered, Dim, version, Reset)
+		fmt.Fprintf(&sb, "  %s⚡ %s%s%s%s%s%s\n\n", gold, orange, powered, Reset, Dim, version, Reset)
 	} else {
-		fmt.Fprintf(&sb, "  %s⚡ %s%s%s%s%s · %s%s\n\n", Yellow, Bold, i18n.AppName(), Reset, Dim, version, powered, Reset)
+		fmt.Fprintf(&sb, "  %s⚡ %s%s%s%s%s%s · %s%s%s\n\n", gold, Bold, orange, i18n.AppName(), Reset, Dim, version, Reset+orange, powered, Reset)
 	}
 
-	model := b.Model
+	green, blue, violet := brand(80, 200, 120, 78), brand(97, 175, 239, 75), brand(198, 120, 221, 176)
+	model := blue + b.Model + Reset
 	if b.NoModel {
 		model = Yellow + i18n.T("banner.no_model") + Reset
 	}
-	where := homeShort(b.Workspace)
+	where := Bold + homeShort(b.Workspace) + Reset
 	if b.Branch != "" {
-		where += Dim + "  (" + b.Branch + ")" + Reset
+		where += "  " + violet + "⎇ " + b.Branch + Reset
 	}
 	mode := b.Mode
 	if c := modeColor(mode); c != "" {
 		mode = c + mode + Reset
+	} else {
+		mode = green + mode + Reset
 	}
 	if b.Sandbox != "" {
-		mode += Dim + " · " + i18n.T("banner.sandbox") + " " + b.Sandbox + Reset
+		state := green
+		if strings.HasPrefix(b.Sandbox, "off") || strings.Contains(b.Sandbox, "unavailable") {
+			state = Red
+		}
+		mode += Dim + " · " + Reset + i18n.T("banner.sandbox") + " " + state + b.Sandbox + Reset
 	}
 	rows := [][2]string{
 		{i18n.T("banner.workspace"), where},
-		{i18n.T("banner.agent"), b.Agent + Dim + " · " + Reset + model},
+		{i18n.T("banner.agent"), green + b.Agent + Reset + Dim + " · " + Reset + model},
 		{i18n.T("banner.mode"), mode},
 	}
 	pad := 0
@@ -182,10 +194,23 @@ func RenderBanner(b BannerInfo) string {
 		pad = max(pad, utf8.RuneCountInString(r[0]))
 	}
 	for _, r := range rows {
-		fmt.Fprintf(&sb, "  %s%-*s%s  %s\n", Dim, pad, r[0], Reset, r[1])
+		fmt.Fprintf(&sb, "  %s%-*s%s  %s\n", Cyan, pad, r[0], Reset, r[1])
 	}
-	fmt.Fprintf(&sb, "\n  %s%s%s\n\n", Dim, i18n.T("banner.hint", "help", "/help", "key", "Ctrl+C"), Reset)
+	key := func(k string) string { return Reset + Bold + orange + k + Reset + Dim }
+	fmt.Fprintf(&sb, "\n  %s%s%s\n\n", Dim, i18n.T("banner.hint", "help", key("/help"), "key", key("Ctrl+C")), Reset)
 	return sb.String()
+}
+
+// brand is a colour of the banner's: truecolor where the terminal has it,
+// else the nearest of the 256 (n); none without colour.
+func brand(r, g, b, n int) string {
+	switch {
+	case !colorOn:
+		return ""
+	case truecolor:
+		return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
+	}
+	return fmt.Sprintf("\033[38;5;%dm", n)
 }
 
 // gradient colours a line of the wordmark from lightning yellow to

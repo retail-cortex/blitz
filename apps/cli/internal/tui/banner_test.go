@@ -90,7 +90,7 @@ func TestRenderBanner(t *testing.T) {
 		absent  []string
 	}{
 		"full": {form: BannerFull, color: true, art: true,
-			want: []string{"powered by Retail Cortex", "v1.3.0", "/work/shop", "(cli-parity)", "blitz", "gemini-flash", "default", "seatbelt", "/help", "Tab completes", "Ctrl+C"}},
+			want: []string{"powered by Retail Cortex", "v1.3.0", "/work/shop", "⎇ cli-parity", "blitz", "gemini-flash", "default", "seatbelt", "/help", "Tab completes", "Ctrl+C"}},
 		"empty form is full":     {form: "", color: true, art: true, want: []string{"powered by Retail Cortex"}},
 		"compact":                {form: BannerCompact, color: true, want: []string{"⚡", "Blitz", "v1.3.0", "powered by Retail Cortex", "gemini-flash"}},
 		"narrow terminal":        {form: BannerFull, width: 40, color: true, want: []string{"⚡", "Blitz", "powered by Retail Cortex"}},
@@ -131,6 +131,15 @@ func TestRenderBanner(t *testing.T) {
 		withColor(t, false, nil)
 		assert.NotContains(t, RenderBanner(BannerInfo{Form: BannerCompact}), "· ·")
 	})
+}
+
+func TestBrand(t *testing.T) {
+	withColor(t, true, map[string]string{"COLORTERM": "truecolor"})
+	assert.Equal(t, "\033[38;2;255;140;0m", brand(255, 140, 0, 208))
+	withColor(t, true, nil)
+	assert.Equal(t, "\033[38;5;208m", brand(255, 140, 0, 208))
+	withColor(t, false, nil)
+	assert.Empty(t, brand(255, 140, 0, 208))
 }
 
 func TestGradient(t *testing.T) {

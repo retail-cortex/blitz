@@ -17,6 +17,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -77,4 +78,25 @@ func TestReasoningCommand(t *testing.T) {
 	assert.Contains(t, out, "/reasoning [<turn>] [--full]")
 	assert.True(t, strings.Contains(shortDuration(850*time.Millisecond), "850ms"))
 	assert.Equal(t, "3m4s", shortDuration(184*time.Second))
+}
+
+// /reasoning turns lists them; a turn by number and --full come back from
+// the workspace.
+func TestReasoningCommandArgs(t *testing.T) {
+	app, s := stubApp(t, "")
+	_, _ = app.Workspace.NewSession()
+	var asked []int
+	s.reasoning = func(_ string, turn int) (api.Reasoning, error) {
+		asked = append(asked, turn)
+		return sampleReasoning(), nil
+	}
+	out := stripANSI(captureStdout(t, func() { HandleCommand(context.Background(), "/reasoning turns", app) }))
+	assert.Contains(t, out, "fix the failing test")
+	out = stripANSI(captureStdout(t, func() { HandleCommand(context.Background(), "/reasoning 1 --full", app) }))
+	assert.Contains(t, out, "The assertion is wrong")
+	assert.Equal(t, []int{-1, 0}, asked)
+	s.reasoning = func(string, int) (api.Reasoning, error) { return api.Reasoning{}, errors.New("no log") }
+	assert.Contains(t, stripANSI(captureStdout(t, func() { HandleCommand(context.Background(), "/reasoning", app) })), "no log")
+	app2, _ := stubApp(t, "")
+	assert.Contains(t, stripANSI(captureStdout(t, func() { cmdReasoning(app2, nil) })), "✗")
 }

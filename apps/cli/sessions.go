@@ -96,7 +96,7 @@ func newSessionsCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 			if asJSON {
-				return writeJSON(cmd.OutOrStdout(), list)
+				return writeJSON(cmd.OutOrStdout(), nonNil(list))
 			}
 			if len(list) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("sessions.none"))

@@ -86,8 +86,8 @@ func newAgentsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if asJSON { // CLP-53
-				return writeJSON(cmd.OutOrStdout(), list)
+			if asJSON { // CLP-53; none is [], not null
+				return writeJSON(cmd.OutOrStdout(), nonNil(list))
 			}
 			printRuns(cmd.OutOrStdout(), list, all, time.Now())
 			return nil
