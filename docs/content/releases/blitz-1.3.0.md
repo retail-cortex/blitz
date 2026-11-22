@@ -30,7 +30,7 @@ The command line gets the care the desktop app has had. Blitz now greets you wit
 
 - **"The workspace is open elsewhere" after a restart.** When the service restarted, mostly on Windows, a workspace could be refused while the old service was still closing it. Blitz now waits a moment for a workspace that's on its way out, and still says at once when one really is open somewhere else.
 
-- **Voice picks a model you can use.** Settings › Voice used to list every live model Google lists, including ones your key or project can't reach, and picked the default by its name rather than its version, so a conversation could stop with "failed to receive setup complete". Blitz now checks each model with the settings a conversation uses and offers only the ones that answer, the newest first, or says why when none does.
+- **Voice picks a model you can use.** Settings › Voice used to list every live model Google lists, including ones your key or project can't reach, and picked the default by its name rather than its version, so a conversation could stop with "failed to receive setup complete". Blitz now checks each model with the settings a conversation uses and offers only the ones that answer, native audio first (it sounds the most natural), or says why when none does. Newer live models also hear you now: your voice reaches them in the form they read.
 
 ### Good to know
 

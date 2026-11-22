@@ -326,10 +326,11 @@ var (
 	dateRE    = regexp.MustCompile(`-(\d{2})-(\d{4})(?:$|-)`)
 )
 
-// liveBetter orders live models best first: the higher version (3.8
-// before 2.5), then native audio, then the newer dated release, then a
-// released one before a preview, then by name: by what they are, not by
-// how their names sort ("gemini-live-2.5" sorts after "gemini-3.8").
+// liveBetter orders live models best first: native audio (the family
+// voice is built and tested on), then the higher version (3.8 before 2.5),
+// then the newer dated release, then a released one before a preview,
+// then by name: by what they are, not by how their names sort
+// ("gemini-live-2.5" sorts after "gemini-3.8").
 func liveBetter(a, b string) int {
 	ver := func(s string) (int, int) {
 		m := versionRE.FindStringSubmatch(s)
@@ -349,16 +350,16 @@ func liveBetter(a, b string) int {
 		yr, _ := strconv.Atoi(m[2])
 		return yr*100 + mo
 	}
-	ax, ay := ver(a)
-	bx, by := ver(b)
-	if c := cmp.Compare(bx*1000+by, ax*1000+ay); c != 0 {
-		return c
-	}
 	if an, bn := strings.Contains(a, "native-audio"), strings.Contains(b, "native-audio"); an != bn {
 		if an {
 			return -1
 		}
 		return 1
+	}
+	ax, ay := ver(a)
+	bx, by := ver(b)
+	if c := cmp.Compare(bx*1000+by, ax*1000+ay); c != 0 {
+		return c
 	}
 	if c := cmp.Compare(date(b), date(a)); c != 0 {
 		return c

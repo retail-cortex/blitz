@@ -106,7 +106,8 @@ func TestNewVoiceModel(t *testing.T) {
 		answer      []string
 		model, want string
 	}{
-		"the best that answers":     {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-12-2025", "gemini-3.8-live"}, "", "gemini-3.8-live"},
+		"native audio first":        {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-12-2025", "gemini-3.8-live"}, "", "gemini-2.5-flash-native-audio-preview-12-2025"},
+		"else the highest version":  {[]string{"gemini-live-2.5-flash-preview", "gemini-3.8-live"}, "", "gemini-3.8-live"},
 		"not one the key can't use": {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-09-2025"}, "", "gemini-2.5-flash-native-audio-preview-09-2025"},
 		"native audio at a version": {[]string{"gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-12-2025"}, "", "gemini-2.5-flash-native-audio-preview-12-2025"},
 		"set, and it answers":       {[]string{"gemini-live-2.5-flash-preview"}, "gemini/gemini-live-2.5-flash-preview", "gemini-live-2.5-flash-preview"},
@@ -140,8 +141,8 @@ func TestNewVoiceModel(t *testing.T) {
 
 	models, def, err := VoiceModels(ctx, config.DefaultConfig())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"gemini-3.8-live", "gemini-2.5-flash-native-audio-preview-12-2025"}, models, "only those that answer, best first")
-	assert.Equal(t, "gemini-3.8-live", def)
+	assert.Equal(t, []string{"gemini-2.5-flash-native-audio-preview-12-2025", "gemini-3.8-live"}, models, "only those that answer, best first")
+	assert.Equal(t, "gemini-2.5-flash-native-audio-preview-12-2025", def)
 	n := len(*asked)
 	_, _, err = VoiceModels(ctx, config.DefaultConfig())
 	require.NoError(t, err)
@@ -189,7 +190,7 @@ func TestLiveSetup(t *testing.T) {
 	assert.NotNil(t, s.SessionResumption)
 }
 
-// Live models in order of what they are: version, native audio, date,
+// Live models in order of what they are: native audio, version, date,
 // released before preview.
 func TestLiveBetter(t *testing.T) {
 	got := []string{
@@ -202,11 +203,11 @@ func TestLiveBetter(t *testing.T) {
 	}
 	slices.SortFunc(got, liveBetter)
 	assert.Equal(t, []string{
+		"gemini-2.5-flash-native-audio-preview-12-2025",
+		"gemini-2.5-flash-native-audio-preview-09-2025",
 		"gemini-3.8-live",
 		"gemini-3.1-flash-live",
 		"gemini-3.1-flash-live-preview",
-		"gemini-2.5-flash-native-audio-preview-12-2025",
-		"gemini-2.5-flash-native-audio-preview-09-2025",
 		"gemini-live-2.5-flash-preview",
 	}, got)
 }

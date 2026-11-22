@@ -16,6 +16,7 @@
 # (MODULE.bazel).
 
 exports_files([
+    "live_audio_field.patch",
     "live_realtime_config.patch",
     "live_write_lock.patch",
 ])

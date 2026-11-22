@@ -488,3 +488,32 @@ func TestVoiceRelaysTheAnswer(t *testing.T) {
 	assert.True(t, strings.HasSuffix(got, "…(the rest is in the window)"))
 	assert.Equal(t, "short", cut("short", 10))
 }
+
+// The person's audio reaches the live model in the field it reads: a
+// Gemini API model after 2.5 reads realtime input's audio (sent the
+// deprecated media chunks, it hears nothing: no transcript, no answer);
+// 2.5 keeps its media chunks (third_party/adk_go/live_audio_field.patch,
+// spec_063_voice VOX-06a).
+func TestVoiceAudioField(t *testing.T) {
+	for model, field := range map[string]string{
+		"gemini-3.8-live": "audio",
+		"gemini-2.5-flash-native-audio-preview-12-2025": "mediaChunks",
+	} {
+		t.Run(model, func(t *testing.T) {
+			w, live := openVoice(t, nil)
+			w.newVoiceModel = func(ctx context.Context, _ *config.Config) (*runtime.VoiceModel, error) {
+				m, err := gemini.NewModel(ctx, model, &genai.ClientConfig{APIKey: "test-key", Backend: genai.BackendGeminiAPI, HTTPOptions: genai.HTTPOptions{BaseURL: live.URL, APIVersion: "v1beta"}})
+				return &runtime.VoiceModel{LLM: m, ID: model, Backend: genai.BackendGeminiAPI}, err
+			}
+			s, err := w.NewSession()
+			require.NoError(t, err)
+			v, err := w.StartVoice(context.Background(), VoiceOptions{SessionID: s.ID, OnEvent: newVoiceEvents().on})
+			require.NoError(t, err)
+			t.Cleanup(v.Close)
+			live.Opened(wait)
+			require.NoError(t, v.Audio(make([]byte, 640)))
+			in := live.Next("realtimeInput", wait)
+			assert.Contains(t, in, field)
+		})
+	}
+}
