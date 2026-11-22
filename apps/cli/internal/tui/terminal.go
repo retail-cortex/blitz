@@ -20,7 +20,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +47,21 @@ type TerminalInput struct {
 	nextInput   string // the next entry's starting text
 	bindings    KeyBindings
 	vim         bool // vi editing: Esc is the editor's
+	// suggest gives the hint shown after the cursor and Tab's fuzzy
+	// match (spec_067_cli_parity CLP-12, CLP-13); nil for none.
+	suggest suggester
+	// line is the whole line as the listener last saw it: the painter
+	// draws the hint only on it, not on runes appended alone.
+	line string
+	// searching is while Ctrl+R's history search is open: the line
+	// isn't the one typed, so no hint is drawn.
+	searching bool
+}
+
+// suggester is what the completer offers beyond readline's candidates.
+type suggester interface {
+	Suggest(before string) (ghost, hint string)
+	Fuzzy(before string) (string, bool)
 }
 
 // WatchKeys lets the user steer the running turn: typing (or Ctrl+T) calls
@@ -139,6 +153,10 @@ func newTerminalInput(o TerminalOptions, base *readline.Config) (*TerminalInput,
 	cfg.DisableAutoSaveHistory = true // multi-line entries are saved whole
 	cfg.HistorySearchFold = true
 	cfg.AutoComplete = o.Completer
+	if sg, ok := o.Completer.(suggester); ok {
+		t.suggest = sg
+		cfg.Painter = t.paint
+	}
 	cfg.InterruptPrompt = "^C"
 	cfg.EOFPrompt = ""
 	cfg.FuncFilterInputRune = t.filterKey
@@ -311,113 +329,6 @@ func (t *TerminalInput) readLine(ctx context.Context, text string, kind readKind
 		}
 		prefill = saved
 	}
-}
-
-// Completer completes slash commands, their arguments, and @path references
-// to files in the workspace.
-type Completer struct {
-	mu        sync.RWMutex
-	commands  map[string][]string        // command -> static argument choices
-	dynamic   map[string]func() []string // command -> argument choices computed on demand
-	workspace string
-	// mentions are the databases' @db: references, without the @
-	// (spec_059_data DAT-45).
-	mentions func() []string
-}
-
-// Mentions registers a function supplying @db: references beside the
-// workspace's paths, without the @; it's asked only when what's typed
-// could be one (@, @d, @db:…).
-func (c *Completer) Mentions(f func() []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mentions = f
-}
-
-// NewCompleter creates a completer rooted at workspace.
-func NewCompleter(workspace string) *Completer {
-	return &Completer{commands: map[string][]string{}, dynamic: map[string]func() []string{}, workspace: workspace}
-}
-
-// SetWorkspace makes completions of paths relative to dir (after /cd).
-func (c *Completer) SetWorkspace(dir string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.workspace = dir
-}
-
-// Command registers a slash command (without "/") and static argument choices.
-func (c *Completer) Command(name string, args ...string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.commands[name] = args
-}
-
-// Dynamic registers a function supplying argument choices for a command.
-func (c *Completer) Dynamic(name string, f func() []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.commands[name]; !ok {
-		c.commands[name] = nil
-	}
-	c.dynamic[name] = f
-}
-
-// Do implements readline.AutoCompleter: it returns candidate suffixes for the
-// word before the cursor and the length of that word.
-func (c *Completer) Do(line []rune, pos int) ([][]rune, int) {
-	before := string(line[:pos])
-	words := strings.Fields(before)
-	endsWithSpace := strings.HasSuffix(before, " ")
-	current := ""
-	if !endsWithSpace && len(words) > 0 {
-		current = words[len(words)-1]
-	}
-
-	var candidates []string
-	switch {
-	case strings.HasPrefix(before, "/") && len(words) <= 1 && !endsWithSpace:
-		c.mu.RLock()
-		for name := range c.commands {
-			candidates = append(candidates, "/"+name+" ")
-		}
-		c.mu.RUnlock()
-	case strings.HasPrefix(current, "@"):
-		c.mu.RLock()
-		mentions := c.mentions
-		c.mu.RUnlock()
-		if ref := current[1:]; mentions != nil && (strings.HasPrefix("db:", ref) || strings.HasPrefix(ref, "db:")) {
-			candidates = mentions()
-		}
-		candidates = append(candidates, c.paths(current[1:])...)
-		for i := range candidates {
-			candidates[i] = "@" + candidates[i]
-		}
-	case strings.HasPrefix(before, "/") && len(words) >= 1 && (len(words) == 1 && endsWithSpace || len(words) == 2 && !endsWithSpace):
-		cmd := strings.TrimPrefix(words[0], "/")
-		c.mu.RLock()
-		candidates = append(candidates, c.commands[cmd]...)
-		if f := c.dynamic[cmd]; f != nil {
-			c.mu.RUnlock()
-			candidates = append(candidates, f()...)
-		} else {
-			c.mu.RUnlock()
-		}
-	}
-	return suffixes(candidates, current), len([]rune(current))
-}
-
-func suffixes(candidates []string, prefix string) [][]rune {
-	sort.Strings(candidates)
-	var out [][]rune
-	seen := map[string]bool{}
-	for _, cand := range candidates {
-		if strings.HasPrefix(cand, prefix) && cand != prefix && !seen[cand] {
-			seen[cand] = true
-			out = append(out, []rune(cand[len(prefix):]))
-		}
-	}
-	return out
 }
 
 // paths lists workspace entries matching partial ("src/ma" -> "src/main.go").

@@ -49,7 +49,7 @@ weight: 20
 | `blitz enterprise items sync \| share <kind>/<name> \| submissions` | Sync your own assets with your organization, submit one to share, list your submissions (spec_053 EN-93, EN-95) |
 | `blitz pkg add \| verify \| validate \| compile \| list \| search \| publish` | The workspace's assets as packages (spec_065 PK-12 to PK-16) |
 | `blitz config set-key \| keys \| secure-key \| remove-key <provider>`, `blitz config set-auth <provider> <api_key\|adc\|oauth>`, `blitz config permissions [allow\|ask\|deny\|remove <rule>] \| check <rule> [sample] \| defaults on\|off\|inherit` | API keys, how a provider signs in, and the saved permission rules (`--workspace`: the workspace's own) |
-| `blitz completion bash\|zsh\|fish\|powershell` | Cobra-generated shell completion |
+| `blitz completion bash\|zsh\|fish\|powershell`, `blitz completion install [shell]` | Shell completion: print the script, or install it for your shell (CLI-42) |
 
 ## 3. Flags
 
@@ -148,8 +148,9 @@ Root only: `-i/--interactive` (REPL even with a prompt), `-v/--version` (prints 
 - **CLI-09** `--no-session-persistence` (PAR-CLI-04) keeps the run's sessions in a temporary folder removed at exit, and runs locally (not in the service); the audit log is written as usual. With `--resume` or `--continue`, or without a prompt, it's a usage error, as is `--json-schema` without one.
 
 ## 5. Tab completion (REPL)
-- **CLI-40** The completer registers every slash command and fixed sub-arguments (`skills list|show|search`, `session list|new|load|save`, `search web|session`, `envs prune|remove`, `memory show|reload|add`, `approvals revoke|clear`, `diff git`, `attach clear`, `undo --force`, `set agency=`).
-- **CLI-41** Dynamic sources: agent names (`/agent`, `/pin_model`); pinned agents (`/unpin`); models in use plus models with settings (`/model_settings`); locale tags (`/locale`); the 20 newest workspace session IDs plus all snapshot names (`/resume`). `@path` completion is provided by the TUI completer.
+- **CLI-40** *Since 2026-11-22 (spec_067_cli_parity CLP-10, CLP-11).* The completer reads the REPL's command tree (`tui.Commands`, `commandtree.go`): every command and alias, sub-commands at any depth, flags not yet used, fixed values (`/mode`, `/effort`), `/config`'s `key=` and each key's values, and custom commands as they are when Tab is pressed.
+- **CLI-41** Sources (`Completer.Source`, registered in `newCompleter`): agents, pinned agents, every provider's models (`ListModels`) and those in use, models with settings, locales, styles, personalities, skills, tasks, processes, sessions and snapshots; themes, paths (`/export`, `/attach`) and folders (`/cd`) the completer knows itself. A source's answer is kept 10 seconds; the hint shown as you type (CLP-12) uses only what's kept, never asks.
+- **CLI-42** *Since 2026-11-22 (CLP-14).* Shell completion: `blitz completion bash|zsh|fish|powershell` prints the script; `blitz completion install [shell]` writes it (`~/.blitz/completion/blitz.zsh`/`.bash`, sourced by one marked line added once to `~/.zshrc`/`~/.bashrc`; fish's `~/.config/fish/completions/blitz.fish`). Arguments complete from the settings and catalog, never the network: `do`'s commands, providers (`config set-key|remove-key|secure-key|set-auth`, `models`), MCP servers (`mcp get|remove|enable|disable|make-global|login|logout`), plugins; flags' values (`--permission-mode` without unsafe, `--agency`, `--effort`, `--output-format`, `--input-format`, `--color`). `doctor` ends with a tip when completion isn't installed for `$SHELL`.
 
 ## 6. Doctor
 - **CLI-49** *Since 2026-10-04* `blitz doctor` runs `blitzd doctor` with the run's `--config`, `--dir`, `--model`, `--agent`, `--agency`, `--plugin-dir`, `--add-dir` and `--online`, passing its output and exit code through: the checks build models, sandboxes and MCP clients, which only the service carries (`apps/service/internal/doctor`). It needs no running service; without `blitzd` it's a usage error.

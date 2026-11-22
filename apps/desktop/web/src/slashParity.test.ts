@@ -15,8 +15,8 @@
  */
 
 // The window's slash commands match the terminal's (spec_024_desktop
-// DSK-102): every command the REPL's /help lists (helpGroups in
-// apps/cli/internal/tui/commands.go) is a built-in here, or one a window
+// DSK-102): every command in the REPL's command tree (Commands in
+// apps/cli/internal/tui/commandtree.go), and each of its other names, is a built-in here, or one a window
 // has no use for (terminalOnly), so one added there can't be missed here.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,12 +25,21 @@ import { builtinCommands, composerSyntax, terminalOnly } from "./slashCommands";
 import { terminalCommands } from "./terminalCommands";
 
 // The terminal's other names for a command the window has.
-const aliases: Record<string, string> = { set: "config" };
+const aliases: Record<string, string> = {
+  set: "config",
+  show: "config",
+  usage: "cost",
+  ps: "processes",
+  perms: "permissions",
+  pin: "pin_model",
+  lang: "locale",
+  language: "locale",
+};
 
 describe("parity with the terminal", () => {
-  const file = join(process.cwd(), "..", "..", "..", "apps", "cli", "internal", "tui", "commands.go");
+  const file = join(process.cwd(), "..", "..", "..", "apps", "cli", "internal", "tui", "commandtree.go");
   it("reads the terminal's commands", () => {
-    expect(existsSync(file), "the REPL's commands.go is the test's data").toBe(true);
+    expect(existsSync(file), "the REPL's commandtree.go is the test's data").toBe(true);
   });
   const terminal = existsSync(file) ? terminalCommands(readFileSync(file, "utf8")) : [];
   it("finds them all", () => {

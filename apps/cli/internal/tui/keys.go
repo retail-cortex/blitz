@@ -21,13 +21,17 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ergochat/readline"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"golang.org/x/term"
 )
 
 // keyEsc stands for a lone Esc keypress. The line editor reads Esc as the
@@ -269,13 +273,88 @@ func (t *TerminalInput) filterKey(r rune) (rune, bool) {
 }
 
 // listen keeps the line the user has typed so far.
-func (t *TerminalInput) listen(line []rune, _ int, key rune) ([]rune, int, bool) {
+func (t *TerminalInput) listen(line []rune, pos int, key rune) ([]rune, int, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.ks != nil && key != 0 { // 0: the read is starting, before any prefill
 		t.ks.line = string(line)
 	}
-	return nil, 0, false
+	t.line = string(line)
+	switch {
+	case key == 0:
+		t.searching = false
+	case key == readline.CharBckSearch || key == readline.CharFwdSearch:
+		t.searching = true
+	case t.searching && !unicode.IsPrint(key) && key != readline.CharBackspace && key != readline.CharCtrlH:
+		t.searching = false // a key that isn't the search's ends it
+	}
+	if t.suggest == nil || t.searching || key == 0 || pos != len(line) || !strings.HasPrefix(t.line, "/") && !strings.Contains(t.line, "@") {
+		return nil, 0, false
+	}
+	switch key {
+	case readline.CharTab: // nothing starts with it: a fuzzy match (CLP-13)
+		if fixed, ok := t.suggest.Fuzzy(t.line); ok {
+			t.line = fixed
+			return []rune(fixed), len([]rune(fixed)), true
+		}
+	case readline.CharForward: // → at the end takes the ghost text (CLP-12)
+		if ghost, _ := t.suggest.Suggest(t.line); ghost != "" {
+			t.line += ghost
+			return []rune(t.line), len([]rune(t.line)), true
+		}
+	}
+	if !strings.HasPrefix(t.line, "/") {
+		return nil, 0, false
+	}
+	// Typing at the end only appends to the screen; draw the whole line
+	// again so the painter can show the hint.
+	return line, pos, true
+}
+
+// paint draws the line with the hint after the cursor, dimmed, and puts
+// the cursor back before it; only for the whole line, with the cursor at
+// its end, in colour, and when it fits on the terminal's line.
+func (t *TerminalInput) paint(line []rune, pos int) []rune {
+	t.mu.Lock()
+	sg, whole := t.suggest, string(line) == t.line && !t.searching
+	t.mu.Unlock()
+	if sg == nil || !whole || pos != len(line) || !ColorOn() {
+		return line
+	}
+	ghost, hint := sg.Suggest(string(line))
+	text := ghost + hint
+	if text == "" {
+		return line
+	}
+	n := utf8.RuneCountInString(text)
+	if w := t.lineWidth(); w > 0 && visibleWidth(t.rl.GetConfig().Prompt)+len(line)+n >= w {
+		return line
+	}
+	out := append(slices.Clone(line), []rune(Dim+text+Reset)...)
+	return append(out, []rune(fmt.Sprintf("\x1b[%dD", n))...)
+}
+
+// lineWidth is the line editor's terminal width (0 when unknown).
+func (t *TerminalInput) lineWidth() int {
+	if f := t.rl.GetConfig().FuncGetSize; f != nil {
+		w, _ := f()
+		return w
+	}
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+		return w
+	}
+	return 0
+}
+
+// ansiRE matches a colour code, for the width a prompt takes on screen.
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+
+// visibleWidth is how many columns s takes, without its colour codes.
+func visibleWidth(s string) int {
+	if i := strings.LastIndex(s, "\n"); i >= 0 {
+		s = s[i+1:]
+	}
+	return utf8.RuneCountInString(ansiRE.ReplaceAllString(s, ""))
 }
 
 // SetNextInput puts text in the next REPL prompt's line, to edit or send

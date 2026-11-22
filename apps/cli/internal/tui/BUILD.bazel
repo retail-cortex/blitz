@@ -23,6 +23,8 @@ go_library(
         "cd.go",
         "commands.go",
         "commands_extra.go",
+        "commandtree.go",
+        "complete.go",
         "data.go",
         "envs.go",
         "exit.go",
@@ -105,6 +107,8 @@ go_test(
         "commands_extra_test.go",
         "commands_more_test.go",
         "commands_new_test.go",
+        "commandtree_test.go",
+        "complete_test.go",
         "data_test.go",
         "envs_test.go",
         "exit_test.go",
@@ -197,11 +201,11 @@ go_test(
     }),
 )
 
-# The REPL's commands (/help's list, helpGroups), in the output tree, for
+# The REPL's commands (its command tree, Commands), in the output tree, for
 # the desktop page's test that its slash commands match them
 # (//apps/desktop/web:test, spec_024_desktop DSK-102).
 copy_to_bin(
     name = "commands",
-    srcs = ["commands.go"],
+    srcs = ["commandtree.go"],
     visibility = ["//apps/desktop/web:__pkg__"],
 )

@@ -15,7 +15,7 @@
  */
 
 // The docs' command table (docs/content/products/cli.md) names only
-// commands that exist: the terminal's (its /help, helpGroups) or the
+// commands that exist: the terminal's (its command tree) or the
 // bundled ones (pkg/engine/commands/builtin), so the docs can't drift from
 // the code unseen.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -42,7 +42,7 @@ describe("the docs' commands", () => {
   const builtinDir = join(root, "pkg", "engine", "commands", "builtin");
   const bundled = existsSync(builtinDir) ? readdirSync(builtinDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(/\.md$/, "")) : [];
   // /help and /show are the REPL's own, not rows in its /help.
-  const known = new Set([...terminalCommands(read("apps", "cli", "internal", "tui", "commands.go")), ...bundled, "help", "show"]);
+  const known = new Set([...terminalCommands(read("apps", "cli", "internal", "tui", "commandtree.go")), ...bundled, "help", "show"]);
   it("reads the docs and the code", () => {
     expect(cli, "docs/content/products/cli.md is the test's data").not.toBe("");
     expect(bundled).toContain("spec");

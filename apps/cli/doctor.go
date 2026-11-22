@@ -16,9 +16,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 
 	"github.com/spf13/cobra"
+
+	"github.com/retail-cortex/blitz/pkg/i18n"
 )
 
 // newDoctorCommand is blitz doctor: blitzd doctor runs the checks (they
@@ -38,6 +41,11 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 			}
 			c := exec.CommandContext(cmd.Context(), bin, doctorArgs(g, online)...)
 			c.Stdin, c.Stdout, c.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
+			defer func() {
+				if !completionInstalled() { // CLP-14
+					fmt.Fprintln(cmd.OutOrStdout(), i18n.T("completion.doctor"))
+				}
+			}()
 			if err := c.Run(); err != nil {
 				var exit *exec.ExitError
 				if errors.As(err, &exit) {

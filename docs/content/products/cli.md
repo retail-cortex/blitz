@@ -127,7 +127,9 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 ## The interactive session
 
 - **The banner**: the Blitz wordmark, the version, then the workspace and its git branch, the agent and model, the permission mode (red when unsafe) and the sandbox. `ui.banner = "compact"` keeps it to one line (as do a terminal narrower than 60 columns and a resumed session), `"off"` or `-q` hides it. The hints on steering and keys show the first time; `/help` has them after.
-- **Line editing** with history (`~/.blitz/history`, owner-only), Ctrl+R search, and Tab completion for `/commands`, their arguments and `@path` references.
+- **Line editing** with history (`~/.blitz/history`, owner-only) and Ctrl+R search.
+- **Completion**: Tab completes `/commands` at every level (`/skills registry add`, `/permissions allow … --save`), their values (models of every provider, agents, themes, sessions, `/config mode=` and the rest) and `@path` references; several candidates open a menu you move through with Tab or the arrows. As you type a command, the rest of it shows dimmed (→ takes it), then what it does. A slip is forgiven: Tab turns `/pmod` into `/pin_model`, and `/permisions` asks "Did you mean /permissions?". `/help <command>` shows a command's sub-commands, values and flags.
+- **Shell completion**: `blitz completion install` sets it up for zsh, bash or fish, so `blitz mcp remove <Tab>` offers your servers and `--permission-mode <Tab>` the modes.
 - **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.
 - **Streaming Markdown**, a progress spinner, and a usage line after each turn: `↳ 12.4k in · 1.2k out · context 12.3k · $0.0023`.
 - **Steering**: while the agent works, start typing (or press Ctrl+T) to send it a message. It reaches the agent with the next tool result, so nothing is interrupted. (macOS and Linux.)

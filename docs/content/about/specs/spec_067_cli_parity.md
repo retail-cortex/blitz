@@ -7,7 +7,7 @@ weight: 67
 
 | | |
 |---|---|
-| Status | **Phase 1 built** (CLP-01–04: the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached), phases 2–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
+| Status | **Phases 1–2 built**: CLP-01–04 (the banner, colour rules, first-run hints; the update notice waits for spec_054's check to be cached) and CLP-10–14 (the command tree, completion at every level, the hint and fuzzy Tab, shell completion; ranking by use isn't built), phases 3–6 planned (2026-11-22, the owner's ask: "ensure [the CLI] has the features required to access and edit the config and features now available in the desktop app … a Blitz banner on startup, powered by Retail Cortex. A crisp autocomplete, that includes sub commands. A better help system that can be agent driven when a provider is present … configure via the agent such as: look at this site X and configure the MCP server here"). Branch `cli-parity`. |
 | Source | `apps/cli/` (cobra commands, `helpgroups.go`, `configcmd.go`, `mcp.go`, `do.go`); `apps/cli/internal/tui/` (`repl.go`, `render.go`, `terminal.go`, `commands.go`, `commands_extra.go`, `status.go`, `theme.go`); `pkg/api/blitzcommands.go` (the catalog), `pkg/engine/blitzcommands.go` (its handlers), `pkg/engine/tools/blitz.go`; `pkg/config/mcpedit.go`, `providers.go` (`SetValue`); `pkg/i18n/locales/` |
 | Tests | Listed with each phase (§4). Every phase ends with the CLI's tests, `tools/check_format.sh`, and the journey tests of §4.8 |
 | Depends on | [spec_019_tui](spec_019_tui.md), [spec_020_cli](spec_020_cli.md), [spec_060_blitz_tools](spec_060_blitz_tools.md) (the catalog, approvals, `blitz do`), [spec_009_mcp](spec_009_mcp.md), [spec_004_i18n](spec_004_i18n.md), [spec_008_web](spec_008_web.md) |
@@ -84,16 +84,16 @@ This spec fixes that in phases small enough to land one at a time, each with its
   - aliases
   - custom commands as they are now, not as they were at start-up
   - `@` files and `@db:` connections, as today
-- **CLP-12** **A completion menu.**
-  - Tab on two or more candidates opens a menu under the line: each candidate with its one-line description, the match highlighted, at most 8 rows with scrolling, moved by Tab/Shift+Tab or the arrows, Enter or Tab to take, Esc to close.
-  - One candidate completes in place.
-  - As you type a slash command, its **ghost text** (the rest of the best match, dimmed) shows, and → accepts it.
-  - The menu uses readline's listener and painter hooks. If ergochat/readline v0.1.3 can't draw it, a small menu renderer of ours is drawn under the line, as the arrow-key pickers already are (`picker.go:315`).
-  - Plain terminals (CLP-03) keep today's list.
-- **CLP-13** **Fuzzy, not only prefix.** A candidate matches by prefix first, then by words (`/perm a` → `/permissions allow`), then by subsequence. Ties go to the most used in this install.
+- **CLP-12** **A completion menu and a hint.**
+  - Tab on one candidate completes in place. On several, it completes as far as they agree, then opens readline's menu under the line: Tab and the arrows move, Enter takes.
+  - As a slash command is typed, a dim **hint** after the cursor shows the rest of the word the candidates agree on (→ takes it). Once the command's name is typed, the hint is its usage and what it does: `/permissions  [allow|ask|deny|remove <rule> [--save]] — Rules for what runs…`.
+  - No hint without colour (CLP-03), while Ctrl+R searches, or when it wouldn't fit on the line.
+  - The hint uses only values already known (a source's answer is kept 10 s), so typing never waits on the service.
+  - ergochat/readline's menu has no room for descriptions, so they're in the hint and in `/help <command>` instead.
+- **CLP-13** **Fuzzy, not only prefix.** A candidate matches by prefix first, then by words (`/perm a` → `/permissions allow`), then by subsequence. (Ranking ties by use in this install is for later.) Tab takes a fuzzy match only when it is the one candidate and none starts with what's typed.
 - **CLP-14** **Shell completion from the same tree.**
-  - The cobra commands get `ValidArgsFunction` and flag completion from one table: agents, models, MCP servers, connectors, jobs, specs, skills, plugins, sessions, workspaces and config keys. Values are asked of the service when it runs, read from the files when it doesn't, and cut off after 300 ms.
-  - `blitz completion install` writes the script for the user's shell (zsh, bash or fish; PowerShell prints it), and `doctor` says when completion isn't installed.
+  - The cobra commands get `ValidArgsFunction` and flag completion from one table: agents, models, MCP servers, connectors, jobs, specs, skills, plugins, sessions, workspaces and config keys. Values come from the settings files and the catalog, never the network or the service (agents, models, jobs, specs and sessions are for later).
+  - `blitz completion install` writes the script for the user's shell (zsh, bash or fish; PowerShell prints it), and `doctor` says when completion isn't installed (spec_020 CLI-42).
 
 ### 3.3 Help (phase 3)
 

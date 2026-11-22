@@ -45,21 +45,31 @@ func TestHelpIsGroupedAndSorted(t *testing.T) {
 	// The groups, in order.
 	at := func(s string) int { return strings.Index(out, "\n"+s+"\n") }
 	var last int
-	for _, g := range helpGroups {
-		title := i18n.T(g.title)
-		require.NotEqual(t, g.title, title, "%s has no words", g.title)
+	for _, g := range helpGroupOrder {
+		title := i18n.T(g)
+		require.NotEqual(t, g, title, "%s has no words", g)
 		i := at(title)
 		require.Greater(t, i, last, "%q out of order:\n%s", title, out)
 		last = i
 	}
-	// Each group sorted by command.
-	for _, g := range helpGroups {
+	// Each group sorted by command, and every command's description has
+	// words.
+	for _, g := range helpGroupOrder {
 		var got []string
-		for _, r := range sortedRows(g.rows) {
+		for _, r := range helpRows(g) {
 			got = append(got, strings.TrimLeft(r[0], "/!"))
+			assert.NotEqual(t, r[1], i18n.T(r[1]), "%s has no words", r[1])
 		}
-		assert.True(t, slices.IsSorted(got), "%s: %v", g.title, got)
+		assert.True(t, slices.IsSorted(got), "%s: %v", g, got)
 	}
+	// Every built-in is listed, with its other names (CLP-10).
+	for _, c := range Commands {
+		assert.Contains(t, out, "/"+c.Name, "/help leaves out /%s", c.Name)
+		for _, a := range c.Aliases {
+			assert.Contains(t, out, "/"+a, "/help leaves out /%s's /%s", c.Name, a)
+		}
+	}
+	assert.Contains(t, out, ShellUsage)
 	// /mode offers auto, a workspace's default, to go back to.
 	assert.Contains(t, out, "/mode [auto|default|", "auto missing from /mode's usage")
 	// Custom commands after the built-ins: the bundled ones, then this

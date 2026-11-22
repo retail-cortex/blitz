@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -157,6 +158,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	addRunFlags(f, o)
 
 	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand())
+	addShellCompletion(root, &o.global)
 	groupHelp(root)
 	return root
 }
@@ -663,54 +665,31 @@ func resolvePrompt(flag string, args []string, stdinTTY, interactive bool, stdin
 	}
 }
 
-// newCompleter registers slash commands and dynamic argument sources.
+// newCompleter completes the REPL's command tree (spec_067_cli_parity
+// CLP-10, CLP-11), asking w for what the arguments can be.
 func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
-	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
-		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "reload", "approvals", "hooks", "goal", "loop", "style", "personality", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme", "processes", "ps", "data"} {
-		c.Command(cmd)
-	}
 	c.Mentions(func() []string { // @db:shop, @db:shop/top_customers (DAT-45)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		conns, _ := w.DataConnections(ctx)
 		return tui.DataMentions(conns)
 	})
-	c.Command("skills", "list", "show", "search", "update", "install", "registry")
-	c.Command("agents", "update")
-	c.Command("rules", "update")
-	c.Command("session", "list", "new", "load", "save")
-	c.Command("search", "web", "session", "files", "documents", "chats", "notes", "all", "status", "reindex")
-	c.Command("processes", "all", "log", "stop")
-	c.Command("envs", "prune", "remove")
-	c.Command("license", "full", "third-party")
-	c.Command("memory", "show", "reload", "add", "notes", "forget")
-	c.Command("approvals", "revoke", "clear")
-	c.Command("goal", "clear")
-	c.Command("loop", "stop")
-	c.Command("diff", "git")
-	c.Command("attach", "clear")
-	c.Command("undo", "--force")
-	c.Command("compact")
-	c.Command("set", "agency=")
-	c.Command("mode", "default", "accept-edits", "auto", "plan", "dont-ask", "bypass")
-	c.Command("permissions", "allow", "ask", "deny", "remove")
-	c.Command("effort", "minimal", "low", "medium", "high", "max", "auto")
-	c.Command("rewind", "--force")
-	for _, cmd := range w.ListCommands() { // custom commands, as they are at startup
-		c.Command(cmd.Name)
-	}
-	agentNames := func() []string {
+	c.Custom(func() []string { // as they are now, not as they were at start-up
+		var names []string
+		for _, cmd := range w.ListCommands() {
+			names = append(names, cmd.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcAgents, func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {
 			names = append(names, a.Name)
 		}
 		return names
-	}
-	c.Dynamic("agent", agentNames)
-	c.Dynamic("pin_model", agentNames)
-	c.Dynamic("unpin", func() []string {
+	})
+	c.Source(tui.SrcPinned, func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {
 			if a.PinnedModel != "" {
@@ -719,8 +698,31 @@ func newCompleter(w api.Backend) *tui.Completer {
 		}
 		return names
 	})
+	c.Source(tui.SrcModels, func() []string { // every provider's (spec_061_models)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		names := []string{w.Model().Name} // in use, whatever the providers list
+		for _, a := range w.ListAgents() {
+			if a.PinnedModel != "" {
+				names = append(names, a.PinnedModel)
+			}
+		}
+		list, err := w.ListModels(ctx, false)
+		if err != nil {
+			return names
+		}
+		for _, p := range list.Providers {
+			for _, m := range p.Models {
+				if p.Provider == list.DefaultProvider {
+					names = append(names, m.ID)
+				}
+				names = append(names, p.Provider+"/"+m.ID)
+			}
+		}
+		return names
+	})
 	// Models in use (the main one and any agent's) and those with settings.
-	c.Dynamic("model_settings", func() []string {
+	c.Source(tui.SrcModelSettings, func() []string {
 		names := []string{w.Model().Name}
 		for _, a := range w.ListAgents() {
 			if a.PinnedModel != "" {
@@ -732,7 +734,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 		}
 		return names
 	})
-	c.Dynamic("locale", func() []string {
+	c.Source(tui.SrcLocales, func() []string {
 		var tags []string
 		list, _ := w.AvailableLocales()
 		for _, m := range list {
@@ -740,7 +742,44 @@ func newCompleter(w api.Backend) *tui.Completer {
 		}
 		return tags
 	})
-	c.Dynamic("resume", func() []string {
+	c.Source(tui.SrcStyles, func() []string {
+		var names []string
+		for _, st := range w.ListStyles() {
+			names = append(names, st.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcPersonalities, func() []string {
+		var names []string
+		for _, p := range w.ListPersonalities() {
+			names = append(names, p.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcSkills, func() []string {
+		var names []string
+		for _, sk := range w.ListSkills() {
+			names = append(names, sk.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcTasks, func() []string {
+		var ids []string
+		for _, t := range w.ListTasks() {
+			ids = append(ids, t.ID)
+		}
+		return ids
+	})
+	c.Source(tui.SrcProcesses, func() []string {
+		var ids []string
+		if p := w.Processes(); p != nil {
+			for _, r := range p.Running() {
+				ids = append(ids, strconv.Itoa(r.ID))
+			}
+		}
+		return ids
+	})
+	c.Source(tui.SrcSessions, func() []string {
 		var ids []string
 		if list, err := w.ListSessions(false); err == nil {
 			for i, s := range list {
