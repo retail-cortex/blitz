@@ -317,6 +317,10 @@ func oneNamed(m map[string]any, name string) error {
 }
 
 // mcpServerTOML is s as a [[mcp.servers]] entry.
+// MCPServerTOML is the server's [[mcp.servers]] entry, as the settings
+// file keeps it (for an approval's diff, spec_067_cli_parity CLP-31).
+func MCPServerTOML(s MCPServerConfig) string { return mcpServerTOML(s) }
+
 func mcpServerTOML(s MCPServerConfig) string {
 	var b strings.Builder
 	b.WriteString("[[mcp.servers]]\n")

@@ -84,6 +84,7 @@ type stubBackend struct {
 	setPermission     func(mode string) (string, error)
 	settings          func() api.Settings
 	modelErr          func() error
+	reasoning         func(id string, turn int) (api.Reasoning, error)
 	sandboxSummary    func() []string
 	projectSettings   func() api.ProjectSettings
 	trustProject      func(hash string, trusted bool) error
@@ -473,6 +474,13 @@ func (s *stubBackend) Settings() api.Settings {
 		return s.settings()
 	}
 	return s.Backend.Settings()
+}
+
+func (s *stubBackend) Reasoning(id string, turn int) (api.Reasoning, error) {
+	if s.reasoning != nil {
+		return s.reasoning(id, turn)
+	}
+	return s.Backend.Reasoning(id, turn)
 }
 
 func (s *stubBackend) ModelErr() error {

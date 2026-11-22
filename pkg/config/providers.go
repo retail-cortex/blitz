@@ -534,6 +534,7 @@ var settableValues = map[string]bool{
 	"ui.task_alerts":   true,
 	"ui.theme":         true,
 	"ui.editor":        true,
+	"ui.banner":        true,
 	// Workspace search, from its panel in the desktop app.
 	"search.embedding_model": true,
 	"search.enrich_model":    true,
@@ -584,6 +585,10 @@ var typedValues = map[string]string{
 	"voice.listen":       "listen",
 	"voice.summaries":    "summaries",
 	"voice.idle_minutes": "idle",
+	"voice.noise":        "noise",
+	"voice.pause_ms":     "pausems",
+	"voice.start_ms":     "startms",
+	"voice.buffer_ms":    "bufferms",
 }
 
 // WorkerPermissionKinds are the permission kinds a worker may be given
@@ -664,6 +669,19 @@ func typedValue(kind, key, value string) (string, any, error) {
 			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(VoiceSummaries, ", "), value)
 		}
 		return strconv.Quote(value), value, nil
+	case "noise":
+		if !slices.Contains(VoiceNoises, value) {
+			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(VoiceNoises, " or "), value)
+		}
+		return strconv.Quote(value), value, nil
+	case "pausems", "startms", "bufferms":
+		r := map[string][2]int{"pausems": {MinVoicePauseMs, MaxVoicePauseMs}, "startms": {MinVoiceStartMs, MaxVoiceStartMs}, "bufferms": {MinVoiceBufferMs, MaxVoiceBufferMs}}[kind]
+		lo, hi := r[0], r[1]
+		n, err := strconv.Atoi(value)
+		if err != nil || n < lo || n > hi {
+			return "", nil, fmt.Errorf("%s is a number of milliseconds from %d to %d, not %q", key, lo, hi, value)
+		}
+		return strconv.Itoa(n), int64(n), nil
 	case "idle":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 1 || n > MaxVoiceIdle {
@@ -720,6 +738,9 @@ func typedValue(kind, key, value string) (string, any, error) {
 	}
 	return "", nil, fmt.Errorf("%s: unknown kind %q", key, kind)
 }
+
+// Settable reports whether SetValue sets key.
+func Settable(key string) bool { return settableValues[key] || typedValues[key] != "" }
 
 // SetValue sets one of the form's settings in a scope (value "" removes it,
 // so a workspace follows the global setting again). It returns the file

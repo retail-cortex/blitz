@@ -28,7 +28,7 @@ export function useVoiceSetup(dir: string): VoiceSetup & { refresh: () => void }
   const [setup, setSetup] = useState<VoiceSetup>({ enabled: false, notSetUp: "", mic: "unknown" });
   const refresh = useCallback(() => {
     voices.describeVoice({ workspace: dir }).then(
-      async (d) => setSetup({ enabled: d.enabled, notSetUp: d.notSetUp, summaries: d.summaries, mic: d.enabled ? await micPermission().then((p) => (p === "prompt" ? "unknown" : p)) : "unknown" }),
+      async (d) => setSetup({ enabled: d.enabled, notSetUp: d.notSetUp, summaries: d.summaries, bufferMs: d.bufferMs, mic: d.enabled ? await micPermission().then((p) => (p === "prompt" ? "unknown" : p)) : "unknown" }),
       () => setSetup((s) => ({ ...s, enabled: false })),
     );
   }, [dir]);
@@ -60,7 +60,8 @@ const framesPerSend = 5;
  * VOX-24): start and end, mute, hold to talk, and what's waiting, which
  * the service hears of as it changes.
  */
-export function useVoice(dir: string, sessionId: string, mic: string, handlers: VoiceHandlers, waiting: Waiting) {
+/** bufferMs is [voice] buffer_ms, how much of a reply is held before it plays (VOX-08). */
+export function useVoice(dir: string, sessionId: string, mic: string, handlers: VoiceHandlers, waiting: Waiting, bufferMs?: number) {
   const h = useRef(handlers);
   h.current = handlers;
   const live = useRef<{ abort: AbortController; mic: Mic | null; player: Player; id: string; sent: Waiting; heard: string; said: string; queue: Uint8Array[]; chain: Promise<unknown>; holding: boolean } | null>(null);
@@ -79,7 +80,10 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
     if (l.id) send(l, { end: true });
     l.abort.abort();
     l.mic?.close();
-    l.player.close();
+    // The voice ended it (its goodbye, a summary said): let what it said
+    // play out. Stopped by the person, or failed: at once.
+    if (why === "goodbye" || why === "summary") void l.player.closeAfterPlaying();
+    else l.player.close();
     setConversation(null);
     setEnder(null);
     if (why === "idle") h.current.error(t("desktop.voice.ended_idle"));
@@ -139,7 +143,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
   const start = useCallback(async () => {
     if (live.current || currentConversation()) return;
     const abort = new AbortController();
-    const l = { abort, mic: null as Mic | null, player: new Player(), id: "", sent: nothingWaiting, heard: "", said: "", queue: [] as Uint8Array[], chain: Promise.resolve() as Promise<unknown>, holding: false };
+    const l = { abort, mic: null as Mic | null, player: new Player(bufferMs), id: "", sent: nothingWaiting, heard: "", said: "", queue: [] as Uint8Array[], chain: Promise.resolve() as Promise<unknown>, holding: false };
     live.current = l;
     const conv: Conversation = { dir, sessionId, id: "", phase: "connecting", state: "listening", muted: false, holding: false, listen: "tap", model: "", voice: "", heard: "", said: "", error: "" };
     setConversation(conv);
@@ -166,7 +170,7 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
     }
     if (live.current === l) end();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dir, sessionId, mic, end]);
+  }, [dir, sessionId, mic, end, bufferMs]);
 
   // What waits on the person, each time it changes (VOX-13).
   useEffect(() => {

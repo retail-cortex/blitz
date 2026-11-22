@@ -72,7 +72,7 @@ func startBackground(ctx context.Context, out io.Writer, cfg *config.Config, t a
 }
 
 func newAgentsCommand() *cobra.Command {
-	var all bool
+	var all, asJSON bool
 	cmd := &cobra.Command{
 		Use:   "agents",
 		Short: "List the background runs in the Blitz service (blitz --bg), in every workspace",
@@ -86,11 +86,15 @@ func newAgentsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if asJSON { // CLP-53; none is [], not null
+				return writeJSON(cmd.OutOrStdout(), nonNil(list))
+			}
 			printRuns(cmd.OutOrStdout(), list, all, time.Now())
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Include the runs that ended")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
 	return cmd
 }
 

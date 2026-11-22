@@ -50,7 +50,7 @@ By phase. Each group's commands are listed by `blitz help`.
 | `job` | `job list`, `job create` (today's `create_job`, `list_jobs`) | `create` changes | 2 |
 | `workflow` | `workflow list`, `save`, `run` | `save` changes; `run` asks as its steps do | 3 |
 | `agent`, `skill` | `list`, `save` | `save` changes | 3 |
-| `settings` | `settings show`; `settings set` (model, image model, speech model, effort, permission mode) | `show` reads; `set` changes (the mode only tighter, DRV-71) | 1 |
+| `settings` | `settings show`; `settings set` (model, image model, speech model, effort, permission mode; since spec_067 CLP-32, the workspace's `ui.*`, `search.*`, models, default agent and provider); `settings reference` | `show`, `reference` read; `set` changes (the mode only tighter, DRV-71; never what loosens limits, redirects requests or writes elsewhere) | 1, 4 |
 | `doctor` | `doctor` (what `blitz doctor` checks: providers, keys, the service, sandbox, language servers, connections) | reads | 1 |
 | `org` | `org policy` (what the organization allows and locks), `org status` (signed in, catalog version, sync) | reads | 1 |
 | `open` | `open settings <section>`, `open view <changes\|processes\|pictures>` | opens | 2 |
@@ -59,7 +59,8 @@ By phase. Each group's commands are listed by `blitz help`.
 | `process` | `process list`, `process stop` | `stop` asks | 2 |
 | `approval` | `approval list`, `approval forget` (saved "always allow" rules) | `forget` changes, only ever making Blitz ask more | 2 |
 | `secret` | `secret list` (names only), `secret set <name>` (the value asked in the form, DRV-05) | `set` changes | 2 |
-| `mcp` | `mcp list`, `mcp add`, `mcp enable`, `mcp disable` | `add` and `enable` run code: asked with the exact command or address (DRV-75) | 4 |
+| `remove` (spec_067 CLP-34) | `connector remove`, `connector test`, `rule remove`, `guardrail remove`, `secret remove`, `workflow remove`, `skill remove` | each asked with the file that goes; this workspace's own only; `connector test` reads | 5 |
+| `mcp` | `mcp list`, `mcp add`, `mcp edit`, `mcp remove`, `mcp test`, `mcp enable`, `mcp disable` | `add`, `edit` and `enable` run code: asked with the server's settings in full and their source (DRV-75); `env` and `headers` take secrets as `${NAME}`, asked of the person and kept as `{secrets:NAME}` (spec_067 CLP-31) | 4 |
 | `rule`, `guardrail`, `command`, `hook` | `list`, `save` (Studio's other items) | `save` changes; a hook runs code (DRV-75) | 4 |
 | `plugin` | `plugin list`, `plugin install`, `plugin remove` | `install` brings code from elsewhere (DRV-75) | 4 |
 | `org` | `org publish` (an Admin's items to the organization's catalog, through its review) | changes, for Admins only | 4 |

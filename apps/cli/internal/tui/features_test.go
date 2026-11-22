@@ -133,9 +133,7 @@ func TestCompleter(t *testing.T) {
 	os.WriteFile(filepath.Join(ws, "src", "main.go"), nil, 0o644)
 	os.WriteFile(filepath.Join(ws, ".env"), nil, 0o644)
 	c := NewCompleter(ws)
-	c.Command("undo", "--force")
-	c.Command("help")
-	c.Dynamic("agent", func() []string { return []string{"helios", "blitz"} })
+	c.Source(SrcAgents, func() []string { return []string{"helios", "blitz"} })
 
 	do := func(line string) []string {
 		cands, _ := c.Do([]rune(line), len([]rune(line)))
@@ -146,14 +144,11 @@ func TestCompleter(t *testing.T) {
 		return out
 	}
 	got := do("/un")
-	assert.Len(t, got, 1, "/un -> %q", got)
-	assert.Equal(t, "do ", got[0], "/un -> %q", got)
+	assert.Equal(t, []string{"do ", "pin "}, got, "/un -> %q", got)
 	got = do("/agent he")
-	assert.Len(t, got, 1, "/agent he -> %q", got)
-	assert.Equal(t, "lios", got[0], "/agent he -> %q", got)
+	assert.Equal(t, []string{"lios "}, got, "/agent he -> %q", got)
 	got = do("/undo ")
-	assert.Len(t, got, 1, "/undo -> %q", got)
-	assert.Equal(t, "--force", got[0], "/undo -> %q", got)
+	assert.Equal(t, []string{"--force "}, got, "/undo -> %q", got)
 	assert.Equal(t, "main.go,pkg/", strings.Join(do("look at @src/"), ","), "@src/ ->")
 	// Negative: hidden files only when asked for, no traversal, nothing for plain words.
 	got = do("@")

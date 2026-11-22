@@ -32,12 +32,13 @@ The flags a run takes, on `blitz` and on `blitz exec`:
 |---|---|
 | `-d, --dir DIR`, `-c, --config DIR` | The workspace (default the current directory) and the folder of the settings file (default `~/.blitz`); every command takes them |
 | `-p, --prompt TEXT` (`-` reads stdin), `-i, --interactive` | A one-shot prompt; `-i` (on `blitz`, not `exec`) opens the interactive session even when a prompt is given |
+| `-q, --quiet`, `--color auto\|always\|never` | Open the interactive session without the banner; colour the output on a terminal (`auto`, the default, also honours `NO_COLOR`, `CLICOLOR_FORCE`, `FORCE_COLOR` and `TERM=dumb`) |
 | `-a, --agent NAME`, `-m, --model REF`, `--agency LEVEL`, `--effort LEVEL` | The agent, the model, how much it does on its own (`low`…`extreme`), and the reasoning effort |
 | `-r, --resume [ID\|NAME]`, `-C, --continue`, `--fork`, `--name TITLE` | Resume a session (or start one from a snapshot), continue the latest; `--fork` continues in a copy of it, leaving it as it was; `--name` names the new session |
 | `--allow RULE`, `--deny RULE` | A [permission rule](../guide/safety.md) for this run only, such as `--allow "shell(go test *)"` or `--deny "shell(git push *)"` (repeatable) |
 | `--permission-mode MODE` | Start in `auto` (the default), `default`, `accept-edits`, `plan`, `dont-ask` or `bypass` (needs the OS sandbox) |
 | `--plan`, `--image FILE`, `--bg` | A plan-only run; an image for the first prompt (repeatable); a background run in the service |
-| `-w, --worktree[=NAME]`, `--ref REF` | Start in a new git worktree, from `REF` |
+| `--worktree[=NAME]`, `--ref REF` (`-w` too, for a release: it will mean `--workspace`) | Start in a new git worktree, from `REF` |
 | `--add-dir DIR`, `--plugin-dir DIR`, `--append-system-prompt[-file]`, `--local`, `--trust-project` | Settings of the run's own: they run in a private service (above) |
 | `--output-format`, `--input-format`, `--json-schema`, `--max-turns`, `--max-cost-usd`, `--timeout`, `--no-session-persistence` | [Scripting](#scripting) |
 
@@ -95,8 +96,12 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz security`, `blitz security fix-apparmor` | Whether the OS sandbox for the agent's commands works here; on Linux, where AppArmor stops bubblewrap, install an AppArmor profile that lets bwrap alone through (asks for your password with sudo) |
 | `blitz security scan-secrets --staged`, `blitz security scan-secrets <file>…` | Look for API keys and other secrets in what the commit being made adds, or in the files named; exits 1 naming each file and line (the value masked). The pre-commit hook runs it |
 | `blitz security install-hook [dir]` | Add the pre-commit hook that stops commits adding secrets (`.githooks/pre-commit`, `core.hooksPath`) to the repository, unless it uses other hooks |
+| `blitz configure <what>` | Hand a setup to Blitz's agent: "the MCP server at https://…", "use the dracula theme"; it reads the page, shows each change before making it, and asks secrets of you, hidden |
+| `blitz docs [page\|words]`, `blitz help "<question>"` | Read the docs of your release, offline: a page (`blitz docs mcp`) or the sections that match; ask how to do something, answered from the docs by your model (or, without one, the matching sections and commands) |
 | `blitz doctor [--online]` | Checks the settings, credentials, sandbox, MCP servers, hooks and skills; `--online` also calls each model and a test search |
 | `blitz config init\|show\|path` | Writes, shows or locates the settings file |
+| `blitz config get <key>`, `blitz config set <key> <value> [-w]`, `blitz config reference [key]` | One setting: its value here (`--json`), changed for every workspace or (`-w`) this one and taken up at once by the open workspaces, or what each does with its type and default |
+| `blitz config edit [-w]`, `blitz config check [file]` | Open the settings file in `$EDITOR` and check it when you save (with a second go when it has errors), or just check it, by line |
 | `blitz config set-key\|keys\|secure-key\|remove-key` | API keys in the OS keychain ([providers](../guide/providers.md)) |
 | `blitz eval <name>` | [Runs an eval](../guide/evals.md): each case on its agents, scored; exits 1 when it fails, for CI (`--case`, `--json`) |
 | `blitz hook run <pre-commit\|pre-push>` | [Runs the workflows on a git hook](../guide/workflows.md#running-before-a-commit-or-push), on the changes; exits 1 when one fails, which stops the commit or push |
@@ -104,8 +109,10 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz pkg add \| verify \| validate \| compile \| list \| search \| publish` | [The workspace's agents, skills and workflows as packages](../guide/packages.md): from your organization's registry, GitHub or a folder, locked and verified |
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
 | `blitz data list`, `blitz data query <connection> ["<sql>"]` | [The workspace's databases](../guide/databases.md#in-the-terminal): lists them and their saved queries; runs SQL or a saved query (`--query`) read-only and prints the table (`--params`, `--max-rows`, `--json`, `--csv`) |
-| `blitz jobs …` | Lists, enables, runs, undoes and shows the history of [jobs](../guide/workers.md) |
+| `blitz jobs …` | Lists, enables, runs, undoes, removes and shows the history of [jobs](../guide/workers.md) |
 | `blitz mcp add\|list\|get\|remove\|enable\|disable\|login\|logout …` | Adds and manages [MCP servers](../guide/mcp.md); `login` signs in to one over OAuth |
+| `blitz providers list\|add\|check\|use\|remove` | The model providers in one place: `add` asks for the key (hidden) and checks it works before saving it; see [providers](../guide/providers.md) |
+| `blitz service logs [--level l] [--grep words] [--day d] [-f]`, `--days` | The service's log, read from its files (so it works when the service doesn't): the newest day, oldest record first, filtered; `-f` keeps watching |
 | `blitz service install\|uninstall\|restart\|status` | Starts the service at login, or stops doing so; `restart` restarts it so it reads changed settings, MCP servers and plugins |
 | `blitz init` | Runs `/setup` unattended: sets up the project for agents (`.agents/AGENTS.md` and the files that import it) |
 | `blitz license [full\|third-party]` | The NOTICE, the Apache License, or the notices of the software Blitz includes |
@@ -114,6 +121,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz auth status\|login <provider>\|logout <provider>` | Sign in to or out of Google, Anthropic, AWS or Azure with its own tool ([providers](../guide/providers.md)) |
 | `blitz trust [dir]` | Show a workspace's project settings and trust or decline them |
 | `blitz sessions export <id> [-o file]` | A session as Markdown, or Word for a `.docx` name, without opening the workspace |
+| `blitz sessions list [--all] [--json]`, `blitz sessions reasoning <id> [--turn n] [--full]` | The saved sessions, newest first; a turn's reasoning as a tree (the desktop app's Reasoning view, in the terminal) |
 | `blitz sessions usage <id>` | What a session spent: each model call (when, what for, which model, its tokens and cost), then the totals by model and purpose |
 | `blitz jobs move <name> [--anyway]` | Move a job to your organization's service, saying first what can't run there ([organization](../guide/organization.md)) |
 | `blitz enterprise connect\|disconnect\|login [--browser]\|logout\|status\|terms\|about` | Your [organization's service](../guide/organization.md): connect, sign in, its status, accepting its terms, and what it says about itself (about text, support, privacy notice) |
@@ -125,7 +133,13 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 
 ## The interactive session
 
-- **Line editing** with history (`~/.blitz/history`, owner-only), Ctrl+R search, and Tab completion for `/commands`, their arguments and `@path` references.
+- **The banner**: the Blitz wordmark, the version, then the workspace and its git branch, the agent and model, the permission mode (red when unsafe) and the sandbox. `ui.banner = "compact"` keeps it to one line (as do a terminal narrower than 60 columns and a resumed session), `"off"` or `-q` hides it. The hints on steering and keys show the first time; `/help` has them after.
+- **Line editing** with history (`~/.blitz/history`, owner-only) and Ctrl+R search.
+- **Completion**: Tab completes `/commands` at every level (`/skills registry add`, `/permissions allow … --save`), their values (models of every provider, agents, themes, sessions, `/config mode=` and the rest) and `@path` references; several candidates open a menu you move through with Tab or the arrows. As you type a command, the rest of it shows dimmed (→ takes it), then what it does. A slip is forgiven: Tab turns `/pmod` into `/pin_model`, and `/permisions` asks "Did you mean /permissions?". `/help <command>` shows a command's sub-commands, values and flags.
+- **Reasoning**: `/reasoning` draws the last turn as a tree: each model call with its tokens, time and cost, the steps of reasoning it shared, its tools (✓ or ✗) and sub-agents; `/reasoning 3 --full` shows turn 3 with every step's text, `/reasoning turns` lists them.
+- **Removing asks first**: `mcp remove`, `plugin remove`, `skills uninstall`, `memory forget`, `picture delete`, `jobs remove` and `providers remove` ask on a terminal (`-y` doesn't; a script goes ahead as it always has), and each also answers to `remove`, `rm` and `delete`.
+- **Help that answers**: `? how do I add an MCP server that needs a token` asks Blitz. It answers from its own docs, which it carries, with the command to type and a link, as an aside the chat doesn't keep; without a model it shows the docs' sections and the commands that match. `/help` with words does the same, `/help <command>` explains one, `/docs` reads the docs.
+- **Shell completion**: `blitz completion install` sets it up for zsh, bash or fish, so `blitz mcp remove <Tab>` offers your servers and `--permission-mode <Tab>` the modes.
 - **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.
 - **Streaming Markdown**, a progress spinner, and a usage line after each turn: `↳ 12.4k in · 1.2k out · context 12.3k · $0.0023`.
 - **Steering**: while the agent works, start typing (or press Ctrl+T) to send it a message. It reaches the agent with the next tool result, so nothing is interrupted. (macOS and Linux.)
@@ -169,7 +183,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz skills registry add\|list\|remove`, `blitz skills search\|install\|update\|uninstall\|list` | Skills from registries such as Castor, hash-checked ([skills](../guide/skills.md#skills-from-a-registry)) |
 | `blitz plugin install\|list\|show\|enable\|disable\|remove\|update`, `blitz plugin marketplace add\|list\|remove`, `blitz plugin import claude\|gemini <dir>`, `--plugin-dir <dir>` | Plugins: skills, commands, agents, hooks and MCP servers in one bundle ([extending](../guide/extending.md#plugins)) |
 | `blitz --bg "<prompt>"` | Start the prompt as a background run in the Blitz service and return |
-| `blitz agents [--all]`, `blitz attach <id>`, `blitz logs <id> [-f]`, `blitz stop <id>` | The background runs in every workspace; follow one in the REPL, answering what it asks, then carry on in its session; show what it has done; stop it |
+| `blitz runs [--all]`, `blitz runs attach <id>`, `blitz runs logs <id> [-f]`, `blitz runs stop <id>` (`blitz agents`, `attach`, `logs` and `stop` work for a release; then `blitz agents` lists your agents) | The background runs in every workspace; follow one in the REPL, answering what it asks, then carry on in its session; show what it has done; stop it |
 | `blitz update [--check]` | Install the latest release over this one, its signature and checksum checked |
 | `blitz models [provider…]` | The models your providers offer, with the prices Blitz knows |
 | `blitz picture "<prompt>"` (or `-` / a pipe for stdin), `blitz picture models\|list`, `blitz picture show\|delete <session>` | [Make pictures](../guide/images.md#pictures-from-the-terminal) with an image model, as the desktop's Pictures does: `--model`, `--ratio`, `--size`, `-n/--count`, `--ref path[:character\|object\|style]`, `--thinking`, `--search[=image]`, `--avoid`, `--people`, `--format`, `--quality`, `--seed`, `--enhance`, `-o/--out`, `--continue <session>`; prints each saved picture and the cost. `show` prints a session's turns (`--json` for JSON) |

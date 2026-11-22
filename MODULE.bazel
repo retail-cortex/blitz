@@ -103,12 +103,16 @@ go_deps_root.module_override(
 # and the caller's input forwarded), which a websocket doesn't allow (the
 # race detector catches it), and it drops the run's realtime input
 # settings, so hold to talk couldn't turn Gemini's activity detection off.
-# The patch serializes the writes and passes the settings on.
+# The patch serializes the writes and passes the settings on. And it sends
+# the person's audio as the deprecated media chunks to every Gemini API
+# model but 3.1, which the models after 2.5 don't read: live_audio_field
+# sends them audio (2.0 and 2.5 keep media chunks).
 go_deps_root.module_override(
     patch_strip = 1,
     patches = [
         "//third_party/adk_go:live_write_lock.patch",
         "//third_party/adk_go:live_realtime_config.patch",
+        "//third_party/adk_go:live_audio_field.patch",
     ],
     path = "google.golang.org/adk/v2",
 )

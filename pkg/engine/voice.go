@@ -170,7 +170,7 @@ func (w *Workspace) StartVoice(ctx context.Context, opts VoiceOptions) (*Voice, 
 		return nil, err
 	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	live, events, err := r.RunLive(runCtx, "person", "voice-"+opts.SessionID, runtime.VoiceLiveConfig(v.voiceName(), cfg.Voice.ListenMode() == config.VoiceListenHold))
+	live, events, err := r.RunLive(runCtx, "person", "voice-"+opts.SessionID, runtime.VoiceLiveConfig(v.voiceName(), cfg.Voice))
 	if err != nil {
 		cancel()
 		return nil, err

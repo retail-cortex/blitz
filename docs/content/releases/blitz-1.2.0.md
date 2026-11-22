@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.2.0
-weight: 1
+weight: 2
 ---
 
 See how the agent thinks. The new **Reasoning** view draws each turn as a map: every model call, the reasoning it shared, the tools it chose and what came back, live as the turn runs and for every chat you've had. And this release is the most hardened Blitz yet, with a new mode for when you really do want the agent outside its sandbox.

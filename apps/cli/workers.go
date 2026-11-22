@@ -45,6 +45,7 @@ type workerOps interface {
 	RunningWorkerRuns() ([]api.Run, error)
 	StopWorkerRun(runID string) error
 	MoveToService(ctx context.Context, name string, force bool) ([]string, bool, error)
+	DeleteWorker(name string) error
 }
 
 // openWorkers reaches the workspace's workers in the Blitz service (started
@@ -132,6 +133,8 @@ main for the service to pick it up (a workspace with sync on does that).`,
 			RunE: func(cmd *cobra.Command, args []string) error { return workersStop(cmd, g, args[0]) }},
 		undo,
 		move,
+		asksBeforeRemove(&cobra.Command{Use: "remove <name>", Short: "Remove a job: its folder and its schedule (its past runs stay); one running is refused", Args: cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error { return workersRemove(cmd, g, args[0]) }}, removeQuestion("remove.job")),
 	)
 	return cmd
 }
@@ -306,6 +309,18 @@ func workersDisable(cmd *cobra.Command, g *globalFlags, name string) error {
 		return workerErr(err)
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), i18n.T("jobs.disabled", "name", name))
+	return nil
+}
+
+func workersRemove(cmd *cobra.Command, g *globalFlags, name string) error {
+	ops, err := openWorkers(cmd.Context(), g)
+	if err != nil {
+		return err
+	}
+	if err := ops.DeleteWorker(name); err != nil {
+		return workerErr(err)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), i18n.T("jobs.removed", "name", name))
 	return nil
 }
 

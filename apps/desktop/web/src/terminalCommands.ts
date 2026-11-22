@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-// The terminal's slash commands, read from its source (the REPL's
-// helpGroups in apps/cli/internal/tui/commands.go), for the tests that keep
-// the window's commands and the docs in step with them.
+// The terminal's slash commands, read from its source (the REPL's command
+// tree, Commands in apps/cli/internal/tui/commandtree.go, spec_067_cli_parity
+// CLP-10), for the tests that keep the window's commands and the docs in step
+// with them.
 
-/** The command names in the REPL's helpGroups usages: "/config [...], /set" is config and set. */
+/** The top-level command names and aliases in the REPL's command tree, and ! when it runs shell commands. */
 export function terminalCommands(source: string): string[] {
-  const start = source.indexOf("var helpGroups");
+  const start = source.indexOf("var Commands = []*Command{");
   const end = source.indexOf("\n}\n", start);
   const block = source.slice(start, end);
   const names = new Set<string>();
-  for (const [, usage] of block.matchAll(/\{"([^"]+)", "help\.[a-z_]+"\}/g)) {
-    for (const part of usage.split(", ")) {
-      if (part.startsWith("!")) names.add("!");
-      const m = /^\/([a-z_]+)/.exec(part);
-      if (m) names.add(m[1]);
-    }
+  for (const [, line] of block.matchAll(/^\t\{(Name: .*)$/gm)) {
+    const name = /^Name: "([a-z_]+)"/.exec(line);
+    if (name) names.add(name[1]);
+    const aliases = /Aliases: \[\]string\{([^}]*)\}/.exec(line);
+    for (const [, a] of (aliases?.[1] ?? "").matchAll(/"([a-z_]+)"/g)) names.add(a);
   }
+  if (source.includes('"!<command>"')) names.add("!");
   return [...names].sort();
 }

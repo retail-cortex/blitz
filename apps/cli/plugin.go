@@ -287,7 +287,7 @@ func newPluginCommandWith(g *globalFlags, store *plugins.Store) *cobra.Command {
 	importCmd.Flags().StringVarP(&out, "out", "o", "", "Where to write the plugin (default <dir>-blitz)")
 
 	cmd.AddCommand(install, update, list, show, toggle("enable", "Load a plugin in every workspace", true),
-		toggle("disable", "Stop loading a plugin", false), remove, market, importCmd)
+		toggle("disable", "Stop loading a plugin", false), asksBeforeRemove(remove, removeQuestion("remove.plugin")), market, importCmd)
 	return cmd
 }
 

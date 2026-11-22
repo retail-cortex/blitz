@@ -385,3 +385,33 @@ func choicesOf(list []*pb.QuestionChoice) []api.Choice {
 	}
 	return out
 }
+
+// reasoningOf is a reasoning graph from the service (spec_066_reasoning).
+func reasoningOf(m *pb.GetReasoningResponse) api.Reasoning {
+	out := api.Reasoning{Turn: int(m.GetTurn()), Cut: m.GetCut()}
+	for _, t := range m.GetTurns() {
+		out.Turns = append(out.Turns, api.ReasoningTurn{
+			Index: int(t.GetIndex()), Prompt: t.GetPrompt(), Start: timeOf(t.GetStart()),
+			Calls: int(t.GetCalls()), Thoughts: int(t.GetThoughts()), Usage: usage(t.GetUsage()),
+		})
+	}
+	for _, n := range m.GetNodes() {
+		node := api.ReasoningNode{
+			ID: n.GetId(), Parent: n.GetParent(), Kind: n.GetKind(), Title: n.GetTitle(), Text: n.GetText(), Author: n.GetAuthor(),
+			Provider: n.GetProvider(), Model: n.GetModel(), Tool: n.GetTool(), Status: n.GetStatus(),
+			Start: timeOf(n.GetStart()), Duration: time.Duration(n.GetDurationMs()) * time.Millisecond, Hidden: n.GetHidden(),
+		}
+		if a := n.GetArgs(); a != nil {
+			node.Args = a.AsMap()
+		}
+		if r := n.GetResult(); r != nil {
+			node.Result = r.AsMap()
+		}
+		if u := n.GetUsage(); u != nil {
+			x := usage(u)
+			node.Usage = &x
+		}
+		out.Nodes = append(out.Nodes, node)
+	}
+	return out
+}

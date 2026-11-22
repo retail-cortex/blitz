@@ -28,6 +28,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -38,6 +40,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 
+	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -51,9 +54,13 @@ var version = "dev"
 
 // rootOptions are the flags of the main (prompt/REPL) command.
 type rootOptions struct {
-	global       globalFlags
-	prompt       string
-	interactive  bool
+	global      globalFlags
+	prompt      string
+	interactive bool
+	quiet       bool // --quiet: no banner (CLP-02)
+	// ask is blitz help's question: the run answers it from the docs, as
+	// an aside (spec_067_cli_parity CLP-22).
+	ask          string
 	version      bool
 	resume       string
 	cont         bool
@@ -101,7 +108,7 @@ func main() {
 	stopPrivate() // a run's own service stops with it
 	waitForPing()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, i18n.T("repl.error", "error", err))
+		fmt.Fprintln(os.Stderr, i18n.T("repl.error", "error", errorText(err, os.Getenv("BLITZ_DEBUG") != "")))
 	}
 	os.Exit(exitCodeFor(err))
 }
@@ -132,6 +139,7 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 		// AI-01, AI-03), but --version (this root's own flag) and help
 		// (Cobra's, a command like any other); --help doesn't run this.
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			tui.SetColor(tui.ColorWanted(o.global.color, stdoutIsTerminal(), nil), nil) // CLP-03
 			if v, err := cmd.Flags().GetBool("version"); (err == nil && v) || cmd.Name() == "help" {
 				return
 			}
@@ -146,13 +154,17 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 	pf := root.PersistentFlags()
 	pf.StringVarP(&o.global.config, "config", "c", "", "Directory containing .env.toml config (default ~/.blitz)")
 	pf.StringVarP(&o.global.dir, "dir", "d", "", "Workspace directory to start in (default: current directory)")
+	pf.StringVar(&o.global.color, "color", "auto", "Colour the output: auto (on a terminal, unless NO_COLOR is set), always or never")
 
 	f := root.Flags()
 	f.BoolVarP(&o.interactive, "interactive", "i", false, "Start the interactive REPL even when a prompt is given")
+	f.BoolVarP(&o.quiet, "quiet", "q", false, "Start the interactive REPL without the banner")
 	f.BoolVarP(&o.version, "version", "v", false, "Print Blitz version")
 	addRunFlags(f, o)
 
-	root.AddCommand(newExecCommand(o), newInitCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newAgentsCommand(), newAttachCommand(o), newLogsCommand(), newStopCommand(), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand())
+	root.AddCommand(newExecCommand(o), newInitCommand(o), newConfigureCommand(o), newDoctorCommand(&o.global), newConfigCommand(&o.global), newServeCommand(), newWorkersCommand(&o.global), newServiceCommand(&o.global), newLicenseCommand(), newTrustCommand(&o.global), newMCPCommand(&o.global), newWorktreesCommand(&o.global), newMemoryCommand(&o.global), newSpecCommand(&o.global), newPictureCommand(&o.global), newDoCommand(&o.global), newPluginCommand(&o.global), newSkillsCommand(&o.global), newModelsCommand(&o.global), newUpdateCommand(), newSessionsCommand(&o.global), newRunsCommand(o), agentsForNow(), movedToRuns(newAttachCommand(o)), movedToRuns(newLogsCommand()), movedToRuns(newStopCommand()), newSecurityCommand(), newSearchCommand(&o.global), newDataCommand(&o.global), newEvalCommand(&o.global), newAuthCommand(&o.global), newEnterpriseCommand(&o.global), newHookCommand(&o.global), newPkgCommand(&o.global), newGitCredentialCommand(), newDocsCommand(&o.global), newProvidersCommand(&o.global))
+	root.SetHelpCommand(newHelpCommand(root, o))
+	addShellCompletion(root, &o.global)
 	groupHelp(root)
 	return root
 }
@@ -161,12 +173,16 @@ Exit codes: 0 success, 1 error, 2 usage, 3 a limit stopped the run
 func addRunFlags(f *pflag.FlagSet, o *rootOptions) {
 	f.StringVarP(&o.prompt, "prompt", "p", "", `One-shot prompt; "-" reads it from stdin`)
 	f.StringVarP(&o.global.agent, "agent", "a", "", "Agent to activate (blitz, helios, qa, ...)")
+	_ = f.MarkShorthandDeprecated("agent", "use --agent; -a will mean --all, as it does elsewhere")
 	f.StringVarP(&o.global.model, "model", "m", "", "Model identifier to use")
 	f.StringVar(&o.global.agency, "agency", "", "Agency level (low, medium, high, extreme)")
 	f.BoolVar(&o.global.trustProject, "trust-project", false, "Trust the workspace's project settings (.blitz/settings.toml) for this run, without recording it")
 	f.BoolVar(&o.global.trustProject, "trust-workspace", false, "Deprecated since v0.2.0: --trust-project")
 	_ = f.MarkHidden("trust-workspace")
 	f.StringVarP(&o.global.worktree, "worktree", "w", "", "Start in a new git worktree (.blitz/worktrees/<name>, branch blitz/<name>); no name: one is made up")
+	// -w means --workspace on every other command, -a --all (CLP-51):
+	// these two work for a release, saying so.
+	_ = f.MarkShorthandDeprecated("worktree", "use --worktree; -w will mean --workspace, as it does elsewhere")
 	f.Lookup("worktree").NoOptDefVal = "new"
 	f.StringArrayVar(&o.global.addDirs, "add-dir", nil, "Let the agent read and write this directory too, for this run, as sandbox.allowed_paths does (repeatable; runs in a private service)")
 	f.StringArrayVar(&o.global.pluginDirs, "plugin-dir", nil, "Load the plugin in this directory for the run (repeatable; runs in a private service)")
@@ -207,6 +223,27 @@ func newInitCommand(root *rootOptions) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.global = root.global // persistent flags (--dir, --config)
 			o.prompt, o.command = "/setup", true
+			return runRoot(cmd, o, nil)
+		},
+	}
+}
+
+// newConfigureCommand is blitz configure: Blitz set up by asking its
+// agent (/configure, spec_067_cli_parity CLP-30), every change asked in
+// this terminal.
+func newConfigureCommand(root *rootOptions) *cobra.Command {
+	o := &rootOptions{requirePrompt: true, outputFormat: formatText}
+	return &cobra.Command{
+		Use:   "configure <what to set up>",
+		Short: "Set Blitz up by asking: an MCP server from its docs page, a model or setting, a connection (/configure)",
+		Long: "Blitz's agent reads the page you name, finds what the setup needs and makes the change with Blitz's own commands. " +
+			"Each change is shown and asked first; secrets are asked of you, hidden, and kept as Blitz secrets.",
+		Example: "  blitz configure the MCP server described at https://github.com/github/github-mcp-server\n" +
+			"  blitz configure use the dracula theme and turn workspace search on",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o.global = root.global // persistent flags (--dir, --config)
+			o.prompt, o.command = "/configure "+strings.Join(args, " "), true
 			return runRoot(cmd, o, nil)
 		},
 	}
@@ -438,6 +475,10 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	}
 	if merr := w.ModelErr(); merr != nil {
 		msg := i18n.T("startup.model_failed", "error", modelErrorText(merr, cfg))
+		if o.ask != "" { // blitz help "<question>" without a model: the docs answer (CLP-23)
+			tui.AnswerOffline(cmd.OutOrStdout(), o.ask, i18n.T("ask.no_model"))
+			return nil
+		}
 		if oneShot {
 			// Every turn would fail; say why at once, with an exit code.
 			return withCode(exitFailure, fmt.Errorf("%s (run 'blitz doctor')", msg))
@@ -518,11 +559,11 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			warnFn(i18n.T("startup.cost_unpriced", "model", model))
 		}
 		run := oneShotOptions{
-			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan,
+			prompt: prompt, sessionID: sess.ID, format: o.outputFormat, maxTurns: o.maxTurns, plan: o.plan, aside: o.ask != "", send: askPrompt(o.ask),
 			maxCostUSD: o.maxCostUSD, timeout: o.timeout, command: o.command,
 			input: input, stdinTTY: stdinTTY && !stdinUsed && !streamIn, stdout: os.Stdout,
 			markdown: pretty && cfg.UI.Markdown, spinner: pretty && cfg.UI.Spinner, width: terminalWidth(),
-			usageLines: pretty, images: attached, theme: cfg.UI.Theme, schema: schema,
+			usageLines: pretty, images: attached, theme: themeFor(cfg.UI.Theme), schema: schema,
 		}
 		if streamIn {
 			return runStreamInput(ctx, w, run, os.Stdin)
@@ -533,14 +574,24 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 	if resumed && sess.Workspace != "" && sess.Workspace != w.Dir() {
 		warnFn(i18n.T("resume.other_workspace_id", "id", sess.ID, "workspace", sess.Workspace))
 	}
+	banner := cfg.UI.Banner
+	var recap func()
+	if o.quiet {
+		banner = tui.BannerOff
+	}
 	if resumed {
+		if banner != tui.BannerOff {
+			banner = tui.BannerCompact // then the recap (CLP-02)
+		}
 		msg := i18n.T("resume.starting", "id", sess.ID, "messages", i18n.N("session.messages", sess.MessageCount))
 		if o.resume != "" && o.resume != "latest" && o.resume != sess.ID { // a snapshot name
 			msg = i18n.T("snapshot.branched", "id", sess.ID, "name", o.resume, "messages", i18n.N("session.messages", sess.MessageCount))
 		}
-		fmt.Printf("%s%s%s\n", tui.Green, msg, tui.Reset)
-		tui.PrintRecap(sess.Messages, 3)
-		fmt.Println()
+		recap = func() {
+			fmt.Printf("%s%s%s\n", tui.Green, msg, tui.Reset)
+			tui.PrintRecap(sess.Messages, 3)
+			fmt.Println()
+		}
 	}
 	return tui.RunREPL(ctx, &tui.App{
 		Workspace:     w,
@@ -554,6 +605,10 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 		ConfigDir:     o.global.config,
 		Notify:        notifier(cfg, pretty),
 		StatusLine:    statusLine(cfg, pretty),
+		Banner:        banner,
+		Width:         terminalWidth(),
+		StateDir:      config.Dir(),
+		AfterBanner:   recap,
 		Follow:        follower(w, o.attachRun),
 		FollowID:      o.attachRun,
 		FirstPrompt:   prompt, // -i with a prompt: sent first (N26 cli-2#4)
@@ -584,7 +639,7 @@ func runRoot(cmd *cobra.Command, o *rootOptions, args []string) (err error) {
 			}, nil
 		},
 		Printer: tui.PrinterOptions{
-			Out: os.Stdout, Markdown: pretty && cfg.UI.Markdown, Theme: cfg.UI.Theme,
+			Out: os.Stdout, Markdown: pretty && cfg.UI.Markdown, Theme: themeFor(cfg.UI.Theme),
 			Width: terminalWidth(), Spinner: pretty && cfg.UI.Spinner,
 		},
 	})
@@ -645,54 +700,31 @@ func resolvePrompt(flag string, args []string, stdinTTY, interactive bool, stdin
 	}
 }
 
-// newCompleter registers slash commands and dynamic argument sources.
+// newCompleter completes the REPL's command tree (spec_067_cli_parity
+// CLP-10, CLP-11), asking w for what the arguments can be.
 func newCompleter(w api.Backend) *tui.Completer {
 	c := tui.NewCompleter(w.Dir())
-	for _, cmd := range []string{"help", "agents", "model", "skills", "session", "set", "clear", "sandbox", "exit", "quit",
-		"undo", "checkpoints", "diff", "cost", "context", "compact", "memory", "reload", "approvals", "hooks", "goal", "loop", "style", "personality", "fork", "export", "mcp", "resume", "locale", "attach", "paste",
-		"tools", "plan", "show", "init", "mode", "permissions", "effort", "rewind", "pin_model", "unpin", "model_settings", "search", "btw", "rename", "envs", "tasks", "cd", "trust", "license", "status", "copy", "config", "theme", "processes", "ps", "data"} {
-		c.Command(cmd)
-	}
 	c.Mentions(func() []string { // @db:shop, @db:shop/top_customers (DAT-45)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		conns, _ := w.DataConnections(ctx)
 		return tui.DataMentions(conns)
 	})
-	c.Command("skills", "list", "show", "search", "update", "install", "registry")
-	c.Command("agents", "update")
-	c.Command("rules", "update")
-	c.Command("session", "list", "new", "load", "save")
-	c.Command("search", "web", "session", "files", "documents", "chats", "notes", "all", "status", "reindex")
-	c.Command("processes", "all", "log", "stop")
-	c.Command("envs", "prune", "remove")
-	c.Command("license", "full", "third-party")
-	c.Command("memory", "show", "reload", "add", "notes", "forget")
-	c.Command("approvals", "revoke", "clear")
-	c.Command("goal", "clear")
-	c.Command("loop", "stop")
-	c.Command("diff", "git")
-	c.Command("attach", "clear")
-	c.Command("undo", "--force")
-	c.Command("compact")
-	c.Command("set", "agency=")
-	c.Command("mode", "default", "accept-edits", "auto", "plan", "dont-ask", "bypass")
-	c.Command("permissions", "allow", "ask", "deny", "remove")
-	c.Command("effort", "minimal", "low", "medium", "high", "max", "auto")
-	c.Command("rewind", "--force")
-	for _, cmd := range w.ListCommands() { // custom commands, as they are at startup
-		c.Command(cmd.Name)
-	}
-	agentNames := func() []string {
+	c.Custom(func() []string { // as they are now, not as they were at start-up
+		var names []string
+		for _, cmd := range w.ListCommands() {
+			names = append(names, cmd.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcAgents, func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {
 			names = append(names, a.Name)
 		}
 		return names
-	}
-	c.Dynamic("agent", agentNames)
-	c.Dynamic("pin_model", agentNames)
-	c.Dynamic("unpin", func() []string {
+	})
+	c.Source(tui.SrcPinned, func() []string {
 		var names []string
 		for _, a := range w.ListAgents() {
 			if a.PinnedModel != "" {
@@ -701,8 +733,31 @@ func newCompleter(w api.Backend) *tui.Completer {
 		}
 		return names
 	})
+	c.Source(tui.SrcModels, func() []string { // every provider's (spec_061_models)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		names := []string{w.Model().Name} // in use, whatever the providers list
+		for _, a := range w.ListAgents() {
+			if a.PinnedModel != "" {
+				names = append(names, a.PinnedModel)
+			}
+		}
+		list, err := w.ListModels(ctx, false)
+		if err != nil {
+			return names
+		}
+		for _, p := range list.Providers {
+			for _, m := range p.Models {
+				if p.Provider == list.DefaultProvider {
+					names = append(names, m.ID)
+				}
+				names = append(names, p.Provider+"/"+m.ID)
+			}
+		}
+		return names
+	})
 	// Models in use (the main one and any agent's) and those with settings.
-	c.Dynamic("model_settings", func() []string {
+	c.Source(tui.SrcModelSettings, func() []string {
 		names := []string{w.Model().Name}
 		for _, a := range w.ListAgents() {
 			if a.PinnedModel != "" {
@@ -714,7 +769,7 @@ func newCompleter(w api.Backend) *tui.Completer {
 		}
 		return names
 	})
-	c.Dynamic("locale", func() []string {
+	c.Source(tui.SrcLocales, func() []string {
 		var tags []string
 		list, _ := w.AvailableLocales()
 		for _, m := range list {
@@ -722,7 +777,44 @@ func newCompleter(w api.Backend) *tui.Completer {
 		}
 		return tags
 	})
-	c.Dynamic("resume", func() []string {
+	c.Source(tui.SrcStyles, func() []string {
+		var names []string
+		for _, st := range w.ListStyles() {
+			names = append(names, st.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcPersonalities, func() []string {
+		var names []string
+		for _, p := range w.ListPersonalities() {
+			names = append(names, p.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcSkills, func() []string {
+		var names []string
+		for _, sk := range w.ListSkills() {
+			names = append(names, sk.Name)
+		}
+		return names
+	})
+	c.Source(tui.SrcTasks, func() []string {
+		var ids []string
+		for _, t := range w.ListTasks() {
+			ids = append(ids, t.ID)
+		}
+		return ids
+	})
+	c.Source(tui.SrcProcesses, func() []string {
+		var ids []string
+		if p := w.Processes(); p != nil {
+			for _, r := range p.Running() {
+				ids = append(ids, strconv.Itoa(r.ID))
+			}
+		}
+		return ids
+	})
+	c.Source(tui.SrcSessions, func() []string {
 		var ids []string
 		if list, err := w.ListSessions(false); err == nil {
 			for i, s := range list {
@@ -802,4 +894,85 @@ func startLog(cfg *config.Config, warn func(string)) func() {
 	slog.SetDefault(logger)
 	slog.Info("start", "version", version, "socket", socket.DefaultSocket())
 	return func() { f.Close() }
+}
+
+// themeFor is the Markdown style to render with: notty, without colour,
+// when colour is off (NO_COLOR, --color=never; CLP-03).
+func themeFor(theme string) string {
+	if !tui.ColorOn() {
+		return "notty"
+	}
+	return theme
+}
+
+// askPrompt is what blitz help sends the model for a question ("" for none).
+func askPrompt(question string) string {
+	if question == "" {
+		return ""
+	}
+	return tui.HelpPrompt(question)
+}
+
+// newHelpCommand is blitz help: a command's help, or, for words that name
+// no command, Blitz's answer to them from its docs (spec_067_cli_parity
+// CLP-22), or the docs' and commands' matches without a model (CLP-23).
+func newHelpCommand(root *cobra.Command, o *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "help [command | question]",
+		Short: "Help about any command, or ask Blitz how to do something",
+		Long: "With a command, its help. With a question, Blitz answers it from its docs using your model, in a session kept nowhere; " +
+			"without a model set up, it shows the docs' sections and the commands that match.",
+		Example: "  blitz help mcp add\n  blitz help \"how do I add an MCP server that needs a token?\"",
+		ValidArgsFunction: func(c *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			cmd, _, err := root.Find(args)
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			var names []string
+			for _, sub := range cmd.Commands() {
+				if sub.IsAvailableCommand() && strings.HasPrefix(sub.Name(), toComplete) {
+					names = append(names, sub.Name())
+				}
+			}
+			return names, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return root.Help()
+			}
+			if target, rest, err := root.Find(args); err == nil && target != root && len(rest) == 0 {
+				return target.Help()
+			}
+			o.ask = strings.Join(args, " ")
+			o.noPersist = true // the question's session is kept nowhere
+			err := runRoot(c, o, []string{"? " + o.ask})
+			if err != nil && exitCodeFor(err) != exitUsage { // the model failed: the docs answer (CLP-23)
+				tui.AnswerOffline(c.OutOrStdout(), o.ask, i18n.T("ask.model_failed", "error", tui.FirstLine(err.Error())))
+				return nil
+			}
+			return err
+		},
+	}
+}
+
+// rpcPrefix is how a gRPC status reads in an error's text.
+var rpcPrefix = regexp.MustCompile(`rpc error: code = \w+ desc = `)
+
+// errorText is what the person reads for err (spec_067_cli_parity
+// CLP-24): the service's own message, without the RPC's code ("not_found:
+// …", "rpc error: code = …"), which BLITZ_DEBUG=1 keeps, with the rest of
+// the chain.
+func errorText(err error, debug bool) string {
+	if debug {
+		return err.Error()
+	}
+	var ce *connect.Error
+	if errors.As(err, &ce) && ce.Message() != "" {
+		text := err.Error()
+		if i := strings.Index(text, ce.Error()); i > 0 { // what wraps it, then its message
+			return text[:i] + ce.Message()
+		}
+		return ce.Message()
+	}
+	return rpcPrefix.ReplaceAllString(err.Error(), "")
 }

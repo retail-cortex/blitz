@@ -914,3 +914,31 @@ func TestSetProfile(t *testing.T) {
 	_, err = SetValue("", "", "profile.gender", "a\nb")
 	assert.ErrorContains(t, err, "one line")
 }
+
+// The voice's hearing and playback settings (spec_063_voice VOX-08): set
+// within their ranges; outside them, refused, and read as the defaults.
+func TestVoiceHearingSettings(t *testing.T) {
+	dir := t.TempDir()
+	for key, value := range map[string]string{"voice.noise": "noisy", "voice.pause_ms": "1500", "voice.start_ms": "200", "voice.buffer_ms": "300"} {
+		_, err := SetValue(dir, "", key, value)
+		require.NoError(t, err, key)
+	}
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+	v := cfg.Voice
+	assert.Equal(t, VoiceNoiseNoisy, v.NoiseMode())
+	assert.Equal(t, 1500, v.Pause())
+	assert.Equal(t, 200, v.Start())
+	assert.Equal(t, 300, v.Buffer())
+	for key, value := range map[string]string{"voice.noise": "loud", "voice.pause_ms": "50", "voice.start_ms": "9000", "voice.buffer_ms": "x"} {
+		_, err := SetValue(dir, "", key, value)
+		assert.Error(t, err, key)
+	}
+	_, err = SetValue(dir, t.TempDir(), "voice.noise", "noisy")
+	assert.Error(t, err, "the person's own: no workspace changes it")
+	none := VoiceConfig{PauseMs: 1, StartMs: 99999, BufferMs: -5}
+	assert.Equal(t, VoiceNoiseNormal, none.NoiseMode())
+	assert.Zero(t, none.Pause())
+	assert.Zero(t, none.Start())
+	assert.Equal(t, MinVoiceBufferMs, none.Buffer(), "the default")
+}

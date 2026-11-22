@@ -34,7 +34,9 @@ import (
 // globalFlags are shared by the root command and subcommands.
 type globalFlags struct {
 	config, dir, model, agent, agency string
-	trustProject                      bool
+	// color is --color: auto, always or never (spec_067_cli_parity CLP-03).
+	color        string
+	trustProject bool
 	// worktree starts in a new git worktree of that name ("new": one
 	// named for the time), from ref (HEAD when "").
 	worktree, ref string

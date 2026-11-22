@@ -210,7 +210,7 @@ func newSkillsCommandWith(store *skillreg.Store, g *globalFlags) *cobra.Command 
 		},
 	}
 
-	cmd.AddCommand(registry, search, install, update, uninstall, installed)
+	cmd.AddCommand(registry, search, install, update, asksBeforeRemove(uninstall, removeQuestion("remove.skill")), installed)
 	return cmd
 }
 

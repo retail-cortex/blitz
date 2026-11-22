@@ -149,6 +149,10 @@ type SessionBackend interface {
 	// ExportSession is a session (the active one when "") as Markdown,
 	// secrets masked (/export).
 	ExportSession(id string) (string, error)
+	// Reasoning is session id's turns and the graph of its turn-th (from
+	// 0; negative or past the end: the last), as the Reasoning view draws
+	// it (spec_066_reasoning RSN-01; /reasoning, spec_067 CLP-47).
+	Reasoning(id string, turn int) (Reasoning, error)
 	// MoveSession carries session id into this workspace from the one it
 	// was in, and makes it active (/cd).
 	MoveSession(id string) (SessionInfo, error)

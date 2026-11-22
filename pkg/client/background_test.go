@@ -123,3 +123,62 @@ func TestSettingsChangedReachesWatchers(t *testing.T) {
 	}
 	assert.True(t, found, "the rule isn't in force: %+v", rules)
 }
+
+// SetConfigValue sets a key in the global settings or a workspace's, and
+// a key it doesn't set is refused (spec_067_cli_parity CLP-40).
+func TestSetConfigValue(t *testing.T) {
+	r, url := attachURL(t, nil)
+	s := AttachSettingsHTTP(http.DefaultClient, url)
+	c, err := s.SetConfigValue(context.Background(), "", "ui.theme", "dracula")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(config.ConfigDir(""), ".env.toml"), c.Path)
+	c, err = s.SetConfigValue(context.Background(), r.dir, "ui.banner", "compact")
+	require.NoError(t, err)
+	assert.NotEmpty(t, c.Path)
+	cfg, err := config.LoadWorkspace("", r.dir)
+	require.NoError(t, err)
+	assert.Equal(t, "dracula", cfg.UI.Theme)
+	assert.Equal(t, "compact", cfg.UI.Banner)
+	_, err = s.SetConfigValue(context.Background(), "", "sandbox.allow_network", "true")
+	assert.Error(t, err)
+}
+
+// Reasoning comes back from the service with its turns and nodes
+// (spec_066_reasoning; /reasoning, CLP-47).
+func TestRemoteReasoning(t *testing.T) {
+	r, _ := attachURL(t, nil, text("first answer"), text("second answer"))
+	s, err := r.NewSession()
+	require.NoError(t, err)
+	for _, p := range []string{"one", "two"} {
+		_, err = r.Run(context.Background(), s.ID, api.Turn{Text: p, Timeout: time.Minute}, func(api.Event) {})
+		require.NoError(t, err)
+	}
+	got, err := r.Reasoning(s.ID, -1)
+	require.NoError(t, err)
+	require.Len(t, got.Turns, 2)
+	assert.Equal(t, 1, got.Turn, "the last")
+	assert.Equal(t, "two", got.Turns[1].Prompt)
+	require.NotEmpty(t, got.Nodes)
+	kinds := map[string]bool{}
+	for _, n := range got.Nodes {
+		kinds[n.Kind] = true
+	}
+	assert.True(t, kinds["turn"] && kinds["call"], "%v", kinds)
+	first, err := r.Reasoning(s.ID, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, first.Turn)
+	none, err := r.Reasoning("nope", -1)
+	require.NoError(t, err)
+	assert.Empty(t, none.Turns, "a session without a log has no turns")
+}
+
+// CheckAPIKey refuses what it can't check: no key, or a provider that
+// takes none (a real key's check is the provider's, not tested here).
+func TestCheckAPIKeyRefuses(t *testing.T) {
+	_, url := attachURL(t, nil)
+	s := AttachSettingsHTTP(http.DefaultClient, url)
+	_, err := s.CheckAPIKey(context.Background(), "", "gemini", " ")
+	assert.ErrorContains(t, err, "no key to check")
+	_, err = s.CheckAPIKey(context.Background(), "", "ollama", "k")
+	assert.ErrorContains(t, err, "takes no API key")
+}

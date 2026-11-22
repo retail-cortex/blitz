@@ -239,11 +239,11 @@ func TestNewCompleter(t *testing.T) {
 		got, _ := c.Do([]rune(line), len([]rune(line)))
 		var out []string
 		for _, r := range got {
-			out = append(out, line[strings.LastIndex(line, " ")+1:]+string(r))
+			out = append(out, strings.TrimSuffix(line[strings.LastIndex(line, " ")+1:]+string(r), " "))
 		}
 		return out
 	}
-	assert.Contains(t, complete("/he"), "/help ")
+	assert.Contains(t, complete("/he"), "/help")
 	assert.Contains(t, complete("/agent "), "qa")
 	assert.Contains(t, complete("/pin_model "), "blitz")
 	assert.Equal(t, []string{"qa"}, complete("/unpin "))
@@ -252,10 +252,18 @@ func TestNewCompleter(t *testing.T) {
 	assert.Contains(t, complete("/resume "), sess.ID)
 	assert.Contains(t, complete("/resume "), "before", "snapshots by name")
 	// /processes and /search's sources complete too (N26 cli-2#12).
-	assert.Contains(t, complete("/proc"), "/processes ")
+	assert.Contains(t, complete("/proc"), "/processes")
+	assert.Contains(t, complete("/model "), e.Model().Name, "the model in use, and every provider's (CLP-11)")
+	assert.Contains(t, complete("/model "), "gemini-3.8-pro", "a pinned one")
 	assert.Contains(t, complete("/processes "), "log")
 	assert.Contains(t, complete("/search "), "documents")
 	assert.Contains(t, complete("/search "), "reindex")
+	// Styles, personalities and skills complete from the workspace's own
+	// lists, built-ins too (CLP-11).
+	for line, want := range map[string]string{"/style ": "default", "/personality ": "friendly", "/skills show ": "blitz"} {
+		assert.Contains(t, complete(line), want, line)
+	}
+	assert.Empty(t, complete("/tasks show "), "no background tasks yet")
 	got, _ := c.Do([]rune("look at @db:"), len("look at @db:")) // asks the workspace for its connections (DAT-45)
 	assert.Empty(t, got, "no connections: no mentions")
 }

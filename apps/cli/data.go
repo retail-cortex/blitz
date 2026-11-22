@@ -215,6 +215,14 @@ func dataConnectionsJSON(conns []api.DataConnection) []dataConnectionJSON {
 	return out
 }
 
+// nonNil is list, or an empty one for nil, so JSON says [] for none.
+func nonNil[T any](list []T) []T {
+	if list == nil {
+		return []T{}
+	}
+	return list
+}
+
 func writeJSON(out io.Writer, v any) error {
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")

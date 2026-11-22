@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -141,4 +142,72 @@ func TestSessionsServiceDown(t *testing.T) {
 		_, err := runCLI(t, args...)
 		assert.ErrorContains(t, err, "service down")
 	}
+}
+
+// blitz sessions list and reasoning (spec_067_cli_parity CLP-47, CLP-48).
+func TestSessionsListAndReasoning(t *testing.T) {
+	isolate(t)
+	store, err := session.NewStorage(config.DefaultConfig().Session.StorageDir)
+	require.NoError(t, err)
+	rec, err := store.CreateSession("", "Fix the build", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, store.AddMessage("user", "why does it fail?"))
+
+	out, err := runCLI(t, "sessions", "list", "--all")
+	require.NoError(t, err)
+	assert.Contains(t, out, rec.ID)
+	assert.Contains(t, out, "Fix the build")
+	out, err = runCLI(t, "sessions", "list", "--all", "--json")
+	require.NoError(t, err)
+	var list []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &list))
+	require.NotEmpty(t, list)
+	assert.Equal(t, rec.ID, list[0]["ID"])
+
+	out, err = runCLI(t, "sessions", "reasoning", rec.ID)
+	require.NoError(t, err)
+	assert.Contains(t, out, "No turn to show yet", "no event log yet: nothing to draw")
+}
+
+// blitz help with a question and no model answers from the docs; blitz
+// configure without one says why (CLP-22, CLP-23, CLP-30).
+func TestHelpQuestionAndConfigureWithoutAModel(t *testing.T) {
+	isolate(t)
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	out, err := runCLI(t, "help", "how", "do", "I", "add", "an", "MCP", "server")
+	require.NoError(t, err)
+	assert.Contains(t, out, "MCP servers")
+	assert.Contains(t, out, "blitz config set-key")
+	_, err = runCLI(t, "configure", "the", "dracula", "theme")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "blitz doctor")
+}
+
+// The JSON is for scripts: an empty list is [], a session without turns has
+// none, and the session list names what was saved (CLP-53).
+func TestRunsAndReasoningJSON(t *testing.T) {
+	isolate(t)
+	store, err := session.NewStorage(config.DefaultConfig().Session.StorageDir)
+	require.NoError(t, err)
+	rec, err := store.CreateSession("", "Fix the build", "blitz")
+	require.NoError(t, err)
+	require.NoError(t, store.AddMessage("user", "why does it fail?")) // an empty session isn't listed
+
+	out, err := runCLI(t, "sessions", "reasoning", rec.ID, "--json")
+	require.NoError(t, err)
+	var r api.Reasoning
+	require.NoError(t, json.Unmarshal([]byte(out), &r))
+	assert.Empty(t, r.Turns, "nothing has run in it")
+
+	out, err = runCLI(t, "runs", "--json")
+	require.NoError(t, err)
+	assert.JSONEq(t, "[]", out, "no runs is an empty list, not null")
+
+	out, err = runCLI(t, "sessions", "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No saved sessions here yet", "it belongs to no workspace, so not this one")
+	out, err = runCLI(t, "sessions", "list", "--all")
+	require.NoError(t, err)
+	assert.Contains(t, out, rec.ID+"  Fix the build  1 message")
 }

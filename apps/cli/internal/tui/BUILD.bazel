@@ -19,10 +19,14 @@ go_library(
     name = "tui",
     srcs = [
         "attach.go",
+        "banner.go",
         "cd.go",
         "commands.go",
         "commands_extra.go",
+        "commandtree.go",
+        "complete.go",
         "data.go",
+        "docs.go",
         "envs.go",
         "exit.go",
         "follow.go",
@@ -45,6 +49,7 @@ go_library(
         "pickers.go",
         "processes.go",
         "project.go",
+        "reasoning.go",
         "render.go",
         "repl.go",
         "rewind.go",
@@ -70,6 +75,7 @@ go_library(
         "//pkg/legal",
         "//pkg/skillreg",
         "//pkg/textutil",
+        "//pkg/userdocs",
         "@com_github_burntsushi_toml//:toml",
         "@com_github_charmbracelet_glamour//:glamour",
         "@com_github_ergochat_readline//:readline",
@@ -96,6 +102,7 @@ go_test(
     size = "small",
     srcs = [
         "attach_test.go",
+        "banner_test.go",
         "btw_test.go",
         "cd_test.go",
         "choose_test.go",
@@ -103,7 +110,10 @@ go_test(
         "commands_extra_test.go",
         "commands_more_test.go",
         "commands_new_test.go",
+        "commandtree_test.go",
+        "complete_test.go",
         "data_test.go",
+        "docs_test.go",
         "envs_test.go",
         "exit_test.go",
         "extensions_more_test.go",
@@ -131,6 +141,7 @@ go_test(
         "pin_test.go",
         "processes_test.go",
         "project_test.go",
+        "reasoning_test.go",
         "remote_test.go",
         "rename_test.go",
         "repl_more_test.go",
@@ -171,6 +182,7 @@ go_test(
         "//pkg/secrets",
         "//pkg/service/servicetest",
         "//pkg/skillreg",
+        "//pkg/userdocs",
         "@com_github_ergochat_readline//:readline",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
@@ -195,11 +207,11 @@ go_test(
     }),
 )
 
-# The REPL's commands (/help's list, helpGroups), in the output tree, for
+# The REPL's commands (its command tree, Commands), in the output tree, for
 # the desktop page's test that its slash commands match them
 # (//apps/desktop/web:test, spec_024_desktop DSK-102).
 copy_to_bin(
     name = "commands",
-    srcs = ["commands.go"],
+    srcs = ["commandtree.go"],
     visibility = ["//apps/desktop/web:__pkg__"],
 )

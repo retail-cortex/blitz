@@ -52,7 +52,7 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 
 	switch cmd {
 	case "help":
-		printHelp(app)
+		printHelp(app, args)
 
 	case "agents":
 		fmt.Printf("\n%s%s:%s\n", Bold, i18n.T("agents.title"), Reset)
@@ -170,6 +170,11 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 		}
 		fmt.Println()
 
+	case "docs":
+		ShowDocs(os.Stdout, "/docs", strings.Join(args, " "), func(md string) string {
+			return RenderMarkdown(md, app.Printer.Theme, app.Printer.Width, app.Printer.Markdown)
+		})
+
 	case "exit", "quit":
 		return true, ErrExit
 
@@ -181,95 +186,53 @@ func HandleCommand(ctx context.Context, input string, app *App) (bool, error) {
 			return false, nil // the REPL runs it as a turn
 		}
 		fmt.Printf("%s%s%s\n", Yellow, i18n.T("command.unknown", "command", safe(cmd)), Reset)
+		if near := nearest(Commands, cmd); near != "" { // CLP-24
+			fmt.Printf("%s%s%s\n", Dim, i18n.T("command.did_you_mean", "command", "/"+near), Reset)
+		}
 	}
 
 	return true, nil
 }
 
-// helpGroups are /help's built-in commands in groups (shown in this
-// order, each sorted by command): usage, and the description's key.
-var helpGroups = []struct {
-	title string // its i18n key
-	rows  [][2]string
-}{
-	{"help.group.session", [][2]string{
-		{"/btw <question>", "help.btw"},
-		{"/checkpoints", "help.checkpoints"},
-		{"/clear", "help.clear"},
-		{"/compact [focus]", "help.compact"},
-		{"/context", "help.context"},
-		{"/copy [n]", "help.copy"},
-		{"/cost", "help.cost"},
-		{"/export [file]", "help.export"},
-		{"/fork [n]", "help.fork"},
-		{"/rename <name>", "help.rename"},
-		{"/rewind [n [mode]] [--force]", "help.rewind"},
-		{"/session list [--all]|new|load <id|name>|save <name>", "help.session"},
-		{"/status", "help.status"},
-		{"/undo [--force]", "help.undo"},
-	}},
-	{"help.group.agents", [][2]string{
-		{"/agent [name]", "help.agent"},
-		{"/agents", "help.agents"},
-		{"/effort [minimal|low|medium|high|max|auto]", "help.effort"},
-		{"/model [name]", "help.model"},
-		{"/model_settings [<model> [key=value…|reset]]", "help.model_settings"},
-		{"/pin_model [<agent> <model>]", "help.pin"},
-		{"/style [name]", "help.style"},
-		{"/personality [name]", "help.personality"},
-		{"/unpin <agent>", "help.unpin"},
-	}},
-	{"help.group.work", [][2]string{
-		{"/goal [<condition>|clear]", "help.goal"},
-		{"/loop [<interval> <prompt>|stop <n>]", "help.loop"},
-		{"/plan <goal>", "help.plan"},
-		{"/search [files|documents|chats|notes|all|web|session] <terms>, /search status|reindex", "help.search"},
-		{"/tasks [show|stop <id>]", "help.tasks"},
-		{"/processes [all|log <id>|stop <id>…|stop flagged|stop all]", "help.processes"},
-		{"/data", "help.data_cli"},
-	}},
-	{"help.group.workspace", [][2]string{
-		{"!<command>", "help.shell"},
-		{"/attach [path|clear]", "help.attach"},
-		{"/cd [path]", "help.cd"},
-		{"/diff [git]", "help.diff"},
-		{"/init", "help.init"},
-		{"/memory [reload|add <note>|notes|forget <name>]", "help.memory"},
-		{"/reload", "help.reload"},
-		{"/paste", "help.paste"},
-		{"/trust", "help.trust"},
-	}},
-	{"help.group.safety", [][2]string{
-		{"/approvals [revoke <n>|clear]", "help.approvals"},
-		{"/hooks", "help.hooks"},
-		{"/mode [auto|default|accept-edits|plan|dont-ask|bypass]", "help.mode"},
-		{"/permissions [allow|ask|deny|remove <rule> [--save]]", "help.permissions"},
-		{"/sandbox", "help.sandbox"},
-	}},
-	{"help.group.extensions", [][2]string{
-		{"/envs [prune|remove <key>]", "help.envs"},
-		{"/mcp", "help.mcp"},
-		{"/skills list|show <name>|search <q>", "help.skills"},
-		{"/tools", "help.tools"},
-	}},
-	{"help.group.settings", [][2]string{
-		{"/config [key=value [--save]], /set", "help.set"},
-		{"/exit, /quit", "help.exit"},
-		{"/license [full|third-party]", "help.license"},
-		{"/locale [code]", "help.locale"},
-		{"/theme [name [--save]]", "help.theme"},
-	}},
+// helpGroupOrder is the order /help shows its groups in.
+var helpGroupOrder = []string{"help.group.session", "help.group.agents", "help.group.work", "help.group.workspace", "help.group.safety", "help.group.extensions", "help.group.settings"}
+
+// helpRows are a group's commands as /help shows them, by name: usage, and
+// the description's key.
+func helpRows(group string) [][2]string {
+	var rows [][2]string
+	for _, c := range Commands {
+		if c.Group != group {
+			continue
+		}
+		usage := "/" + c.Name
+		if c.Usage != "" {
+			usage += " " + c.Usage
+		}
+		for _, a := range c.Aliases {
+			usage += ", /" + a
+		}
+		rows = append(rows, [2]string{usage, c.Help})
+	}
+	if group == "help.group.workspace" {
+		rows = append(rows, [2]string{ShellUsage, "help.shell"})
+	}
+	return sortedRows(rows)
 }
 
 // customSources is the order /help lists custom commands in, by source
 // ("mcp" for every MCP server's prompts); others follow, by name.
 var customSources = []string{"bundled", "project", "user", "plugin", "skill", "mcp"}
 
-func printHelp(app *App) {
+func printHelp(app *App, args []string) {
+	if len(args) > 0 {
+		printCommandHelp(app, args)
+		return
+	}
 	fmt.Printf("\n%s%s%s\n", Bold, i18n.T("help.title"), Reset)
-	for _, g := range helpGroups {
-		fmt.Printf("\n%s%s%s\n", Bold, i18n.T(g.title), Reset)
-		for _, r := range sortedRows(g.rows) {
+	for _, g := range helpGroupOrder {
+		fmt.Printf("\n%s%s%s\n", Bold, i18n.T(g), Reset)
+		for _, r := range helpRows(g) {
 			fmt.Printf("  %s%-36s%s %s\n", Bold, r[0], Reset, i18n.T(r[1]))
 		}
 	}
@@ -452,6 +415,8 @@ func handleSkillsCommand(ctx context.Context, args []string, app *App) {
 			return
 		}
 		fmt.Printf("%s✓ %s%s\n", Green, i18n.T("skills.installed_from", "name", i.Name, "version", i.Version, "registry", i.Registry), Reset)
+	default:
+		unknownSub("skills", sub)
 	}
 }
 
@@ -538,6 +503,8 @@ func handleSessionCommand(args []string, app *App) {
 			return
 		}
 		fmt.Printf("%s %s%s\n", Green, i18n.T("session.started", "id", s.ID), Reset)
+	default:
+		unknownSub("session", sub)
 	}
 }
 

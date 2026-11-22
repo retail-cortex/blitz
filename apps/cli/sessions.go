@@ -80,7 +80,61 @@ func newSessionsCommand(g *globalFlags) *cobra.Command {
 			return err
 		},
 	}
-	cmd.AddCommand(export, usage)
+	var all, asJSON, full bool
+	var turn int
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List this workspace's saved sessions (--all: every workspace's), newest first",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			list, err := r.ListSessions(all)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), nonNil(list))
+			}
+			if len(list) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), i18n.T("sessions.none"))
+				return nil
+			}
+			for _, s := range list {
+				title := cmp.Or(s.Title, s.Snapshot, "-")
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", s.ID, title, i18n.N("session.messages", s.MessageCount))
+			}
+			return nil
+		},
+	}
+	list.Flags().BoolVarP(&all, "all", "a", false, "Every workspace's sessions")
+	list.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	reasoning := &cobra.Command{
+		Use:   "reasoning <session-id>",
+		Short: "Show a turn's reasoning as a tree: its model calls, the steps they shared, tools and sub-agents (the last turn unless --turn)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := attachWorkspace(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			got, err := r.Reasoning(args[0], turn-1)
+			if err != nil {
+				return withCode(exitUsage, err)
+			}
+			if asJSON {
+				return writeJSON(cmd.OutOrStdout(), got)
+			}
+			tui.PrintReasoning(cmd.OutOrStdout(), got, full)
+			return nil
+		},
+	}
+	reasoning.Flags().IntVar(&turn, "turn", 0, "The turn, from 1 (default: the last)")
+	reasoning.Flags().BoolVar(&full, "full", false, "Each step's text too")
+	reasoning.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	cmd.AddCommand(export, usage, list, reasoning)
 	return cmd
 }
 

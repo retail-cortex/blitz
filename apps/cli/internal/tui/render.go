@@ -24,8 +24,9 @@ import (
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
-// ANSI color codes
-const (
+// ANSI colour codes. They're variables so that SetColor can blank them
+// all when colour is off (NO_COLOR, a pipe, --color=never: CLP-03).
+var (
 	Reset   = "\033[0m"
 	Bold    = "\033[1m"
 	Dim     = "\033[2m"
@@ -39,14 +40,6 @@ const (
 	BgBlack = "\033[40m"
 	BgBlue  = "\033[44m"
 )
-
-// PrintBanner prints the session's first lines: the app's name (the
-// organization's, spec_053 EN-51) and Blitz's version, the agent and model
-// in use, and how to get help or stop.
-func PrintBanner(version, agent, model string) {
-	fmt.Printf("%s%s%s %s  %s%s %s · %s %s%s\n", Bold, i18n.AppName(), Reset, version, Dim, i18n.T("banner.agent"), agent, i18n.T("banner.model"), model, Reset)
-	fmt.Printf("%s%s%s\n\n", Dim, i18n.T("banner.hint", "help", "/help", "key", "Ctrl+C"), Reset)
-}
 
 // safe prepares untrusted text (model output, tool args/results) for the
 // terminal by removing control sequences.

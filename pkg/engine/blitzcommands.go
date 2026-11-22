@@ -58,57 +58,69 @@ var blitzHandlers map[string]blitzHandler
 
 func init() {
 	blitzHandlers = map[string]blitzHandler{
-		"connector list":    (*Workspace).cmdConnectorList,
-		"connector save":    (*Workspace).cmdConnectorSave,
-		"connector enable":  (*Workspace).cmdConnectorOn,
-		"connector disable": (*Workspace).cmdConnectorOn,
-		"settings show":     (*Workspace).cmdSettingsShow,
-		"settings set":      (*Workspace).cmdSettingsSet,
-		"doctor":            (*Workspace).cmdDoctor,
-		"org policy":        (*Workspace).cmdOrgPolicy,
-		"org status":        (*Workspace).cmdOrgStatus,
-		"open url":          (*Workspace).cmdOpen,
-		"open file":         (*Workspace).cmdOpen,
-		"open studio":       (*Workspace).cmdOpen,
-		"open settings":     (*Workspace).cmdOpen,
-		"open view":         (*Workspace).cmdOpen,
-		"picture":           (*Workspace).cmdPicture,
-		"eval list":         (*Workspace).cmdEvalList,
-		"eval run":          (*Workspace).cmdEvalRun,
-		"eval results":      (*Workspace).cmdEvalResults,
-		"spec list":         (*Workspace).cmdSpecList,
-		"spec review":       (*Workspace).cmdSpecReview,
-		"spec verify":       (*Workspace).cmdSpecVerify,
-		"spec implement":    (*Workspace).cmdSpecImplement,
-		"memory list":       (*Workspace).cmdMemoryList,
-		"memory forget":     (*Workspace).cmdMemoryForget,
-		"chat new":          (*Workspace).cmdChatNew,
-		"chat export":       (*Workspace).cmdChatExport,
-		"chat search":       (*Workspace).cmdChatSearch,
-		"process list":      (*Workspace).cmdProcessList,
-		"process stop":      (*Workspace).cmdProcessStop,
-		"approval list":     (*Workspace).cmdApprovalList,
-		"approval forget":   (*Workspace).cmdApprovalForget,
-		"secret list":       (*Workspace).cmdSecretList,
-		"secret set":        (*Workspace).cmdSecretSet,
-		"workflow list":     (*Workspace).cmdWorkflowList,
-		"workflow save":     (*Workspace).cmdWorkflowSave,
-		"agent list":        (*Workspace).cmdAgentList,
-		"agent save":        (*Workspace).cmdAgentSave,
-		"skill list":        (*Workspace).cmdSkillList,
-		"skill save":        (*Workspace).cmdSkillSave,
-		"mcp list":          (*Workspace).cmdMCPList,
-		"mcp add":           (*Workspace).cmdMCPAdd,
-		"mcp enable":        (*Workspace).cmdMCPOn,
-		"mcp disable":       (*Workspace).cmdMCPOn,
-		"rule list":         (*Workspace).cmdRuleList,
-		"rule save":         (*Workspace).cmdRuleSave,
-		"guardrail list":    (*Workspace).cmdGuardrailList,
-		"guardrail save":    (*Workspace).cmdGuardrailSave,
-		"command list":      (*Workspace).cmdCommandList,
-		"command save":      (*Workspace).cmdCommandSave,
-		"hook list":         (*Workspace).cmdHookList,
-		"plugin list":       (*Workspace).cmdPluginList,
+		"connector list":     (*Workspace).cmdConnectorList,
+		"connector save":     (*Workspace).cmdConnectorSave,
+		"connector enable":   (*Workspace).cmdConnectorOn,
+		"connector disable":  (*Workspace).cmdConnectorOn,
+		"settings show":      (*Workspace).cmdSettingsShow,
+		"settings set":       (*Workspace).cmdSettingsSet,
+		"doctor":             (*Workspace).cmdDoctor,
+		"org policy":         (*Workspace).cmdOrgPolicy,
+		"org status":         (*Workspace).cmdOrgStatus,
+		"open url":           (*Workspace).cmdOpen,
+		"open file":          (*Workspace).cmdOpen,
+		"open studio":        (*Workspace).cmdOpen,
+		"open settings":      (*Workspace).cmdOpen,
+		"open view":          (*Workspace).cmdOpen,
+		"picture":            (*Workspace).cmdPicture,
+		"eval list":          (*Workspace).cmdEvalList,
+		"eval run":           (*Workspace).cmdEvalRun,
+		"eval results":       (*Workspace).cmdEvalResults,
+		"spec list":          (*Workspace).cmdSpecList,
+		"spec review":        (*Workspace).cmdSpecReview,
+		"spec verify":        (*Workspace).cmdSpecVerify,
+		"spec implement":     (*Workspace).cmdSpecImplement,
+		"memory list":        (*Workspace).cmdMemoryList,
+		"memory forget":      (*Workspace).cmdMemoryForget,
+		"chat new":           (*Workspace).cmdChatNew,
+		"chat export":        (*Workspace).cmdChatExport,
+		"chat search":        (*Workspace).cmdChatSearch,
+		"process list":       (*Workspace).cmdProcessList,
+		"process stop":       (*Workspace).cmdProcessStop,
+		"approval list":      (*Workspace).cmdApprovalList,
+		"approval forget":    (*Workspace).cmdApprovalForget,
+		"secret list":        (*Workspace).cmdSecretList,
+		"secret set":         (*Workspace).cmdSecretSet,
+		"workflow list":      (*Workspace).cmdWorkflowList,
+		"workflow save":      (*Workspace).cmdWorkflowSave,
+		"agent list":         (*Workspace).cmdAgentList,
+		"agent save":         (*Workspace).cmdAgentSave,
+		"skill list":         (*Workspace).cmdSkillList,
+		"skill save":         (*Workspace).cmdSkillSave,
+		"mcp list":           (*Workspace).cmdMCPList,
+		"mcp add":            (*Workspace).cmdMCPSave,
+		"mcp edit":           (*Workspace).cmdMCPSave,
+		"mcp remove":         (*Workspace).cmdMCPRemove,
+		"mcp test":           (*Workspace).cmdMCPTest,
+		"rule remove":        (*Workspace).cmdRuleRemove,
+		"guardrail remove":   (*Workspace).cmdGuardrailRemove,
+		"connector remove":   (*Workspace).cmdConnectorRemove,
+		"connector test":     (*Workspace).cmdConnectorTest,
+		"secret remove":      (*Workspace).cmdSecretRemove,
+		"workflow remove":    (*Workspace).cmdWorkflowRemove,
+		"skill remove":       (*Workspace).cmdSkillRemove,
+		"agent remove":       (*Workspace).cmdAgentRemove,
+		"settings reference": (*Workspace).cmdSettingsReference,
+		"mcp enable":         (*Workspace).cmdMCPOn,
+		"mcp disable":        (*Workspace).cmdMCPOn,
+		"rule list":          (*Workspace).cmdRuleList,
+		"rule save":          (*Workspace).cmdRuleSave,
+		"guardrail list":     (*Workspace).cmdGuardrailList,
+		"guardrail save":     (*Workspace).cmdGuardrailSave,
+		"command list":       (*Workspace).cmdCommandList,
+		"command save":       (*Workspace).cmdCommandSave,
+		"hook list":          (*Workspace).cmdHookList,
+		"plugin list":        (*Workspace).cmdPluginList,
 	}
 }
 
@@ -418,7 +430,12 @@ func refOf(m api.ModelInfo) string {
 func (w *Workspace) cmdSettingsSet(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	key, value := str(args, "key"), str(args, "value")
 	s := w.Settings()
-	from := map[string]string{"model": refOf(s.Model), "image_model": s.ImageModel, "speech_model": s.SpeechModel, "effort": s.Effort, "mode": s.PermissionMode}[key]
+	from, session := map[string]string{"model": refOf(s.Model), "image_model": s.ImageModel, "speech_model": s.SpeechModel, "effort": s.Effort, "mode": s.PermissionMode}[key]
+	if !session {
+		if err := agentSettable(key); err != nil {
+			return nil, err
+		}
+	}
 	if key == "mode" {
 		m, err := api.ParsePermissionMode(value)
 		if err != nil {
@@ -469,6 +486,19 @@ func (w *Workspace) cmdSettingsSet(ctx context.Context, c api.BlitzCommand, args
 		if err := w.ReloadProviders(ctx, cfg); err != nil {
 			return nil, err
 		}
+	default: // a settings key of the workspace's (CLP-32)
+		path, err := config.SetValue(w.cfg.Dir, w.Dir(), key, value)
+		if err != nil {
+			return nil, err
+		}
+		cfg, err := config.LoadWorkspace(w.cfg.Dir, w.Dir())
+		if err != nil {
+			return nil, err
+		}
+		if err := w.ReloadProviders(ctx, cfg); err != nil {
+			return nil, err
+		}
+		return map[string]any{key: value, "file": path}, nil
 	}
 	return map[string]any{key: value}, nil
 }
@@ -913,31 +943,6 @@ func (w *Workspace) cmdMCPList(context.Context, api.BlitzCommand, map[string]any
 	return w.ListMCPServers(), nil
 }
 
-// cmdMCPAdd adds an MCP server to the workspace: asked with exactly what
-// will run, always (DRV-75), and refused where the organization's policy
-// keeps people's own out (DRV-72).
-func (w *Workspace) cmdMCPAdd(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
-	if o := w.settings().Org; o.Active() && !o.Policy.MCP.Own {
-		return nil, errors.New("your organization doesn't allow MCP servers of your own")
-	}
-	s := config.MCPServerConfig{Name: str(args, "name"), Command: str(args, "command"), Args: list(args, "args"), URL: str(args, "url")}
-	if (s.Command == "") == (s.URL == "") {
-		return nil, errors.New("give either command (with args) or url")
-	}
-	what := "connects to " + s.URL
-	if s.Command != "" {
-		what = "runs: " + strings.Join(append([]string{s.Command}, s.Args...), " ")
-	}
-	if err := w.askChange(ctx, c, fmt.Sprintf("Add the MCP server %s, which %s", s.Name, what), ""); err != nil {
-		return nil, err
-	}
-	path, err := config.AddMCPServer(w.cfg.Dir, w.Dir(), s)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"added": s.Name, "file": path}, w.reloadMCPFromSettings(ctx)
-}
-
 func (w *Workspace) cmdMCPOn(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	name, on := str(args, "name"), c.Name == "mcp enable"
 	i := slices.IndexFunc(w.ListMCPServers(), func(m api.MCPServer) bool { return m.Name == name })
@@ -972,7 +977,11 @@ func (w *Workspace) cmdRuleList(context.Context, api.BlitzCommand, map[string]an
 
 func (w *Workspace) cmdRuleSave(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	spec := RuleSpec{Name: str(args, "name"), Description: str(args, "description"), Text: str(args, "text")}
-	if err := w.askChange(ctx, c, "Save the rule "+spec.Name, fileDiff(".agents/rules/"+spec.Name+".md", "", spec.Text)); err != nil {
+	old := ""
+	if i := slices.IndexFunc(w.Rules(), func(r gates.Rule) bool { return r.Name == spec.Name }); i >= 0 {
+		old = fileBody(w.Rules()[i].Path) // a change shows what it changes (CLP-34)
+	}
+	if err := w.askChange(ctx, c, "Save the rule "+spec.Name, fileDiff(".agents/rules/"+spec.Name+".md", old, spec.Text)); err != nil {
 		return nil, err
 	}
 	r, problems, err := w.SaveRule(spec, w.existingRule(spec.Name))
@@ -998,7 +1007,11 @@ func (w *Workspace) cmdGuardrailList(context.Context, api.BlitzCommand, map[stri
 
 func (w *Workspace) cmdGuardrailSave(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
 	spec := GuardrailSpec{Name: str(args, "name"), Description: str(args, "description"), Stage: str(args, "stage"), Action: str(args, "action"), Text: str(args, "check")}
-	if err := w.askChange(ctx, c, fmt.Sprintf("Save the guardrail %s (%s, %s)", spec.Name, spec.Stage, firstOf(spec.Action, "block")), fileDiff(".agents/guardrails/"+spec.Name+".md", "", spec.Text)); err != nil {
+	old := ""
+	if i := slices.IndexFunc(w.Guardrails(), func(g gates.Guardrail) bool { return g.Name == spec.Name && g.Builtin == "" }); i >= 0 {
+		old = fileBody(w.Guardrails()[i].Path)
+	}
+	if err := w.askChange(ctx, c, fmt.Sprintf("Save the guardrail %s (%s, %s)", spec.Name, spec.Stage, firstOf(spec.Action, "block")), fileDiff(".agents/guardrails/"+spec.Name+".md", old, spec.Text)); err != nil {
 		return nil, err
 	}
 	previous := ""

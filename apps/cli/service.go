@@ -36,7 +36,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newServiceCommand() *cobra.Command {
+func newServiceCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "service",
 		Short: "Start the Blitz service at login (install, uninstall, restart, status)",
@@ -56,6 +56,7 @@ A login item doesn't see your shell's environment: keep API keys in
 			RunE: func(cmd *cobra.Command, _ []string) error { return serviceRestart(cmd.Context(), cmd.OutOrStdout()) }},
 		&cobra.Command{Use: "status", Short: "Say whether the login item is installed and the service answering", Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error { return serviceStatus(cmd.OutOrStdout()) }},
+		newServiceLogsCommand(g),
 	)
 	return cmd
 }

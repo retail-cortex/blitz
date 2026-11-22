@@ -76,6 +76,10 @@ type oneShotOptions struct {
 	maxCostUSD float64       // --max-cost-usd (0: unlimited)
 	timeout    time.Duration // --timeout (0: unlimited)
 	plan       bool          // --plan: read-only tools, answer with a plan
+	aside      bool          // blitz help's question: recorded nowhere, read-only tools
+	// send, when set, goes to the model instead of prompt (blitz help: the
+	// docs and the question, the prompt being the question).
+	send       string
 	input      tui.Input
 	stdinTTY   bool
 	stdout     io.Writer
@@ -114,12 +118,12 @@ func runOneShot(ctx context.Context, w api.Backend, o oneShotOptions) error {
 	default:
 		handler = collectHandler(&calls)
 	}
-	var send string
+	send := o.send
 	if o.schema != nil {
 		send = o.prompt + o.schema.instruction()
 	}
 	turn, runErr := w.Run(ctx, sid, api.Turn{
-		Text: o.prompt, Prompt: send, Command: o.command, Plan: o.plan, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
+		Text: o.prompt, Prompt: send, Command: o.command, Plan: o.plan, Aside: o.aside, Images: o.images, MaxTurns: o.maxTurns, MaxCostUSD: o.maxCostUSD, Timeout: o.timeout,
 		OnAccepted: func() {
 			if printer != nil {
 				printer.Begin()
@@ -268,7 +272,9 @@ func collectHandler(calls *[]toolCallJSON) func(api.Event) {
 	}
 }
 
-func stdoutIsTerminal() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
+// stdoutIsTerminal reports whether standard output is a terminal (a
+// variable for tests).
+var stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 
 func terminalWidth() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
