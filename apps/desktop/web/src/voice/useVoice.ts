@@ -79,7 +79,10 @@ export function useVoice(dir: string, sessionId: string, mic: string, handlers: 
     if (l.id) send(l, { end: true });
     l.abort.abort();
     l.mic?.close();
-    l.player.close();
+    // The voice ended it (its goodbye, a summary said): let what it said
+    // play out. Stopped by the person, or failed: at once.
+    if (why === "goodbye" || why === "summary") void l.player.closeAfterPlaying();
+    else l.player.close();
     setConversation(null);
     setEnder(null);
     if (why === "idle") h.current.error(t("desktop.voice.ended_idle"));

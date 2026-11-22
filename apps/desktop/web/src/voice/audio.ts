@@ -150,4 +150,24 @@ export class Player {
     void this.ctx?.close();
     this.ctx = null;
   }
+
+  /** How long what's queued has left to play, in ms (0 when nothing is). */
+  get remainingMs() {
+    if (!this.ctx || this.playing.size === 0) return 0;
+    return Math.max(0, (this.at - this.ctx.currentTime) * 1000);
+  }
+
+  /**
+   * Closes once what's queued has played, at most maxMs from now: the
+   * voice's goodbye is said whole, not cut off as the conversation ends.
+   */
+  closeAfterPlaying(maxMs = 15000): Promise<void> {
+    const wait = Math.min(this.remainingMs + 100, maxMs);
+    return new Promise((done) =>
+      setTimeout(() => {
+        this.close();
+        done();
+      }, wait),
+    );
+  }
 }

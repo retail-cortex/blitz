@@ -32,6 +32,8 @@ The command line gets the care the desktop app has had. Blitz now greets you wit
 
 - **Voice picks a model you can use.** Settings › Voice used to list every live model Google lists, including ones your key or project can't reach, and picked the default by its name rather than its version, so a conversation could stop with "failed to receive setup complete". Blitz now checks each model with the settings a conversation uses and offers only the ones that answer, native audio first (it sounds the most natural), or says why when none does. Newer live models also hear you now: your voice reaches them in the form they read.
 
+- **Goodbyes are said whole.** When you end a voice conversation by saying goodbye, Blitz's reply plays to the end instead of being cut off.
+
 ### Good to know
 
 - `blitz agents`, `logs`, `stop` and `attach` are now `blitz runs`, `runs logs`, `runs stop` and `runs attach`. The old names work for this release. After it, `blitz agents` lists your agents.
