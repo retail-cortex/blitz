@@ -87,6 +87,7 @@ export function useConversationVoice({
       error: (text) => snack(text, { error: true }),
     },
     waitingOf(pending, taskRequests[0]),
+    voiceSetup.bufferMs,
   );
   const voiceState: ButtonState = conversationNow && !myVoice ? "hidden" : buttonState(voiceSetup, myVoice);
   const toggleVoice = () => (myVoice ? voice.end() : void voice.start());

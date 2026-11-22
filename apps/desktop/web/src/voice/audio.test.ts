@@ -83,7 +83,7 @@ describe("the voice's player", () => {
     const ctx = FakeContext.made[0];
     vi.advanceTimersByTime(500);
     expect(ctx.closed).toBe(false);
-    expect(ctx.sources[0].stopped).toBe(false, "not cut off");
+    expect(ctx.sources[0].stopped).toBe(false); // not cut off
     vi.advanceTimersByTime(1000);
     await done;
     expect(ctx.closed).toBe(true);
@@ -94,7 +94,7 @@ describe("the voice's player", () => {
     p.play(second);
     expect(p.remainingMs).toBeCloseTo(1300, -1);
     p.play(second);
-    expect(p.remainingMs).toBeCloseTo(2300, -1, "the second piece follows the first, not another buffer");
+    expect(p.remainingMs).toBeCloseTo(2300, -1); // the second piece follows the first, not another buffer
     expect(new Player(5).remainingMs).toBe(0);
   });
 
