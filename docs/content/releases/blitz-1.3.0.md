@@ -26,6 +26,10 @@ The command line gets the care the desktop app has had. Blitz now greets you wit
 - **Removing asks first.** Removing an MCP server, plugin, skill, note, job or Pictures session asks on a terminal (`-y` skips it). Scripts go ahead as before.
 - **More for scripts.** `blitz sessions list`, `blitz runs` for background runs, and `--json` on more lists.
 
+### Fixed
+
+- **"The workspace is open elsewhere" after a restart.** When the service restarted, mostly on Windows, a workspace could be refused while the old service was still closing it. Blitz now waits a moment for a workspace that's on its way out, and still says at once when one really is open somewhere else.
+
 ### Good to know
 
 - `blitz agents`, `logs`, `stop` and `attach` are now `blitz runs`, `runs logs`, `runs stop` and `runs attach`. The old names work for this release. After it, `blitz agents` lists your agents.

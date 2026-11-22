@@ -520,6 +520,10 @@ func (w *Workspace) ModelErr() error {
 // Close kills background processes and MCP servers, flushes the audit log
 // and releases the workspace.
 func (w *Workspace) Close() error {
+	// Closing takes a while (tasks, tools, MCP servers, processes): one
+	// opening the workspace meanwhile, a restarted service say, waits for
+	// it rather than calling it open elsewhere.
+	w.lock.markClosing()
 	var err error
 	if w.storage != nil && w.tools != nil {
 		if a := w.storage.Active(); a != nil {

@@ -34,3 +34,10 @@ func tryLock(f *os.File) error {
 }
 
 func unlock(f *os.File) { unix.Flock(int(f.Fd()), unix.LOCK_UN) }
+
+// processAlive reports whether process pid runs (one of another user's,
+// which can't be signalled, counts).
+func processAlive(pid int) bool {
+	err := unix.Kill(pid, 0)
+	return err == nil || errors.Is(err, unix.EPERM)
+}

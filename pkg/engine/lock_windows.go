@@ -37,3 +37,24 @@ func tryLock(f *os.File) error {
 func unlock(f *os.File) {
 	windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, new(windows.Overlapped))
 }
+
+// stillActive is GetExitCodeProcess's code for a process that runs.
+const stillActive = 259
+
+// processAlive reports whether process pid runs (one Windows won't let
+// this one look at counts).
+func processAlive(pid int) bool {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	var code uint32
+	if err := windows.GetExitCodeProcess(h, &code); err != nil {
+		return true
+	}
+	return code == stillActive
+}
