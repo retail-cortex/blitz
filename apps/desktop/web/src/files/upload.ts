@@ -43,7 +43,7 @@ export type OnConflict = "replace" | "keep" | "skip";
 export interface UploadClient {
   uploadFile(r: { workspace: string; path: string; uploadId: string; data: Uint8Array; done: boolean; replace: boolean }): Promise<{ uploadId: string; version: string }>;
   createFolder(r: { workspace: string; path: string }): Promise<unknown>;
-  deleteFile(r: { workspace: string; path: string }): Promise<unknown>;
+  deleteFile(r: { workspace: string; path: string; undoable?: boolean }): Promise<unknown>;
 }
 
 /**
@@ -142,7 +142,8 @@ export async function importDrop(c: UploadClient, workspace: string, into: strin
     if (item.file) {
       await uploadFile(c, workspace, path, item.file, replace);
     } else {
-      if (replace) await c.deleteFile({ workspace, path });
+      // The folder replaced goes to the Trash, so a failed upload loses nothing (files#1).
+      if (replace) await c.deleteFile({ workspace, path, undoable: true });
       await c.createFolder({ workspace, path });
       for (const x of item.inside) {
         const sub = joinPath(path, x.path.replace(/\/$/, ""));

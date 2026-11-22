@@ -52,8 +52,9 @@ func TestLedger(t *testing.T) {
 
 	calls, err = s.Calls(rec.ID)
 	require.NoError(t, err)
-	require.Len(t, calls, 1, "the torn line, and the call written after it on the same line, are skipped")
+	require.Len(t, calls, 2, "the torn line is skipped; the call after it starts its own (N26 engine-sub-2#8)")
 	assert.Equal(t, first, calls[0])
+	assert.Equal(t, second, calls[1])
 
 	fork, err := s.Fork(rec.ID)
 	require.NoError(t, err)

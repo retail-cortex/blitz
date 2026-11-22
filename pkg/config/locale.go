@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 var tableRE = regexp.MustCompile(`^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(#.*)?$`)
@@ -50,6 +51,21 @@ func editConfigFile(dir string, edit func(doc string) string, verify func(map[st
 		return "", errors.New("no configuration directory")
 	}
 	path := filepath.Join(dir, ".env.toml")
+	// One edit at a time across processes (the service, the CLI, the
+	// tray): each reads what the last wrote, so none is lost (N26
+	// api-client-config#20).
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	lock, err := os.OpenFile(path+".lock", os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return "", err
+	}
+	defer lock.Close()
+	if err := lockFile(lock); err != nil {
+		return "", err
+	}
+	defer unlockFile(lock)
 	orig, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", err
@@ -67,7 +83,7 @@ func editConfigFile(dir string, edit func(doc string) string, verify func(map[st
 	if err := verify(check); err != nil {
 		return "", fmt.Errorf("%s: %w", path, err)
 	}
-	return path, writeFileAtomic(path, []byte(updated), perm)
+	return path, atomicfile.MkdirWrite(path, []byte(updated), 0o700, perm)
 }
 
 // setTOMLKey sets key = value in [table], replacing an existing assignment,

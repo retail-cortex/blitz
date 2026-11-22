@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -213,7 +214,7 @@ func TestAsClientCallsDropsGeminisGrounding(t *testing.T) {
 		GroundingMetadata: &genai.GroundingMetadata{
 			WebSearchQueries:  []string{"blitz"},
 			GroundingChunks:   []*genai.GroundingChunk{{Web: &genai.GroundingChunkWeb{URI: "https://b", Title: "Blitz"}}, nil},
-			GroundingSupports: []*genai.GroundingSupport{{Segment: &genai.Segment{Text: "Blitz is"}, GroundingChunkIndices: []int32{0, 7}}},
+			GroundingSupports: []*genai.GroundingSupport{{Segment: &genai.Segment{Text: "Blitz is"}, GroundingChunkIndices: []int32{0, 7, -1}}}, // past the end, and negative (runtime#7)
 		},
 	}
 	geminiProviderTools(geminiO, resp)
@@ -488,4 +489,54 @@ func TestGeminiOwnToolParts(t *testing.T) {
 	assert.Equal(t, ptWebSearch, got[1].Parts[0].FunctionCall.Name, "another model reads a call of the client tool")
 	require.NotNil(t, got[2].Parts[0].FunctionResponse)
 	assert.Equal(t, map[string]any{"result": "found"}, got[2].Parts[0].FunctionResponse.Response)
+}
+
+// fakeWebGuard is a guard that says whether a guardrail checks web
+// results.
+type fakeWebGuard struct {
+	Guard
+	checks bool
+}
+
+func (g fakeWebGuard) ChecksWebResults() bool { return g.checks }
+
+// The provider's web tools are used only while nothing of Blitz's applies
+// to the web: its fetch asks before a host it doesn't allow, so the
+// provider's fetch goes only with allow_domains = ["*"]; a domain list, a
+// web rule, a web hook or a guardrail on web results keeps both
+// (CA-81a; security review runtime#1).
+func TestProviderWebToolsOnlyWithoutWebRules(t *testing.T) {
+	tests := []struct {
+		name          string
+		set           func(*config.Config)
+		guard         Guard
+		search, fetch bool // on
+	}{
+		{name: "defaults", set: func(*config.Config) {}, search: true},
+		{name: "every host allowed", set: func(c *config.Config) { c.Web.AllowDomains = []string{"*"} }, search: true, fetch: true},
+		{name: "deny_domains", set: func(c *config.Config) {
+			c.Web.AllowDomains, c.Web.DenyDomains = []string{"*"}, []string{"evil.example"}
+		}},
+		{name: "allow_domains", set: func(c *config.Config) { c.Web.AllowDomains = []string{"go.dev"} }},
+		{name: "a hook for every tool", set: func(c *config.Config) {
+			c.Web.AllowDomains = []string{"*"}
+			c.Hooks.PreTool = []config.HookConfig{{Command: "true"}}
+		}},
+		{name: "a hook for another tool", set: func(c *config.Config) {
+			c.Web.AllowDomains = []string{"*"}
+			c.Hooks.PostTool = []config.HookConfig{{Match: "run_shell_command", Command: "true"}}
+		}, search: true, fetch: true},
+		{name: "a guardrail on web results", set: func(c *config.Config) { c.Web.AllowDomains = []string{"*"} }, guard: fakeWebGuard{checks: true}},
+		{name: "a guardrail elsewhere", set: func(c *config.Config) { c.Web.AllowDomains = []string{"*"} }, guard: fakeWebGuard{}, search: true, fetch: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			tt.set(cfg)
+			e := &Engine{cfg: cfg, guard: tt.guard}
+			pol := e.providerToolPolicy()
+			assert.Equal(t, !tt.search, pol.Disabled[ptWebSearch], "web search off")
+			assert.Equal(t, !tt.fetch, pol.Disabled[ptWebFetch], "web fetch off")
+		})
+	}
 }

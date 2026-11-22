@@ -122,6 +122,16 @@ func (m *ProcessManager) Start(session, command, cwd string) (*BackgroundProcess
 // StartWatched is Start with what the process reports as it runs (nil:
 // nothing).
 func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch) (*BackgroundProcess, error) {
+	return m.start(session, command, cwd, watch, false)
+}
+
+// StartUnsandboxed is StartWatched outside the OS sandbox: unsafe mode
+// (spec_005 APR-14e).
+func (m *ProcessManager) StartUnsandboxed(session, command, cwd string, watch *Watch) (*BackgroundProcess, error) {
+	return m.start(session, command, cwd, watch, true)
+}
+
+func (m *ProcessManager) start(session, command, cwd string, watch *Watch, unsandboxed bool) (*BackgroundProcess, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -140,7 +150,13 @@ func (m *ProcessManager) StartWatched(session, command, cwd string, watch *Watch
 	m.pruneLocked()
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.maxLifetime)
-	cmd, err := m.exec.command(ctx, []string{"bash", "-c", command})
+	run := m.exec
+	if unsandboxed && run != nil {
+		copied := *run
+		copied.Sandbox = nil
+		run = &copied
+	}
+	cmd, err := run.command(ctx, []string{"bash", "-c", command})
 	if err != nil {
 		cancel()
 		return nil, err

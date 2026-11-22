@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +91,8 @@ func TestConfigKeyCommands(t *testing.T) {
 	for name, args := range map[string][]string{
 		"no key":           {"config", "set-key", "openai"},
 		"not keyed":        {"config", "set-key", "ollama"},
+		"remove not keyed": {"config", "remove-key", "ollama"},
+		"secure not keyed": {"config", "secure-key", "ollama"},
 		"nothing here":     {"config", "secure-key", "openai"},
 		"not OpenAI's":     {"config", "set-auth", "openai", "oauth"},
 		"not a provider":   {"config", "set-auth", "ollama", "oauth"},
@@ -251,4 +254,10 @@ func TestConfigPermissionsCheckForms(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "global (")
 	assert.Contains(t, out, "  none")
+
+	// readSecret propagates non-EOF read errors.
+	cmd := newRootCommand()
+	cmd.SetIn(errReader{errors.New("stdin failed")})
+	_, err = readSecret(cmd, "key: ")
+	assert.ErrorContains(t, err, "stdin failed")
 }

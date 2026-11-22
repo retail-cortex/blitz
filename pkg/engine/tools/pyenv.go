@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
@@ -314,15 +315,7 @@ func (m *PyEnvs) touch(e PyEnv, skill string) PyEnv {
 }
 
 func (m *PyEnvs) writeMarker(e PyEnv) error {
-	b, err := json.MarshalIndent(e, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(e.Dir, pyEnvMarker+".tmp")
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(e.Dir, pyEnvMarker))
+	return atomicfile.WriteJSON(filepath.Join(e.Dir, pyEnvMarker), e, 0o600)
 }
 
 func dirSize(dir string) int64 {

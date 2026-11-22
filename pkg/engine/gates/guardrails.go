@@ -672,10 +672,14 @@ var prefixOptions = map[string]map[string]bool{
 	"time":    {"-f": true, "-o": true, "--format": true, "--output": true},
 	"command": {},
 	"exec":    {"-a": true},
+	// xargs runs what follows on its input (N26 safety-enterprise#3):
+	// GNU's and BSD's options that take an argument.
+	"xargs": {"-a": true, "-d": true, "-E": true, "-I": true, "-J": true, "-L": true, "-n": true, "-P": true, "-R": true, "-s": true, "-S": true,
+		"--arg-file": true, "--delimiter": true, "--eof": true, "--replace": true, "--max-lines": true, "--max-args": true, "--max-procs": true, "--max-chars": true, "--process-slot-var": true},
 }
 
 // dropPrefixes is f with what runs the command before it taken off:
-// sudo, env, nice, nohup, time, command and exec with their options, and
+// sudo, env, nice, nohup, time, command, exec and xargs with their options, and
 // VAR=value.
 func dropPrefixes(f []string) []string {
 	for len(f) > 0 {

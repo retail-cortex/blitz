@@ -21,14 +21,12 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
-
-	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // entry is what the store keeps for one worker.
@@ -200,14 +198,7 @@ func (s *Store) commitLocked(change func(map[string]map[string]entry)) error {
 
 // save writes ws as the store, atomically.
 func (s *Store) save(ws map[string]map[string]entry) error {
-	data, err := json.MarshalIndent(struct {
+	return atomicfile.WriteJSON(s.path, struct {
 		Workspaces map[string]map[string]entry `json:"workspaces"`
-	}{ws}, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return err
-	}
-	return atomicfile.Write(s.path, append(data, '\n'), 0o600)
+	}{ws}, 0o600)
 }

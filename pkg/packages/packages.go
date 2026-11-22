@@ -360,7 +360,14 @@ func Add(ctx context.Context, root, uri string, o Options) ([]agentpkg.LockEntry
 		// One of the name the workspace has is replaced only when it came
 		// from this very package, or with Force.
 		prev, locked := lock.Assets[key]
-		_, err := os.Stat(filepath.Join(root, filepath.FromSlash(agentpkg.MainFile(f.kind, f.name))))
+		// A skill is its folder, which writing it replaces: one there
+		// without a SKILL.md is the workspace's own too (security review
+		// packages#5).
+		have := filepath.Join(root, filepath.FromSlash(agentpkg.MainFile(f.kind, f.name)))
+		if f.kind == "skill" {
+			have = filepath.Join(root, "skills", f.name)
+		}
+		_, err := os.Lstat(have)
 		if err == nil && !o.Force && (!locked || prev.URI != u.String()) {
 			return added, fmt.Errorf("%s: %w", key, ErrTaken)
 		}
@@ -529,12 +536,23 @@ func fetchGitHub(ctx context.Context, u agentpkg.URI, o Options) (dir string, er
 
 // untar writes a GitHub archive's files into dir: each under the
 // archive's one folder (repo-ref/), only plain files, none outside dir.
+// The most of a fetched repository's archive written out: files, and
+// bytes (each file is at most agentpkg.MaxFile).
+const (
+	maxArchiveFiles = 20_000
+	maxArchiveBytes = 500 << 20
+)
+
 func untar(r io.Reader, dir string) error {
 	zr, err := gzip.NewReader(io.LimitReader(r, 200<<20))
 	if err != nil {
 		return err
 	}
 	tr := tar.NewReader(zr)
+	// The compressed size is capped above; what it expands to, in files
+	// and bytes, is capped here (security review packages#4: a crafted
+	// archive could fill the disk).
+	files, total := 0, int64(0)
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -547,9 +565,15 @@ func untar(r io.Reader, dir string) error {
 		if !ok || rel == "" || strings.Contains(rel, "..") || h.Typeflag != tar.TypeReg {
 			continue
 		}
+		if files++; files > maxArchiveFiles {
+			return fmt.Errorf("the archive holds more than %d files", maxArchiveFiles)
+		}
 		b, err := io.ReadAll(io.LimitReader(tr, agentpkg.MaxFile+1))
 		if err != nil {
 			return err
+		}
+		if total += int64(len(b)); total > maxArchiveBytes {
+			return fmt.Errorf("the archive holds more than %d MB", maxArchiveBytes>>20)
 		}
 		target := filepath.Join(dir, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {

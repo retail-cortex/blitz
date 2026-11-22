@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/engine/session"
@@ -219,13 +220,8 @@ func (w *Workspace) readIdeas() ideaCache {
 }
 
 func (w *Workspace) saveIdeas(c ideaCache) {
-	path := w.ideasPath()
-	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err == nil {
-		err = writeFileAtomic(filepath.Dir(path), path, data)
-		if err != nil {
-			slog.Warn("saving suggestions", "error", err)
-		}
+	if err := atomicfile.WriteJSON(w.ideasPath(), c, 0o644); err != nil {
+		slog.Warn("saving suggestions", "error", err)
 	}
 }
 

@@ -17,6 +17,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -187,4 +188,29 @@ func TestBackgroundRunsWithTheService(t *testing.T) {
 	}
 	_, err = runCLI(t, "--local", "attach", "bg-1")
 	assert.Equal(t, exitUsage, exitCodeFor(err))
+
+	// --bg with missing --image returns usage error.
+	_, err = runCLI(t, "-d", ws, "--bg", "--image", filepath.Join(ws, "missing.png"), "hello")
+	assert.Equal(t, exitUsage, exitCodeFor(err))
+}
+
+func TestBackgroundCommandsServiceErrors(t *testing.T) {
+	isolate(t)
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service unavailable") }
+	t.Cleanup(func() { startShared = inner })
+
+	ws := t.TempDir()
+	for _, args := range [][]string{
+		{"-d", ws, "--bg", "hello"},
+		{"agents"},
+		{"logs", "bg-1"},
+		{"stop", "bg-1"},
+		{"attach", "bg-1"},
+	} {
+		t.Run(args[len(args)-1], func(t *testing.T) {
+			_, err := runCLI(t, args...)
+			assert.ErrorContains(t, err, "service unavailable")
+		})
+	}
 }

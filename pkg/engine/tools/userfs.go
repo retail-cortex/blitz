@@ -50,7 +50,10 @@ func UserPath(p string) (string, error) {
 	if escapesRoot(c) {
 		return "", fmt.Errorf("%w: %q", ErrOutsideWorkspace, p)
 	}
-	if c == ".git" || strings.HasPrefix(c, ".git"+string(filepath.Separator)) {
+	// Any spelling of it on a disk that ignores case (.GIT/hooks), where
+	// it's the same folder (security review files#8).
+	first, _, _ := strings.Cut(c, string(filepath.Separator))
+	if first == ".git" || caseInsensitiveFS && strings.EqualFold(first, ".git") {
 		return "", ErrGitDir
 	}
 	return c, nil
@@ -77,6 +80,17 @@ func (w *Workspace) AgentRule(rel string) string {
 		return "read_only"
 	}
 	return ""
+}
+
+// userWritable refuses the person's changes to a read-only workspace (a
+// Viewer's clone of the organization's repository, EN-60): the editor and
+// the file tree change nothing there, as the agent's tools don't
+// (security review files#6).
+func (w *Workspace) userWritable() error {
+	if w.readOnly != "" {
+		return fmt.Errorf("%w: %s", ErrReadOnlyPath, w.readOnly)
+	}
+	return nil
 }
 
 // UserReadDir lists the directory rel.
@@ -125,6 +139,9 @@ var ErrTooLarge = errors.New("file too large")
 // set, runs under the lock with the file's current content (nil, false
 // when it doesn't exist) and can refuse the write.
 func (w *Workspace) UserWriteFile(ctx context.Context, rel string, data []byte, check func(current []byte, exists bool) error) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return errors.New("path must name a file")
 	}
@@ -148,6 +165,9 @@ func (w *Workspace) UserWriteFile(ctx context.Context, rel string, data []byte, 
 
 // UserMkdir creates the folder rel (and missing parents); it must not exist.
 func (w *Workspace) UserMkdir(rel string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return fs.ErrExist
 	}
@@ -159,6 +179,9 @@ func (w *Workspace) UserMkdir(rel string) error {
 
 // UserRename moves from to to, which must not exist.
 func (w *Workspace) UserRename(ctx context.Context, from, to string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if from == "." || to == "." {
 		return errors.New("can't rename the workspace")
 	}
@@ -184,6 +207,9 @@ func (w *Workspace) UserRename(ctx context.Context, from, to string) error {
 // which must not exist; a symbolic link is copied as a link. Folders are
 // made as the copy goes, and a copy that fails partway is taken back.
 func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if from == "." || to == "." {
 		return errors.New("can't copy the workspace")
 	}
@@ -204,6 +230,14 @@ func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
 	}
 	if err := mkdirParent(r, to); err != nil {
 		return err
+	}
+	// Into itself by another spelling (a case variant, a linked parent)
+	// would copy for ever (security review files#9): the real places are
+	// compared.
+	if src, err := filepath.EvalSymlinks(filepath.Join(w.roots[0].dir, from)); err == nil {
+		if parent, err := filepath.EvalSymlinks(filepath.Join(w.roots[0].dir, filepath.Dir(to))); err == nil && within(src, parent) {
+			return fmt.Errorf("%s: can't copy a folder into itself", filepath.ToSlash(to))
+		}
 	}
 	err = fs.WalkDir(r.FS(), filepath.ToSlash(from), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -254,6 +288,9 @@ func (w *Workspace) UserCopy(ctx context.Context, from, to string) error {
 // file beside it (its folders made), which UserAppend fills and
 // UserFinishUpload puts in place. It returns the hidden file's path.
 func (w *Workspace) UserCreateUpload(rel string) (string, error) {
+	if err := w.userWritable(); err != nil {
+		return "", err
+	}
 	if rel == "." {
 		return "", errors.New("path must name a file")
 	}
@@ -288,12 +325,16 @@ func (w *Workspace) UserAppend(tmp string, data []byte) error {
 // UserFinishUpload puts the upload tmp at rel, under rel's lock. rel must
 // not exist unless replace, and a folder is never replaced.
 func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, replace bool) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	unlock, err := w.lockPaths(ctx, rel)
 	if err != nil {
 		return err
 	}
 	defer unlock()
 	r := w.userRoot()
+	keep := os.FileMode(0)
 	if info, err := r.Lstat(rel); err == nil {
 		if !replace {
 			return fmt.Errorf("%s: %w", filepath.ToSlash(rel), fs.ErrExist)
@@ -301,10 +342,19 @@ func (w *Workspace) UserFinishUpload(ctx context.Context, tmp, rel string, repla
 		if info.IsDir() {
 			return fmt.Errorf("%s is a folder", filepath.ToSlash(rel))
 		}
+		keep = info.Mode().Perm()
 	}
 	f, err := r.OpenFile(tmp, os.O_WRONLY, 0)
 	if err != nil {
 		return err
+	}
+	// A file replaced keeps its mode: an upload over a 0600 one doesn't
+	// make it readable by others (security review files#10).
+	if keep != 0 {
+		if err := f.Chmod(keep); err != nil {
+			f.Close()
+			return err
+		}
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
@@ -326,6 +376,9 @@ func (w *Workspace) UserDiscardUpload(tmp string) {
 // ostrash.ErrUnavailable when there's none. The folders above it must be
 // the workspace's own, not links out of it.
 func (w *Workspace) UserTrash(ctx context.Context, rel string) (string, error) {
+	if err := w.userWritable(); err != nil {
+		return "", err
+	}
 	if rel == "." {
 		return "", errors.New("can't delete the workspace")
 	}
@@ -334,19 +387,19 @@ func (w *Workspace) UserTrash(ctx context.Context, rel string) (string, error) {
 		return "", err
 	}
 	defer unlock()
-	if _, err := w.userRoot().Lstat(rel); err != nil {
-		return "", err
-	}
 	abs, err := w.userAbs(rel)
 	if err != nil {
 		return "", err
 	}
-	return ostrash.Trash(ctx, abs)
+	return trashChecked(ctx, w.userRoot(), rel, abs)
 }
 
 // UserRestoreTrashed puts what UserTrash moved to where back at rel,
 // which must not exist.
 func (w *Workspace) UserRestoreTrashed(ctx context.Context, where, rel string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return errors.New("can't restore over the workspace")
 	}
@@ -385,6 +438,9 @@ func (w *Workspace) userAbs(rel string) (string, error) {
 
 // UserRemove deletes rel, a folder with everything in it.
 func (w *Workspace) UserRemove(ctx context.Context, rel string) error {
+	if err := w.userWritable(); err != nil {
+		return err
+	}
 	if rel == "." {
 		return errors.New("can't delete the workspace")
 	}
@@ -397,4 +453,13 @@ func (w *Workspace) UserRemove(ctx context.Context, rel string) error {
 		return err
 	}
 	return w.userRoot().RemoveAll(rel)
+}
+
+// within reports whether p is dir or inside it, without case on a disk
+// that ignores it.
+func within(dir, p string) bool {
+	if caseInsensitiveFS {
+		dir, p = strings.ToLower(dir), strings.ToLower(p)
+	}
+	return p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }

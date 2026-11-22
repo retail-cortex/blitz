@@ -50,6 +50,15 @@ type PolicyItem struct {
 	Files map[string]string `json:"files,omitempty"`
 }
 
+// PolicySchema is the newest policy envelope this client reads. A newer
+// one may hold restrictions it doesn't know, so it isn't taken: the policy
+// kept stays, and with none, the strictest applies (EN-33b; security
+// review enterprise#6). 0 is an envelope from before the field.
+const PolicySchema = 2
+
+// ErrPolicySchema is a policy envelope newer than this client reads.
+var ErrPolicySchema = errors.New("your organization's policy is newer than this version of Blitz reads: update Blitz")
+
 // PolicyEnvelope is what the service signs at /api/v1/policy (its
 // spec_012_policy PO-20): the person's effective policy, why each setting
 // is what it is, their rules and guardrails, and until when it holds.
@@ -94,7 +103,10 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 		return false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	if tag, err := os.ReadFile(filepath.Join(dir, policyETag)); err == nil {
+	// The ETag only stands for a policy kept: with policy.json gone, the
+	// service's 304 would leave none for ever (security review
+	// enterprise#9).
+	if tag, err := os.ReadFile(filepath.Join(dir, policyETag)); err == nil && fileExists(filepath.Join(dir, "policy.json")) {
 		req.Header.Set("If-None-Match", string(tag))
 	}
 	res, err := c.hc.Do(req)
@@ -132,53 +144,77 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := layOutPolicy(dir, env); err != nil {
+	if env.Schema > PolicySchema {
+		return false, fmt.Errorf("%w (schema %d; this reads %d)", ErrPolicySchema, env.Schema, PolicySchema)
+	}
+	next, err := stagePolicy(dir, env)
+	if err != nil {
 		return false, err
 	}
 	// What the settings read as they load: the policy, why, the expiry.
-	state, _ := json.Marshal(struct {
+	// Written before swapping policy/ into place so readers never see the
+	// new rules or guardrails ahead of their matching policy.json.
+	state, err := json.Marshal(struct {
 		Policy  Policy                           `json:"policy"`
 		Explain map[string]config.PolicyDecision `json:"explain"`
 		Expires time.Time                        `json:"expires"`
 	}{env.Policy, env.Explain, env.Expires})
-	for _, f := range []struct {
-		name string
-		data []byte
-	}{{PolicyFile, state}, {policyETag, []byte(res.Header.Get("ETag"))}} {
-		if err := writeFile(dir, f.name, f.data); err != nil {
-			return true, err
+	if err != nil {
+		return false, fmt.Errorf("encoding policy state: %w", err)
+	}
+	prev, hadPrev := os.ReadFile(filepath.Join(dir, PolicyFile))
+	if err := writeFile(dir, PolicyFile, state); err != nil {
+		return false, err
+	}
+	if err := swapPolicy(dir, next); err != nil {
+		// The old policy/ is back in place (swapPolicy): so is the
+		// policy.json that goes with it (EN-33c, security review
+		// enterprise#10).
+		if hadPrev == nil {
+			_ = writeFile(dir, PolicyFile, prev)
+		} else {
+			_ = os.Remove(filepath.Join(dir, PolicyFile))
 		}
+		return false, err
+	}
+	if err := writeFile(dir, policyETag, []byte(res.Header.Get("ETag"))); err != nil {
+		return true, err
 	}
 	return true, nil
 }
 
-// layOutPolicy writes env's rules and guardrails to dir/policy as a
-// workspace's .agents folder (rules/<name>.md, guardrails/<name>.md),
-// built beside the old ones and swapped in whole.
-func layOutPolicy(dir string, env PolicyEnvelope) error {
+// stagePolicy writes env's rules, guardrails and library items to
+// dir/policy.next (rules/<name>.md, guardrails/<name>.md), ready to be
+// swapped into dir/policy whole.
+func stagePolicy(dir string, env PolicyEnvelope) (string, error) {
 	next := filepath.Join(dir, policyDir+".next")
 	if err := os.RemoveAll(next); err != nil {
-		return err
+		return "", err
 	}
 	for _, set := range []struct {
 		sub     string
 		entries []PolicyEntry
 	}{{"rules", env.Rules}, {"guardrails", env.Guardrails}} {
 		if err := os.MkdirAll(filepath.Join(next, set.sub), 0o700); err != nil {
-			return err
+			return "", err
 		}
 		for _, e := range set.entries {
 			if !entryName.MatchString(e.Name) || len(e.Name) > 64 {
-				return fmt.Errorf("the organization's policy names a %s that can't be a file: %q", set.sub, e.Name)
+				return "", fmt.Errorf("the organization's policy names a %s that can't be a file: %q", set.sub, e.Name)
 			}
 			if err := os.WriteFile(filepath.Join(next, set.sub, e.Name+".md"), []byte(e.Body), 0o600); err != nil {
-				return err
+				return "", err
 			}
 		}
 	}
 	if err := layOutItems(next, env.Items); err != nil {
-		return err
+		return "", err
 	}
+	return next, nil
+}
+
+// swapPolicy replaces dir/policy with the staged directory next.
+func swapPolicy(dir, next string) error {
 	old := filepath.Join(dir, policyDir+".old")
 	_ = os.RemoveAll(old)
 	cur := filepath.Join(dir, policyDir)
@@ -188,9 +224,19 @@ func layOutPolicy(dir string, env PolicyEnvelope) error {
 		}
 	}
 	if err := os.Rename(next, cur); err != nil {
+		// Never no policy/ at all: the old one goes back.
+		if _, statErr := os.Stat(old); statErr == nil {
+			_ = os.Rename(old, cur)
+		}
 		return err
 	}
 	return os.RemoveAll(old)
+}
+
+// policyTookOver reports whether dir keeps a policy from the policy API
+// (/api/v1/policy, EN-38): its ETag, and the policy it stands for.
+func policyTookOver(dir string) bool {
+	return fileExists(filepath.Join(dir, policyETag)) && fileExists(filepath.Join(dir, PolicyFile))
 }
 
 // itemRoot is where an asset of kind named name keeps its files, as a
@@ -224,6 +270,10 @@ func layOutItems(next string, items []PolicyItem) error {
 		}
 		if !entryName.MatchString(it.Name) || len(it.Name) > 64 {
 			return fmt.Errorf("the organization offers a %s that can't be a file: %q", it.Kind, it.Name)
+		}
+		// A skill's version names its folder under versions/ (packages#2).
+		if it.Kind == "skill" && !agentpkg.ValidVersion(it.Version) {
+			return fmt.Errorf("the organization offers skill %s with a version that can't be a folder: %q", it.Name, it.Version)
 		}
 		if got := agentpkg.Digest(it.Files); got != it.SHA256 {
 			return fmt.Errorf("the organization's %s %s %s doesn't match its digest", it.Kind, it.Name, it.Version)
@@ -265,4 +315,10 @@ func (c *Client) SetItem(ctx context.Context, kind, name string, on bool) (confi
 	var out config.OrgAsset
 	err := c.signedCall(ctx, http.MethodPut, "/api/v1/me/items/"+url.PathEscape(kind)+"/"+url.PathEscape(name), map[string]any{"on": on}, &out)
 	return out, err
+}
+
+// fileExists reports whether a file is at path.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

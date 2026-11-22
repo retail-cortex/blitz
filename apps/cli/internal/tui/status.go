@@ -120,7 +120,9 @@ func cmdConfig(ctx context.Context, args []string, app *App) {
 		_, err = app.Workspace.SetAgent(ctx, value)
 	case "mode", "permission_mode":
 		key = "mode"
-		_, err = app.Workspace.SetPermissionMode(value)
+		if err = UnsafeFromAgent(value); err == nil {
+			_, err = app.Workspace.SetPermissionMode(value)
+		}
 	case "locale":
 		_, err = app.Workspace.SetLocale(ctx, value)
 	default:

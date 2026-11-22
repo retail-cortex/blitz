@@ -18,7 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/api"
 
 	"github.com/retail-cortex/blitz/pkg/i18n"
@@ -39,7 +41,10 @@ func cmdMode(args []string, app *App) {
 		printModeNote(app)
 		return
 	}
-	mode, err := app.Workspace.SetPermissionMode(args[0])
+	mode, err := "", UnsafeFromAgent(args[0])
+	if err == nil {
+		mode, err = app.Workspace.SetPermissionMode(args[0])
+	}
 	switch {
 	case errors.Is(err, api.ErrUnknownMode):
 		fmt.Printf("%s%s%s\n", Yellow, i18n.T("mode.usage"), Reset)
@@ -49,6 +54,9 @@ func cmdMode(args []string, app *App) {
 		fmt.Printf("%s✗ %s%s\n", Red, i18n.T("set.failed", "error", safe(err.Error())), Reset)
 	default:
 		fmt.Printf("%s%s%s\n", modeColor(mode), i18n.T("mode.set", "mode", mode), Reset)
+		if api.PermissionMode(mode) == api.ModeUnsafe {
+			fmt.Printf("%s%s%s\n", Red+Bold, i18n.T("mode.unsafe_warning"), Reset)
+		}
 		printModeNote(app)
 	}
 }
@@ -62,11 +70,12 @@ func printModeNote(app *App) {
 	}
 }
 
-// modeColor is how the prompt and messages show a mode: red for bypass,
+// modeColor is how the prompt and messages show a mode: red for bypass
+// and unsafe,
 // yellow for the others that change what asks, nothing for default.
 func modeColor(mode string) string {
 	switch api.PermissionMode(mode) {
-	case api.ModeBypass:
+	case api.ModeBypass, api.ModeUnsafe:
 		return Red + Bold
 	case api.ModeDefault, "":
 		return ""
@@ -136,4 +145,15 @@ func cycleMode(app *App, withBypass bool) bool {
 		}
 	}
 	return app.Workspace.Settings().PermissionMode != current
+}
+
+// UnsafeFromAgent refuses unsafe mode in a blitz the agent's command
+// started (activity.AgentEnv set): its /mode and flags never take the
+// agent outside the sandbox; only the person chooses it (spec_005
+// APR-14e).
+func UnsafeFromAgent(mode string) error {
+	if m, err := api.ParsePermissionMode(mode); err == nil && m == api.ModeUnsafe && os.Getenv(activity.AgentEnv) != "" {
+		return api.ErrUnsafeNotHere
+	}
+	return nil
 }

@@ -200,6 +200,15 @@ func TestSavePicture(t *testing.T) {
 	p5, err := w.SavePicture(ctx, s.ID, pic, "hero")
 	require.NoError(t, err)
 	assert.Equal(t, "hero.png", p5, "at the workspace's top")
+	bad := []string{".git/hooks/pre-commit", ".git/", "../out.png"}
+	if caseInsensitiveDisk(t, w.Dir()) {
+		bad = append(bad, ".GIT/x.png") // .git by another spelling there; a folder of its own elsewhere
+	}
+	for _, bad := range bad {
+		_, err = w.SavePicture(ctx, s.ID, pic, bad)
+		assert.ErrorIs(t, err, ErrBadPath, "%s: never .git or outside (security review files#7)", bad)
+	}
+	assert.NoFileExists(t, filepath.Join(w.Dir(), ".git", "hooks", "pre-commit"))
 	again, err := w.PictureSession(s.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{p1, p2, p3, p4, p5}, again.Turns[0].Pictures[0].Saved)
@@ -400,4 +409,15 @@ func TestKeepToolPictures(t *testing.T) {
 	require.NoError(t, os.RemoveAll(w.picturesDir()))
 	require.NoError(t, os.WriteFile(w.picturesDir(), []byte("not a folder"), 0o600))
 	assert.Empty(t, w.keepToolPictures(ctx, tools.KeptPictures{Model: "gemini/x", Prompt: "p", Pictures: []tools.Picture{{Data: []byte("P"), MIME: "image/png"}}}))
+}
+
+// caseInsensitiveDisk reports whether dir's disk finds a file by another
+// case (macOS's and Windows' by default), probing with a file of its own.
+func caseInsensitiveDisk(t *testing.T, dir string) bool {
+	t.Helper()
+	probe := filepath.Join(dir, "Case-Probe")
+	require.NoError(t, os.WriteFile(probe, nil, 0o600))
+	defer os.Remove(probe)
+	_, err := os.Stat(filepath.Join(dir, "case-probe"))
+	return err == nil
 }

@@ -59,6 +59,9 @@ func NewSpeaker(ctx context.Context, cfg *config.Config) (tools.Speaker, error) 
 		return nil, nil
 	}
 	provider, name := ParseModelRef(ref, cfg.LLM.Provider)
+	if err := ownProviderOff(cfg, provider); err != nil { // runtime#5
+		return nil, err
+	}
 	pol := policyFrom(cfg.LLM)
 	switch provider {
 	case "gemini":

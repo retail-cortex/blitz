@@ -118,8 +118,11 @@ func (e *FileChangedError) Error() string {
 const (
 	maxListed      = 5000
 	maxEditorBytes = 2 << 20
-	maxWalked      = 50000
 )
+
+// maxWalked is the most files a listing keeps (Go to file, @mentions,
+// search's scan); a variable for tests.
+var maxWalked = 50000
 
 // FileVersion is the version of content: its SHA-256.
 func FileVersion(data []byte) string {
@@ -389,8 +392,8 @@ func (w *Workspace) RenameFile(ctx context.Context, from, to string) error {
 	if err := w.files().UserRename(ctx, fromRel, toRel); err != nil {
 		return err
 	}
-	if len(w.unstageGone(ctx, fromSlash)) > 0 {
-		w.restage(ctx, toSlash) // the new name in git in the old one's place (FIL-61)
+	if files := w.unstageGone(ctx, fromSlash); len(files) > 0 {
+		w.restage(ctx, movedTo(files, fromSlash, toSlash)...) // the new names in git in the old ones' place (FIL-61)
 	}
 	w.userEdited(fromSlash, "renamed to "+toSlash)
 	return nil
@@ -646,6 +649,17 @@ type fileIndex struct {
 	mu    sync.Mutex
 	at    time.Time
 	paths []string
+	// truncated is whether paths stopped at maxWalked.
+	truncated bool
+}
+
+// FilesTruncated reports whether the workspace's last file listing (Go
+// to file, @mentions) stopped at its limit, so a file past it isn't
+// found (N26 engine-top-1#14: it said nothing).
+func (w *Workspace) FilesTruncated() bool {
+	w.index.mu.Lock()
+	defer w.index.mu.Unlock()
+	return w.index.truncated
 }
 
 // FindFiles returns up to limit files whose path matches query, best
@@ -722,11 +736,11 @@ func (w *Workspace) allFiles(ctx context.Context) ([]string, error) {
 	if time.Since(w.index.at) < 5*time.Second && w.index.paths != nil {
 		return w.index.paths, nil
 	}
-	paths, err := w.listFiles(ctx, false)
+	paths, truncated, err := w.listFilesCapped(ctx, false)
 	if err != nil {
 		return nil, err
 	}
-	w.index.paths, w.index.at = paths, time.Now()
+	w.index.paths, w.index.at, w.index.truncated = paths, time.Now(), truncated
 	return paths, nil
 }
 
@@ -738,19 +752,36 @@ func (w *Workspace) allFiles(ctx context.Context) ([]string, error) {
 // worktrees, whole checkouts). Search's scans call it directly, so they
 // don't fill allFiles' cache with a list from before a file was made.
 func (w *Workspace) listFiles(ctx context.Context, dots bool) ([]string, error) {
+	paths, _, err := w.listFilesCapped(ctx, dots)
+	return paths, err
+}
+
+// listFilesCapped is listFiles, and whether it stopped at maxWalked. The
+// limit counts the files kept, not those left out (dot and blocked
+// paths), so a workspace with many of those still lists maxWalked.
+func (w *Workspace) listFilesCapped(ctx context.Context, dots bool) ([]string, bool, error) {
 	var paths []string
+	truncated := false
 	if out, err := w.git(ctx, nil, "ls-files", "--cached", "--others", "--exclude-standard", "--deduplicate", "-z"); err == nil {
+		// Each is stat'ed below: twice the limit read at most, which leaves
+		// room for those left out.
 		for _, p := range strings.Split(string(out), "\x00") {
-			if p != "" && len(paths) < maxWalked {
-				paths = append(paths, p)
+			if p == "" {
+				continue
 			}
+			if len(paths) == 2*maxWalked {
+				truncated = true
+				break
+			}
+			paths = append(paths, p)
 		}
 	} else {
 		var werr error
 		paths, werr = w.walkFiles(dots)
 		if werr != nil {
-			return nil, werr
+			return nil, false, werr
 		}
+		truncated = len(paths) >= maxWalked
 	}
 	fsys := w.files()
 	paths = slices.DeleteFunc(paths, func(p string) bool {
@@ -767,7 +798,10 @@ func (w *Workspace) listFiles(ctx context.Context, dots bool) ([]string, error) 
 		}
 		return fsys.AgentRule(filepath.FromSlash(p)) == "blocked"
 	})
-	return paths, nil
+	if len(paths) > maxWalked {
+		paths, truncated = paths[:maxWalked], true
+	}
+	return paths, truncated, nil
 }
 
 // walkFiles lists the files outside a repository, skipping dot folders

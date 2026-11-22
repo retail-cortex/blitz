@@ -312,11 +312,20 @@ func TestDeletionsLeaveGit(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, status(t, dir), "staged, then deleted: gone from git, no AD")
 
+		// A file git doesn't track beside the tracked ones stays untracked
+		// through a trash and restore, and a rename (security review
+		// files#5: restaging ran git add --all on the whole folder).
+		write(t, dir, "docs/keys.local", "secret\n")
 		id, err := w.TrashFile(ctx, "docs")
 		require.NoError(t, err)
 		assert.Equal(t, "D  docs/old.md", status(t, dir), "committed: a staged deletion")
 		require.NoError(t, w.RestoreFile(ctx, id, "docs"))
-		assert.Empty(t, status(t, dir), "restored: back as it was")
+		assert.Equal(t, "?? docs/keys.local", status(t, dir), "restored: back as it was, the untracked file untracked")
+		require.NoError(t, w.RenameFile(ctx, "docs", "notes"))
+		assert.Equal(t, "R  docs/old.md -> notes/old.md\n?? notes/keys.local", status(t, dir), "renamed: the tracked file moved, the other still untracked")
+		require.NoError(t, w.RenameFile(ctx, "notes", "docs"))
+		require.NoError(t, os.Remove(filepath.Join(dir, "docs", "keys.local")))
+		assert.Empty(t, status(t, dir))
 
 		require.NoError(t, w.RenameFile(ctx, "kept.go", "moved.go"))
 		assert.Equal(t, "R  kept.go -> moved.go", status(t, dir), "a rename, staged")

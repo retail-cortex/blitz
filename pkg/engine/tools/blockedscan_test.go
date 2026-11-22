@@ -273,3 +273,16 @@ func TestBlockedScanReportsItsLimit(t *testing.T) {
 	assert.Empty(t, s.limited)
 	assert.False(t, s.warned)
 }
+
+// A blocked name under node_modules is masked as anywhere else, and a
+// scan that stopped at its limit tells the turn once (security review
+// engine-tools-1#7: they were skipped, and only the log knew).
+func TestBlockedScanVendoredFoldersAndLimitNote(t *testing.T) {
+	ws, spec := scanFixture(t)
+	s := newBlockedScan(spec)
+	files, _ := s.expand()
+	assert.Contains(t, files, filepath.Join(ws, "node_modules", "pkg", ".env"))
+	note := s.limitNote()
+	assert.Contains(t, note, "aren't hidden from commands", "the fixture goes past the depth limit")
+	assert.Empty(t, s.limitNote(), "told once")
+}

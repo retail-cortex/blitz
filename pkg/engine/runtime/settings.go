@@ -120,6 +120,7 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 		}
 	}
 	info := m.info()
+	req = withThoughts(m.provider, info, req)
 	req, stream = applyFacts(info, req, stream)
 	return func(yield func(*model.LLMResponse, error) bool) {
 		// A refusal for something the record let through, before any
@@ -178,6 +179,35 @@ func (m *settingsModel) GenerateContent(ctx context.Context, req *model.LLMReque
 			send, stream = applyFacts(info, req, stream)
 		}
 	}
+}
+
+// withThoughts asks a Gemini model that thinks for its thought summaries
+// (includeThoughts): Gemini sends its reasoning only when asked, and the
+// summaries cost nothing more, its thinking being billed either way. They
+// show in the chat's thoughts and the Reasoning view (spec_066 RSN-06).
+// Not when thinking is off (a budget of 0); a model that refuses it is
+// learned and sent again without (applyFacts). req is shared with the
+// other models of a fallback chain, so a copy.
+func withThoughts(provider string, info ModelInfo, req *model.LLMRequest) *model.LLMRequest {
+	if provider != "gemini" || info.Thinking == ThinkingNone || req == nil {
+		return req
+	}
+	tc := genai.ThinkingConfig{}
+	if req.Config != nil && req.Config.ThinkingConfig != nil {
+		tc = *req.Config.ThinkingConfig
+		if tc.IncludeThoughts || (tc.ThinkingBudget != nil && *tc.ThinkingBudget == 0) {
+			return req
+		}
+	}
+	tc.IncludeThoughts = true
+	gc := genai.GenerateContentConfig{}
+	if req.Config != nil {
+		gc = *req.Config
+	}
+	gc.ThinkingConfig = &tc
+	cp := *req
+	cp.Config = &gc
+	return &cp
 }
 
 // apply returns a copy of req with s applied; req itself is shared with

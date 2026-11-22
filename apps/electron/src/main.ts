@@ -23,7 +23,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -73,11 +73,13 @@ import {
   profilePartition,
   previewStep,
   addressURL,
+  within,
   previewURL,
   printCheckScript,
   printLoadScript,
   printOptions,
   text,
+  withTimeout,
   theme,
   unsaved,
   waitForPrint,
@@ -435,7 +437,12 @@ async function relayPing(child: ChildProcess, p: RelayPing) {
   } catch (err) {
     answer = { pinged: p.id, error: err instanceof Error ? err.message : String(err) || "the ping failed" };
   }
-  if (child.stdin && !child.stdin.destroyed) child.stdin.write(JSON.stringify(answer) + "\n");
+  const stdin = child.stdin;
+  if (!stdin || stdin.destroyed || !stdin.writable) return;
+  // The host can exit while a ping is out: its stdin then fails with
+  // EPIPE, which unhandled would end the app (security review electron#4).
+  if (stdin.listenerCount("error") === 0) stdin.on("error", () => {});
+  stdin.write(JSON.stringify(answer) + "\n", () => {});
 }
 
 /** Points the open windows at the page served again (a new one-time link each). */
@@ -532,16 +539,20 @@ async function printPDF(html: string, pageSize: unknown): Promise<string> {
   const file = path.join(dir, "page.html");
   const printer = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
   try {
-    await writeFile(file, html);
-    const loaded = printer.loadURL(pathToFileURL(file).href);
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("printing took longer than a minute")), 60_000));
-    await Promise.race([loaded, timeout]);
-    // Fonts and pictures may not be ready to draw yet: wait for them.
-    const wc = printer.webContents;
-    await wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printLoadScript }]).catch(() => {});
-    await waitForPrint(() => wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printCheckScript }]));
-    const pdf = await Promise.race([printer.webContents.printToPDF(printOptions(pageSize)), timeout]);
-    return pdf.toString("base64"); // as Go's []byte reaches the page
+    return await withTimeout(
+      (async () => {
+        await writeFile(file, html);
+        await printer.loadURL(pathToFileURL(file).href);
+        // Fonts and pictures may not be ready to draw yet: wait for them.
+        const wc = printer.webContents;
+        await wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printLoadScript }]).catch(() => {});
+        await waitForPrint(() => wc.executeJavaScriptInIsolatedWorld(1001, [{ code: printCheckScript }]));
+        const pdf = await printer.webContents.printToPDF(printOptions(pageSize));
+        return pdf.toString("base64"); // as Go's []byte reaches the page
+      })(),
+      60_000,
+      "printing took longer than a minute",
+    );
   } finally {
     printer.destroy();
     await rm(dir, { recursive: true, force: true });
@@ -636,7 +647,9 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
       // Signed in with a browser profile (BP-08): an agent's open_page that named one.
       const profile = a[2] === "" || a[2] === undefined ? undefined : profileName(a[2]);
       if (a[2] && !profile) throw new Error(`not a browser profile: ${JSON.stringify(a[2])}`);
-      openPreview(id, url, profile);
+      // A page the agent opened (BP-08a): held to its reach, as the agent's views are (EL-17).
+      const reach = a.length > 3 ? { allowLocal: a[3] === true, deny: stringList(a[4]), sites: stringList(a[5]) } : undefined;
+      openPreview(id, url, profile, reach);
       return url;
     }
     case "PreviewBounds": {
@@ -702,8 +715,17 @@ ipcMain.handle("blitz:call", async (e, method: unknown, args: unknown) => {
     case "TrashDropped": {
       // A move from the computer into the workspace, once copied: only
       // files the preload read from a drop (EL-15).
+      // Never one that's really in the workspace: the copy just made, by
+      // another spelling of its path (security review files#2); it's
+      // said not trashed.
       const failed: string[] = [];
+      const workspace = typeof a[1] === "string" && path.isAbsolute(a[1]) ? await realpath(a[1]).catch(() => a[1] as string) : undefined;
       for (const p of dropped.take(absolutePaths(a[0], path.isAbsolute))) {
+        const real = await realpath(p).catch(() => p);
+        if (workspace === undefined || within(real, workspace, path)) {
+          failed.push(p);
+          continue;
+        }
         await shell.trashItem(p).catch(() => failed.push(p));
       }
       return failed;
@@ -906,8 +928,12 @@ function preview(a: unknown[]) {
   return p;
 }
 
-/** Opens (or points) preview id at url, hidden until the page places and shows it; in profile's session when given (BP-08). */
-function openPreview(id: string, url: string, profile?: string) {
+/**
+ * Opens (or points) preview id at url, hidden until the page places and
+ * shows it; in profile's session when given (BP-08). A page the agent
+ * opened has a reach: the session's request filter holds it (BP-08a).
+ */
+function openPreview(id: string, url: string, profile?: string, reach?: AgentReach) {
   if (!win) return;
   let p = previews.get(id);
   if (!p) {
@@ -919,6 +945,12 @@ function openPreview(id: string, url: string, profile?: string) {
     p = { view, errors: [] };
     previews.set(id, p);
     watchPreview(id, p);
+  }
+  if (reach) {
+    const wc = p.view.webContents;
+    filterAgentRequests(wc.session, reach);
+    if (!agentReach.has(wc.id)) wc.once("destroyed", () => agentReach.delete(wc.id));
+    agentReach.set(wc.id, reach);
   }
   // A page that won't load shows Chromium's error page, and its error.
   p.view.webContents.loadURL(url).catch(() => {});

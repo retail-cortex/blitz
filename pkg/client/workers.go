@@ -16,6 +16,7 @@ package client
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -171,9 +172,14 @@ func (w *Workers) RunningWorkerRuns() ([]api.Run, error) {
 	if err != nil {
 		return nil, fromAPI(err)
 	}
+	// The service names a workspace by its real directory.
+	here := w.dir
+	if real, err := filepath.EvalSymlinks(here); err == nil {
+		here = real
+	}
 	var out []api.Run
 	for _, r := range res.Msg.Runs {
-		if r.Workspace == w.dir {
+		if r.Workspace == here {
 			out = append(out, workerRun(r))
 		}
 	}

@@ -16,9 +16,10 @@ package enterprise
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,6 +30,8 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/agentpkg"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 )
 
 // PersonalItem is one of the person's own assets as the organization's
@@ -137,6 +140,42 @@ func (c *Client) Share(ctx context.Context, kind, name string, files map[string]
 	return out, err
 }
 
+// PersonalSecrets are what look like secrets in one of the person's own
+// assets, by file and line, before it leaves the computer (shared or
+// synced): what's published is read for secrets first, as a shared folder
+// is (spec_053 EN-36a, EN-66). A line marked secretscan.AllowMarker is a
+// false alarm.
+func PersonalSecrets(files map[string]string) []secretscan.Finding {
+	var out []secretscan.Finding
+	for _, name := range slices.Sorted(func(yield func(string) bool) {
+		for k := range files {
+			if !yield(k) {
+				return
+			}
+		}
+	}) {
+		out = append(out, secretscan.Scan(name, []byte(files[name]))...)
+	}
+	return out
+}
+
+// SecretsSummary names what a secret scan found, each by file and line,
+// the first ten.
+func SecretsSummary(found []secretscan.Finding) string {
+	var b strings.Builder
+	for i, f := range found {
+		if i == 10 {
+			fmt.Fprintf(&b, "; and %d more", len(found)-10)
+			break
+		}
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		fmt.Fprintf(&b, "%s:%d (%s %s)", f.Path, f.Line, f.Kind, f.Masked)
+	}
+	return b.String()
+}
+
 // Submissions are the person's submissions, the newest first.
 func (c *Client) Submissions(ctx context.Context) ([]Submission, error) {
 	var out struct {
@@ -173,9 +212,11 @@ type SyncReport struct {
 	Skipped map[string]string
 }
 
-// syncState is what the last sync left, by "kind/name".
+// syncState is what the last sync left, by "kind/name", and whose sync it
+// was (the person's ID on the service).
 type syncState struct {
-	Items map[string]syncedItem `json:"items"`
+	Person string                `json:"person,omitempty"`
+	Items  map[string]syncedItem `json:"items"`
 }
 
 type syncedItem struct {
@@ -201,9 +242,21 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 	}
 	local, skipped := PersonalFiles(root)
 	var st syncState
-	if b, err := os.ReadFile(state); err == nil {
-		_ = json.Unmarshal(b, &st)
+	if _, err := atomicfile.ReadJSONOrQuarantine(state, &st); err != nil {
+		if _, statErr := os.Stat(state); !errors.Is(statErr, fs.ErrNotExist) {
+			return rep, fmt.Errorf("reading sync state: %w", err)
+		}
+		slog.Warn("personal sync state was damaged and quarantined; starting from empty state", "path", state, "error", err)
 	}
+	// The last sync was another person's (another account on the same
+	// service), or remembers items the service no longer lists any of (a
+	// reset): nothing here is taken for removed elsewhere, and what's here
+	// is sent (EN-93b; security review enterprise#3).
+	person := c.Status().Person.ID
+	if st.Person != person || len(remote) == 0 && len(st.Items) > 0 {
+		st.Items = nil
+	}
+	st.Person = person
 	if st.Items == nil {
 		st.Items = map[string]syncedItem{}
 	}
@@ -251,6 +304,10 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 			sum = agentpkg.Digest(files)
 		}
 		send := func(base int) {
+			if found := PersonalSecrets(files); len(found) > 0 {
+				rep.Skipped[key] = fmt.Sprintf("not sent: it holds what look like secrets: %s. Remove them, or mark a false alarm with %s on its line", SecretsSummary(found), secretscan.AllowMarker)
+				return
+			}
 			got, err := c.PutPersonal(ctx, kind, name, files, base)
 			if err != nil {
 				if ref, ok := errors.AsType[*Refusal](err); ok && ref.Status == http.StatusUnprocessableEntity {
@@ -319,10 +376,8 @@ func SyncPersonal(ctx context.Context, c *Client, root, state string) (SyncRepor
 			}
 		}
 	}
-	if b, err := json.MarshalIndent(st, "", "  "); err == nil {
-		if err := os.MkdirAll(filepath.Dir(state), 0o700); err == nil {
-			errs = append(errs, os.WriteFile(state, b, 0o600))
-		}
+	if err := atomicfile.WriteJSON(state, st, 0o600); err != nil {
+		errs = append(errs, fmt.Errorf("saving sync state: %w", err))
 	}
 	return rep, errors.Join(errs...)
 }

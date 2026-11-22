@@ -62,6 +62,17 @@ describe("the stylesheets", () => {
 // The window moves by the title bar's free space (issue #106): only what
 // can be clicked in it stops dragging, never the menu bar as a whole, and
 // a view's header drags too.
+// No view covers the top menu: a layer over the whole window lets clicks
+// through (CodeMirror's tooltips); viewers start under it, as the
+// drawer's views do (spec_066_reasoning RSN-15).
+describe("the top menu", () => {
+  it.each(stylesheets(dir))("%s leaves it usable", (file) => {
+    const rules = readFileSync(join(dir, file), "utf8").match(/[^{}]+\{[^{}]*\}/g) ?? [];
+    const covering = rules.filter((r) => /position:\s*fixed/.test(r) && /inset:\s*0\s*[;}]/.test(r) && !/pointer-events:\s*none/.test(r));
+    expect(covering.map((r) => r.split("{")[0].trim())).toEqual([]);
+  });
+});
+
 describe("the title bar", () => {
   const css = readFileSync(join(dir, "app.css"), "utf8");
   it("drags between the menus", () => {

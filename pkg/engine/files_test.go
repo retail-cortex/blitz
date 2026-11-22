@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -472,4 +473,29 @@ func TestFindFilesInARepository(t *testing.T) {
 	l, err := w.ListDir(ctx, "", false)
 	require.NoError(t, err)
 	assert.Equal(t, "renamed", entry(t, l, "new.go").Git)
+}
+
+// A listing past its limit says so, and the limit counts files kept: dot
+// and blocked paths left out don't use it up (N26 engine-top-1#14).
+func TestFilesTruncated(t *testing.T) {
+	was := maxWalked
+	maxWalked = 3
+	t.Cleanup(func() { maxWalked = was })
+	w := openTest(t)
+	ctx := context.Background()
+	write(t, w.Dir(), ".hidden/a", "x")
+	write(t, w.Dir(), ".hidden/b", "x")
+	write(t, w.Dir(), "a.go", "x")
+	write(t, w.Dir(), "b.go", "x")
+	_, err := w.FindFiles(ctx, "", 10)
+	require.NoError(t, err)
+	assert.False(t, w.FilesTruncated(), "two files, under the limit")
+
+	w.index.at = time.Time{} // listed again
+	write(t, w.Dir(), "c.go", "x")
+	write(t, w.Dir(), "d.go", "x")
+	got, err := w.FindFiles(ctx, "", 10)
+	require.NoError(t, err)
+	assert.Len(t, got, 3)
+	assert.True(t, w.FilesTruncated(), "four files, past the limit of three")
 }

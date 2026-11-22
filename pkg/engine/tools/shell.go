@@ -158,7 +158,11 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 				watch.Lines = re
 			}
 		}
-		bp, err := cfg.Processes.StartWatched(sessionOf(ctx), input.Command, cwd, watch)
+		start := cfg.Processes.StartWatched
+		if cfg.Hooks != nil && cfg.Hooks.ModeOf(ctx) == api.ModeUnsafe {
+			start = cfg.Processes.StartUnsandboxed // APR-14e
+		}
+		bp, err := start(sessionOf(ctx), input.Command, cwd, watch)
 		if err != nil {
 			return RunShellCommandOutput{Error: fmt.Sprintf("failed to start background command: %v", err)}
 		}
@@ -182,7 +186,15 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, input RunShellCommand
 	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd, err := cfg.Exec.command(cmdCtx, []string{"bash", "-c", input.Command})
+	run := cfg.Exec
+	// Unsafe mode runs the command outside the OS sandbox (APR-14e): the
+	// rest of its environment (the guard, the scrubbed variables) stays.
+	if run != nil && cfg.Hooks != nil && cfg.Hooks.ModeOf(ctx) == api.ModeUnsafe {
+		unsandboxed := *run
+		unsandboxed.Sandbox = nil
+		run = &unsandboxed
+	}
+	cmd, err := run.command(cmdCtx, []string{"bash", "-c", input.Command})
 	switch {
 	case err == nil:
 	// The time limit or a cancellation while the sandbox got ready: as if

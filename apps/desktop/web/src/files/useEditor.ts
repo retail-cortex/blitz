@@ -22,6 +22,7 @@ import type { EditorState } from "@codemirror/state";
 import { files } from "../api";
 import { onPreviewState, previewClose } from "../desktop";
 import { errorMeta, message, reason } from "../errors";
+import type { PageReach } from "../events";
 import { secretCompletion } from "./secretCompletion";
 import { fileState, languageSupport } from "./codemirror";
 import { endLanguageSession, languageExtension, languageSession, type LanguageHooks } from "./language";
@@ -61,6 +62,8 @@ export interface WebPage {
   agent?: boolean;
   /** The browser profile it's signed in with (BP-08): an agent's open_page that named one. */
   profile?: string;
+  /** What it may reach, when the agent opened it (BP-08a). */
+  reach?: PageReach;
 }
 
 /** Where to put the cursor when a tab is shown next. */
@@ -99,7 +102,7 @@ export interface EditorModel {
   /** A file was renamed or deleted in the shelf. */
   moved: (from: string, to: string | null) => void;
   /** Opens a web page in a tab of its own (spec_038_electron EL-100); returns the tab's path. */
-  openWeb: (url: string, profile?: string) => string;
+  openWeb: (url: string, profile?: string, reach?: PageReach) => string;
   /** Shows the agent's watched view id as a tab (spec_050_agent_browser AB-03). */
   openAgentWeb: (id: string) => void;
   /** What a web tab's preview said of its page. */
@@ -298,9 +301,9 @@ export function useEditor(dir: string, language?: Omit<LanguageHooks, "open">): 
     [dir, patch],
   );
 
-  const openWeb = useCallback((url: string, profile?: string) => {
+  const openWeb = useCallback((url: string, profile?: string, reach?: PageReach) => {
     const path = webPath(newWebId());
-    setTabs((ts) => [...ts, { path, name: webTabName(url, ""), loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, web: { url, title: "", loading: true, back: false, forward: false, ...(profile ? { profile } : {}) } }]);
+    setTabs((ts) => [...ts, { path, name: webTabName(url, ""), loading: false, version: "", size: 0, binary: false, tooLarge: false, agentRule: "", dirty: false, web: { url, title: "", loading: true, back: false, forward: false, ...(profile ? { profile } : {}), ...(reach ? { reach } : {}) } }]);
     setActive(path);
     setTarget(null);
     return path;

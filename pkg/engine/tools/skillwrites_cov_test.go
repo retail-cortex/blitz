@@ -102,12 +102,13 @@ func TestRunSkillScriptWritesWorkspace(t *testing.T) {
 	assert.Equal(t, "rewritten\n", read(t, f.ws, "README.md"))
 	assert.Equal(t, "<none>", read(t, f.ws, "gone.txt"))
 
-	// A blocked file the script made isn't written; the rest is.
+	// A blocked file the script made: none of its changes is kept, all or
+	// none (N26 engine-tools-2#13).
 	out = f.r.Run(context.Background(), RunSkillScriptInput{Skill: "writer", Script: "secret"})
 	assert.Contains(t, out.Error, "the script's changes weren't kept: .env:", "%+v", out)
-	assert.Equal(t, []string{"ok.txt"}, out.Changed)
-	assert.Equal(t, "SECRET=1\n", read(t, f.ws, ".env"))
-	assert.Equal(t, "ok\n", read(t, f.ws, "ok.txt"))
+	assert.Empty(t, out.Changed)
+	assert.Equal(t, "SECRET=1\n", read(t, f.ws, ".env"), "the workspace's own .env, untouched")
+	assert.Equal(t, "<none>", read(t, f.ws, "ok.txt"), "not written: all or none")
 
 	refused := newWriterFixture(t, denyAll)
 	out = refused.r.Run(context.Background(), RunSkillScriptInput{Skill: "writer", Script: "edit"})

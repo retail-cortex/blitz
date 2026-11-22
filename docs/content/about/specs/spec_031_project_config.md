@@ -101,6 +101,8 @@ This design lets a repository carry settings in three tiers:
   In the service these are `WorkspaceService.GetProjectSettings` and `TrustProject`. The client implements them, so the REPL works the same attached or local.
 - **PRJ-41** Permission listings (`ListPermissionRules`, the run settings panel) show the scope `project` for rules from project files. They can't be removed from Blitz: they're edited in the file.
 - **PRJ-41a** *2026-11-05 (scan N26-engine-top-2#3: `/permissions remove` and `RemovePermissionRule` deleted every rule with that text, a project's deny rules and the built-in ones too, until a project file changed).* `RemovePermissionRule` removes only the session's, the flags' and the settings' rules; one that is a project file's rule is refused ("… comes from the project's .blitz/settings.toml: change it there"), and so is a built-in read-only rule (turned off with `read_only_defaults = false`).
+- **PRJ-41b** *2026-11-21 (N26 engine-top-2#3, still open after PRJ-41a: the organization's `tools.off` are merged into the settings' deny rules, so `/permissions remove web_search` switched an org-disabled tool back on for the session).* A rule the organization's policy turns off (`tools.off`) is refused too ("… is turned off by your organization's policy: it can't be removed").
+- **PRJ-41c** *2026-11-21 (re-check of N26 desktop-1#15: removing a session's ask removed every rule of its text, a deny in the settings too, until they were read again).* `RemovePermissionRule` takes an `effect` (`allow`, `ask` or `deny`; "" every one, as `/permissions remove` does), and only that rule goes; Settings' session rules send theirs. Another effect is `BAD_RULE`.
 
 ## 8. What changed for existing users
 

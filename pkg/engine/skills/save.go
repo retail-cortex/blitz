@@ -28,9 +28,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/engine/frontmatter"
-
-	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
 )
 
 // Writing a skill from Studio's form (spec_013_skills SK-100): SKILL.md's

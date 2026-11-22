@@ -196,20 +196,7 @@ func (h configService) ShareWithOrganization(ctx context.Context, r req[pb.Share
 
 // findings names what a secret scan found, each by file and line, the
 // first ten.
-func findings(found []secretscan.Finding) string {
-	var b strings.Builder
-	for i, f := range found {
-		if i == 10 {
-			fmt.Fprintf(&b, "; and %d more", len(found)-10)
-			break
-		}
-		if i > 0 {
-			b.WriteString("; ")
-		}
-		fmt.Fprintf(&b, "%s:%d (%s %s)", f.Path, f.Line, f.Kind, f.Masked)
-	}
-	return b.String()
-}
+func findings(found []secretscan.Finding) string { return enterprise.SecretsSummary(found) }
 
 // changedSecrets finds the secrets in what committing everything in the
 // repository at dir would add (its untracked files git doesn't ignore, and

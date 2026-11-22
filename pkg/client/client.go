@@ -42,6 +42,7 @@ type Remote struct {
 	sessions   pb.SessionServiceClient
 	workspaces pb.WorkspaceServiceClient
 	config     pb.ConfigServiceClient
+	languages  pb.LanguageServiceClient
 	// warn reports calls that failed where Backend has no error to return
 	// (a listing comes back empty instead).
 	warn     func(string)
@@ -76,6 +77,7 @@ func AttachHTTP(ctx context.Context, hc connect.HTTPClient, baseURL, dir string,
 		sessions:   pb.NewSessionServiceClient(hc, baseURL),
 		workspaces: pb.NewWorkspaceServiceClient(hc, baseURL),
 		config:     pb.NewConfigServiceClient(hc, baseURL),
+		languages:  pb.NewLanguageServiceClient(hc, baseURL),
 		warn:       warn,
 	}
 	// Opens the workspace in the service, and says whether its model works.
@@ -1142,4 +1144,22 @@ func (r *Remote) ListModels(ctx context.Context, refresh bool) (api.ModelList, e
 		out.Providers = append(out.Providers, pm)
 	}
 	return out, nil
+}
+
+// RepoCodeTrust is whether the workspace's language servers may run its
+// own code, and what it is (spec_037 VE-43a; LanguageService
+// GetLanguageStatus): "" when they'd run none.
+func (r *Remote) RepoCodeTrust() (string, []string, error) {
+	res, err := r.languages.GetLanguageStatus(context.Background(), connect.NewRequest(&pb.GetLanguageStatusRequest{Workspace: r.dir}))
+	if err != nil {
+		return "", nil, fromAPI(err)
+	}
+	return res.Msg.RepoCode, res.Msg.RepoCodeFiles, nil
+}
+
+// TrustRepoCode records whether the workspace's language servers may run
+// its own code (LanguageService.TrustLanguageCode).
+func (r *Remote) TrustRepoCode(trusted bool) error {
+	_, err := r.languages.TrustLanguageCode(context.Background(), connect.NewRequest(&pb.TrustLanguageCodeRequest{Workspace: r.dir, Trusted: trusted}))
+	return fromAPI(err)
 }

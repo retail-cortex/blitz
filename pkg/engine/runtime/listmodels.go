@@ -31,6 +31,7 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"google.golang.org/genai"
 )
 
@@ -305,7 +306,9 @@ var ollamaAnswers = func(ctx context.Context) bool {
 		return false
 	}
 	req.Close = true // one question: no connection kept open
-	res, err := http.DefaultClient.Do(req)
+	hc := netutil.NewClient(300 * time.Millisecond)
+	defer hc.CloseIdleConnections()
+	res, err := hc.Do(req)
 	if err != nil {
 		return false
 	}

@@ -61,6 +61,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/apps/cli/internal/tui",
     visibility = ["//apps/cli:__subpackages__"],
     deps = [
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/config",
         "//pkg/docx",
@@ -156,6 +157,7 @@ go_test(
     # macOS.
     tags = ["no-sandbox"],
     deps = [
+        "//pkg/activity",
         "//pkg/api",
         "//pkg/client",
         "//pkg/config",

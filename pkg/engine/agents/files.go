@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
@@ -144,7 +145,7 @@ func Save(dir string, spec *AgentSpec, previous string, builtin func(string) boo
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", nil, err
 	}
-	if err := writeAtomic(path, data); err != nil {
+	if err := atomicfile.Write(path, data, 0o644); err != nil {
 		return "", nil, err
 	}
 	if old != "" && old != path {
@@ -178,26 +179,4 @@ func DeleteFile(dir, path string) error {
 		return fmt.Errorf("%s isn't an agent file in %s", path, dir)
 	}
 	return os.Remove(path)
-}
-
-// writeAtomic replaces path with data through a temporary file beside it,
-// so a reload never reads half a file.
-func writeAtomic(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".agent-*.md.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o644); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }

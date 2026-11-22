@@ -26,6 +26,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // Keep is how long verdicts are kept, for trends (HL-11).
@@ -212,7 +214,7 @@ func (s *Store) Add(v Verdict) error {
 		b.Write(line)
 		b.WriteByte('\n')
 	}
-	return writeFile(s.file(), b.Bytes())
+	return atomicfile.MkdirWrite(s.file(), b.Bytes(), 0o700, 0o600)
 }
 
 // State is what the store remembers of the checks.
@@ -250,25 +252,5 @@ func (s *Store) SetState(st State) error {
 	if err != nil {
 		return err
 	}
-	return writeFile(s.stateFile(), data)
-}
-
-// writeFile writes data to path through a temporary file, so a reader
-// never sees half of it.
-func writeFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	// A temporary file of its own: two processes on one store don't
-	// write into each other's.
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	_, werr := tmp.Write(data)
-	if err := errors.Join(werr, tmp.Chmod(0o600), tmp.Close()); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return atomicfile.MkdirWrite(s.stateFile(), data, 0o700, 0o600)
 }

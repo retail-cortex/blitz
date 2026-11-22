@@ -29,6 +29,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/agent"
 )
 
 // serveMCP serves srv over streamable HTTP for the test and returns its URL.
@@ -367,4 +368,67 @@ func TestHooksAskUser(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// namedToolCtx is a tool call's context as one agent's.
+type namedToolCtx struct {
+	agent.Context
+	name string
+}
+
+func (n namedToolCtx) AgentName() string { return n.name }
+
+// The resource tools read only the servers whose tools the calling agent
+// has: one without an agents list is the turn's own agent's, one naming
+// agents is theirs (N26 engine-tools-1#26: any agent could read any
+// server's resources once approved).
+func TestMCPResourceToolsFollowTheServersAgents(t *testing.T) {
+	url, _ := mcpHTTPServer(t)
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Tools.ApprovalsFile = ""
+	cfg.MCP.Servers = []config.MCPServerConfig{
+		{Name: "own", URL: url, AutoApprove: true},
+		{Name: "writers", URL: url, AutoApprove: true, Agents: []string{"writer"}},
+	}
+	reg, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { reg.Close() })
+	list := reg.tools["list_mcp_resources"].(runnerTool)
+	read := reg.tools["read_mcp_resource"].(runnerTool)
+	as := func(agentName, primary string) agent.Context {
+		return namedToolCtx{createTestToolContextWith(WithPrimaryAgent(context.Background(), primary)), agentName}
+	}
+	tests := []struct {
+		name, agent, primary, server string
+		offered                      bool
+	}{
+		{"the turn's agent, a server for it", "main", "main", "own", true},
+		{"the turn's agent, a server for others", "main", "main", "writers", false},
+		{"a sub-agent, a server naming it", "writer", "", "writers", true},
+		{"a sub-agent, the turn's agent's server", "writer", "", "own", false},
+		{"another sub-agent", "critic", "", "writers", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := read.Run(as(tt.agent, tt.primary), map[string]any{"server": tt.server, "uri": "file:///readme"})
+			require.NoError(t, err)
+			if tt.offered {
+				assert.Empty(t, errOf(out))
+				assert.Contains(t, fmt.Sprint(out), "hello from the server")
+			} else {
+				assert.Contains(t, errOf(out), "isn't offered to this agent")
+			}
+		})
+	}
+	t.Run("listing every server leaves out the others'", func(t *testing.T) {
+		out, err := list.Run(as("critic", ""), map[string]any{})
+		require.NoError(t, err)
+		assert.Empty(t, errOf(out))
+		assert.NotContains(t, fmt.Sprint(out), "file:///readme", "a server the agent isn't offered was listed")
+	})
+	t.Run("outside a turn nothing is limited", func(t *testing.T) {
+		out := runTool(t, read, map[string]any{"server": "writers", "uri": "file:///readme"})
+		assert.Empty(t, errOf(out))
+	})
 }

@@ -214,7 +214,7 @@ export function Workspace({
     const onWeb = (e: Event) => {
       const d = (e as CustomEvent<OpenWebDetail>).detail;
       if (d.dir !== dir) return;
-      editorRef.current.openWeb(d.url, d.profile);
+      editorRef.current.openWeb(d.url, d.profile, d.reach);
       setWide((w) => (w === "chat" ? "" : w));
       setModal(null);
     };
@@ -343,6 +343,7 @@ export function Workspace({
         {prefs.files ? (
           <FilesShelf
             dir={dir}
+            readOnly={settings?.readOnly ?? ""}
             width={filesWidth}
             onResize={(w) => update((p) => ({ ...p, files_width: w }))}
             showHidden={prefs.show_hidden}

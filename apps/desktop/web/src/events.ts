@@ -76,6 +76,15 @@ export interface OpenWebDetail {
   url: string;
   /** The browser profile it's signed in with (spec_049_browser_profiles BP-08); none: the app's own pages' session. */
   profile?: string;
+  /** What an agent's page may reach (BP-08a), held by the window's network filter; none: the person's own page. */
+  reach?: PageReach;
+}
+
+/** What a page the agent opened may reach (BP-08a): private addresses with allowLocal, never deny, a profile's own sites on the private network. */
+export interface PageReach {
+  allowLocal: boolean;
+  deny: string[];
+  sites: string[];
 }
 /** Opens a web page in a workspace's editor, in a tab of its own. */
 export function openWeb(detail: OpenWebDetail) {

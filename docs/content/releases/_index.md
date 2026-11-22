@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 1.2.0](blitz-1.2.0.md): the Reasoning view draws each turn's calls, thinking and tools, live and for every past chat; Gemini shows its thinking; unsafe mode, only ever your choice; the most hardened Blitz yet.
 - [Blitz 1.1.3](blitz-1.1.3.md): the agent reaches your browser profile's internal sites, on a private network over a VPN or your company's DNS.
 - [Blitz 1.1.2](blitz-1.1.2.md): 1.1.1 for Linux on ARM, with the desktop app's packages.
 - [Blitz 1.1.1](blitz-1.1.1.md): your agents browse signed in, with the browser profiles you sign in to; and settings that take effect, with a restart Blitz offers when you close Settings.

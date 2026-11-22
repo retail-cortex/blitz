@@ -15,6 +15,7 @@ package agentpkg
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -184,6 +185,17 @@ func (u URI) String() string {
 // ValidName reports whether name is one Blitz gives an asset: lowercase
 // letters, digits and single hyphens or underscores, up to 64.
 func ValidName(name string) bool { return len(name) <= 64 && depName.MatchString(name) }
+
+// assetVersion is a version as a folder name can hold it: letters,
+// digits, dots, hyphens, underscores and plus signs, starting with a
+// letter or digit (1.2.0, v2, 2.0.0-rc.1+build).
+var assetVersion = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$`)
+
+// ValidVersion reports whether version can name an asset's folder: never
+// a path (no slash, no "..").
+func ValidVersion(version string) bool {
+	return assetVersion.MatchString(version) && !strings.Contains(version, "..")
+}
 
 func validKind(k string) bool {
 	for _, x := range Kinds {

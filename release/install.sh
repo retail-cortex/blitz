@@ -103,4 +103,4 @@ case ":$PATH:" in
   *":$BIN:"*) ;;
   *) say "Add $BIN to your PATH, e.g. echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.profile" ;;
 esac
-say "Next: blitz setup"
+say "Next: blitz config init, then blitz config set-key <provider> (or blitz auth login), and blitz doctor"

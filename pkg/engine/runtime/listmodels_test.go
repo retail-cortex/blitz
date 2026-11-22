@@ -88,10 +88,7 @@ func TestNotSetUp(t *testing.T) {
 	cfg.Enterprise.URL = "https://blitz.example.com"
 	assert.Empty(t, NotSetUp(cfg, listed))
 	cfg.Org.Policy.Models.OwnProviders = true
-	assert.Equal(t, []string{"gemini", "anthropic", "openai", "ollama"}, NotSetUp(cfg, nil))
-	cfg.Org.Policy.Models.OwnProviders = false
-	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"ollama": {Allowed: true}}
-	assert.Equal(t, []string{"ollama"}, NotSetUp(cfg, nil), "only those the policy allows (EN-35)")
+	assert.Equal(t, []string{"ollama"}, NotSetUp(cfg, nil), "only the local provider beside the organization (EN-35a)")
 }
 
 // Ollama is listed when its base_url is set, or when it answers on this
@@ -134,7 +131,7 @@ func TestListModelsFindsOllama(t *testing.T) {
 	assert.Equal(t, 1, countOf(providers(cfg), "ollama"))
 
 	cfg.Enterprise.URL = "https://blitz.example.com"
-	assert.NotContains(t, providers(cfg), "ollama", "the organization's models only")
+	assert.Contains(t, providers(cfg), "ollama", "the local provider stays beside the organization's (EN-35a)")
 
 	// Allowed by the policy, its models by pattern (EN-35).
 	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"ollama": {Allowed: true, Models: []string{"qwen3:*"}}}

@@ -40,7 +40,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/jsonl"
 
-	"github.com/retail-cortex/blitz/pkg/engine/atomicfile"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // Session transcripts can contain secrets pasted by the user or echoed by

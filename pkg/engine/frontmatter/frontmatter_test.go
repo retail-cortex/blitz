@@ -109,3 +109,19 @@ func TestStrict(t *testing.T) {
 		})
 	}
 }
+
+// FuzzFrontMatter: any file splits and decodes, or is refused, without a
+// panic, and the front matter split off is a prefix of the file.
+func FuzzFrontMatter(f *testing.F) {
+	for _, s := range []string{"---\nname: a\n---\nbody", "\xef\xbb\xbf---\nx: 1\n---\n", "---\n----\n---", "no front matter", "---\n", "---\nname: [\n---\n"} {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		front, _, ok := Split(data)
+		if ok && len(front) > len(data) {
+			t.Fatalf("front matter longer than the file")
+		}
+		var v map[string]any
+		_ = Strict(data, &v)
+	})
+}

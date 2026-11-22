@@ -234,6 +234,7 @@ func (w *Workspace) Settings() api.Settings {
 		SpeechError:    errText(w.tools.SpeakerErr()),
 		ImageModel:     w.cfg.Images.Model,
 		ImageError:     errText(w.tools.PainterErr()),
+		ReadOnly:       w.files().ReadOnly(),
 	}
 }
 
@@ -253,6 +254,12 @@ func (w *Workspace) SetPermissionMode(mode string) (string, error) {
 	m, err := api.ParsePermissionMode(mode)
 	if err != nil {
 		return "", err
+	}
+	// The agent acts only while it works here: a switch to unsafe then
+	// could be its own (a command reaching the service), never the
+	// person's (APR-14e).
+	if m == api.ModeUnsafe && w.tools.Hooks().Mode() != api.ModeUnsafe && w.agentAtWork() {
+		return "", api.ErrUnsafeWhileAgentWorks
 	}
 	if err := w.tools.SetPermissionMode(m); err != nil {
 		return "", err
@@ -412,4 +419,13 @@ func (w *Workspace) ListModels(ctx context.Context, refresh bool) (api.ModelList
 	w.models, w.modelsUntil = &out, time.Now().Add(fresh)
 	w.modelsMu.Unlock()
 	return out, nil
+}
+
+// agentAtWork reports whether the agent is acting in the workspace: a
+// turn, a background task, or a background process it started.
+func (w *Workspace) agentAtWork() bool {
+	if w.Busy() || len(w.RunningProcesses()) > 0 {
+		return true
+	}
+	return slices.ContainsFunc(w.engine.ListTasks(nil), api.TaskInfo.Active)
 }

@@ -24,6 +24,7 @@ go_library(
     importpath = "github.com/retail-cortex/blitz/pkg/selfupdate",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/netutil",
         "@com_github_sigstore_sigstore_go//pkg/bundle",
         "@com_github_sigstore_sigstore_go//pkg/root",
         "@com_github_sigstore_sigstore_go//pkg/tuf",

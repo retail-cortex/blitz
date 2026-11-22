@@ -33,6 +33,7 @@ go_test(
     name = "agentpkg_test",
     size = "small",
     srcs = [
+        "files_test.go",
         "uri_test.go",
         "version_test.go",
     ],

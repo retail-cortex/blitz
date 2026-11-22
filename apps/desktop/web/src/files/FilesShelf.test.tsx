@@ -110,14 +110,29 @@ afterEach(() => {
 // Lets the shelf's listings land.
 const settle = () => act(() => new Promise<void>((r) => setTimeout(r, 20)));
 
-async function mount() {
+async function mount(readOnly = "") {
   fs.reset();
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
   const noop = () => {};
-  act(() => root!.render(<FilesShelf dir="/w" width={260} onResize={noop} showHidden={false} onToggleHidden={noop} active={null} refresh={0} reveal={null} onOpen={noop} onMoved={noop} onChanged={noop} onClose={noop} />));
+  act(() => root!.render(<FilesShelf dir="/w" width={260} onResize={noop} showHidden={false} onToggleHidden={noop} active={null} refresh={0} reveal={null} onOpen={noop} onMoved={noop} onChanged={noop} onClose={noop} readOnly={readOnly} />));
   await settle();
 }
+
+// A Viewer's clone (EN-60) says its files only read, and offers no new
+// file or folder (security review files#6).
+describe("FilesShelf, read-only", () => {
+  it("shows why, without the new-file buttons", async () => {
+    await mount("you're a Viewer of Plans");
+    expect(host!.querySelector(".files-read-only")?.textContent).toContain("you're a Viewer of Plans");
+    expect(host!.querySelector(`[aria-label="${t("desktop.files.new_file")}"]`)).toBeNull();
+  });
+  it("shows nothing of it when files can change", async () => {
+    await mount();
+    expect(host!.querySelector(".files-read-only")).toBeNull();
+    expect(host!.querySelector(`[aria-label="${t("desktop.files.new_file")}"]`)).not.toBeNull();
+  });
+});
 
 const row = (path: string) => host!.querySelector<HTMLElement>(`[data-path="${path}"]`);
 

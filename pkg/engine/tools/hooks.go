@@ -378,7 +378,7 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		decided(audit.Entry{Kind: audit.KindDenial, Tool: req.Tool, Detail: req.Detail, Decision: "rule-deny " + rule.String()})
 		return fmt.Errorf("%w: %s is denied by the permission rule deny %s", ErrNotApproved, req.Detail, rule)
 	}
-	mustAsk := req.MustAsk || effect == EffectAsk
+	mustAsk := req.MustAsk || effect == EffectAsk || FromText(ctx)
 
 	if decide, ok := ctx.Value(unattendedKey{}).(api.Approver); ok {
 		if mustAsk { // an ask rule needs a person, and nobody is watching
@@ -426,6 +426,9 @@ func (h *Hooks) Approve(ctx context.Context, req api.ApprovalRequest) error {
 		return nil
 	case policy.Mode == api.ModeBypass:
 		record("mode-bypass")
+		return nil
+	case policy.Mode == api.ModeUnsafe:
+		record("mode-unsafe")
 		return nil
 	case req.Kind == api.ActionCommand && req.Tool != "browser" && policy.AutoApproveCommands:
 		// Shell commands, not a page's JavaScript (its sign-ins included).

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/harness"
@@ -116,11 +117,7 @@ func (w *Workspace) harnessState() harnessState {
 func (w *Workspace) saveHarnessState(st harnessState) {
 	path := w.harnessStatePath()
 	data, _ := json.Marshal(st)
-	err := os.MkdirAll(filepath.Dir(path), 0o700)
-	if err == nil {
-		err = writeFileAtomic(filepath.Dir(path), path, data)
-	}
-	if err != nil {
+	if err := atomicfile.MkdirWrite(path, data, 0o700, 0o644); err != nil {
 		slog.Warn("saving the harness state", "error", err)
 	}
 }
@@ -272,10 +269,7 @@ func (w *Workspace) saveGlobalExperience(ctx context.Context, entry string) (str
 		return path, nil
 	}
 	text = addToSection(text, howToWorkHeading, "- "+entry)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", err
-	}
-	if err := writeFileAtomic(filepath.Dir(path), path, []byte(text)); err != nil {
+	if err := atomicfile.MkdirWrite(path, []byte(text), 0o700, 0o644); err != nil {
 		return "", err
 	}
 	_, err = w.ReloadMemory(context.WithoutCancel(ctx))

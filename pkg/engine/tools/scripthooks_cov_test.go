@@ -180,3 +180,32 @@ func TestHTTPHookReplyCutShort(t *testing.T) {
 	assert.True(t, out.Blocked, "a fail_closed hook whose reply was cut short")
 	assert.Contains(t, out.Reason, "fail_closed")
 }
+
+// TestHTTPHookHeadersScrubbedInTheRegistry checks the registry hands
+// sandbox.scrub_env to its hooks: an http hook's allowed_env_vars can't
+// send a withheld key, while one the scrub list leaves goes (N26
+// api-client-config#2, which only the bare expansion was tested for).
+func TestHTTPHookHeadersScrubbedInTheRegistry(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-secret")
+	t.Setenv("HOOK_TOKEN", "t0ken")
+	got := make(chan http.Header, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	cfg.Hooks = config.HooksConfig{Stop: []config.HookConfig{{
+		Type: "http", URL: srv.URL,
+		Headers:        map[string]string{"X-Key": "$ANTHROPIC_API_KEY", "X-Token": "$HOOK_TOKEN"},
+		AllowedEnvVars: []string{"ANTHROPIC_API_KEY", "HOOK_TOKEN"},
+	}}}
+	r, err := NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { r.Close() })
+	r.ScriptHooks().Run(context.Background(), "stop", "", HookEvent{})
+	h := <-got
+	assert.Equal(t, "${ANTHROPIC_API_KEY}", h.Get("X-Key"), "a scrubbed key was sent")
+	assert.Equal(t, "t0ken", h.Get("X-Token"))
+}

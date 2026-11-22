@@ -618,6 +618,20 @@ export async function waitForPrint(check: () => Promise<unknown>, sleep = (ms: n
   await sleep(printWait.settleMs);
 }
 
+/**
+ * Races work against an ms timeout, rejecting with message if it expires,
+ * and always clears the timer when work settles.
+ */
+export function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 /** The largest picture Save to workspace downloads (EL-106). */
 export const maxPictureBytes = 10 << 20;
 
@@ -879,3 +893,16 @@ export function pagePermission(permission: string, requesting: string, origin: s
   if (permission !== "media") return false;
   return !!origin && originOf(requesting) === origin && mediaTypes.length > 0 && mediaTypes.every((t) => t === "audio");
 }
+
+/**
+ * Whether p is root or inside it, both real paths, compared as the disk
+ * compares them (case-insensitively on macOS and Windows): a dropped file
+ * inside the workspace is never moved to the Trash (security review
+ * files#2).
+ */
+export function within(p: string, root: string, paths: { relative(from: string, to: string): string; isAbsolute(p: string): boolean }, foldCase = process.platform !== "linux"): boolean {
+  const norm = (s: string) => (foldCase ? s.toLowerCase() : s);
+  const rel = paths.relative(norm(root), norm(p));
+  return rel === "" || (!rel.startsWith("..") && !paths.isAbsolute(rel));
+}
+

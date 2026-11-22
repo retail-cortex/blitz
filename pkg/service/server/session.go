@@ -112,6 +112,22 @@ func (h sessionService) ListSessionTools(ctx context.Context, r req[pb.ListSessi
 	return ok(out)
 }
 
+func (h sessionService) GetReasoning(ctx context.Context, r req[pb.GetReasoningRequest]) (*connect.Response[pb.GetReasoningResponse], error) {
+	w, err := h.s.workspace(ctx, r.Msg.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	turn := -1
+	if r.Msg.Turn != nil {
+		turn = int(r.Msg.GetTurn())
+	}
+	got, err := w.Reasoning(r.Msg.SessionId, turn)
+	if err != nil {
+		return nil, apiError(connect.CodeNotFound, "SESSION_NOT_FOUND", err, "ref", r.Msg.SessionId)
+	}
+	return ok(reasoningMsg(got))
+}
+
 func (h sessionService) SaveSnapshot(ctx context.Context, r req[pb.SaveSnapshotRequest]) (*connect.Response[pb.SaveSnapshotResponse], error) {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {

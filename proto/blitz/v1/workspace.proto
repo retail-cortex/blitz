@@ -1105,6 +1105,10 @@ message GetSettingsResponse {
   // a local model would review its own actions (spec_005_approvals
   // APR-14c). "" otherwise.
   string mode_note = 17;
+  // Why the workspace's files can only be read (a Viewer's clone of the
+  // organization's repository, spec_053 EN-60): the editor and the file
+  // tree change nothing. "" when they can.
+  string read_only = 18;
 }
 
 // AcceptedMedia is a kind of attachment a model takes.
@@ -1202,6 +1206,10 @@ message RemovePermissionRuleRequest {
   bool save = 3;
   // With save: "global" ("" too) or "workspace".
   string scope = 4;
+  // "allow", "ask" or "deny": only the rule with that effect is removed
+  // (a session's ask leaves a deny of the same text); "" removes it under
+  // every effect.
+  string effect = 5;
 }
 
 // Response message for WorkspaceService.RemovePermissionRule.

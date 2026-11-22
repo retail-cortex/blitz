@@ -181,6 +181,9 @@ type Settings struct {
 	// ImageModel is generate_image's image model ([images] model; "" for
 	// none), and ImageError why it can't be used.
 	ImageModel, ImageError string
+	// ReadOnly is why the workspace's files can only be read (a Viewer's
+	// clone, spec_053 EN-60); "" when they can be changed.
+	ReadOnly string
 }
 
 // StyleInfo is an output style (/style).

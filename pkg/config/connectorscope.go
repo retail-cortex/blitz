@@ -15,11 +15,12 @@
 package config
 
 import (
-	"encoding/json"
-	"os"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"sync"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // ConnectorScope keeps which connections the person turned off in each
@@ -161,8 +162,8 @@ func (s *ConnectorScope) readLocked() map[string]connectorScopeEntry {
 	var f struct {
 		Workspaces map[string]connectorScopeEntry `json:"workspaces"`
 	}
-	if data, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(data, &f)
+	if _, err := atomicfile.ReadJSONOrQuarantine(s.path, &f); err != nil {
+		slog.Warn("connector scope store unreadable; using empty defaults", "path", s.path, "error", err)
 	}
 	if f.Workspaces == nil {
 		f.Workspaces = map[string]connectorScopeEntry{}
@@ -172,5 +173,5 @@ func (s *ConnectorScope) readLocked() map[string]connectorScopeEntry {
 
 // writeLocked writes the choices in place of the file, atomically.
 func (s *ConnectorScope) writeLocked(all map[string]connectorScopeEntry) error {
-	return writeJSONAtomic(s.path, map[string]any{"version": 1, "workspaces": all})
+	return atomicfile.WriteJSON(s.path, map[string]any{"version": 1, "workspaces": all}, 0o600)
 }

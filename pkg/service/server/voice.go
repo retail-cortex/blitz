@@ -43,6 +43,8 @@ type voiceConv struct {
 	id  string
 	dir string
 	v   *engine.Voice
+	// ended is set by endVoices on one still starting (no v yet).
+	ended bool
 }
 
 // ErrUnknownVoice is a conversation that has ended or never was.
@@ -169,8 +171,17 @@ func (h voiceService) Converse(ctx context.Context, r req[pb.ConverseRequest], s
 	if err != nil {
 		return voiceError(err)
 	}
+	// Set under the conversations' lock, which SendVoice and endVoices
+	// read it under; ended at once if voice was turned off while it
+	// started (security review service#3).
+	h.s.voice.mu.Lock()
 	conv.v = v
+	ended := conv.ended
+	h.s.voice.mu.Unlock()
 	defer v.Close()
+	if ended {
+		return nil
+	}
 	cfg := w.VoiceSettings()
 	if err := stream.Send(&pb.ConverseResponse{Started: &pb.VoiceStarted{Id: conv.id, Model: v.ModelID(), Voice: v.VoiceName(), Listen: cfg.ListenMode()}}); err != nil {
 		return nil
@@ -229,11 +240,14 @@ func (h voiceService) SendVoice(_ context.Context, r req[pb.SendVoiceRequest]) (
 	vs := &h.s.voice
 	vs.mu.Lock()
 	conv := vs.byID[r.Msg.Id]
+	var v *engine.Voice
+	if conv != nil {
+		v = conv.v
+	}
 	vs.mu.Unlock()
-	if conv == nil || conv.v == nil || conv.dir != dir {
+	if conv == nil || v == nil || conv.dir != dir {
 		return nil, voiceError(errUnknownVoice)
 	}
-	v := conv.v
 	switch {
 	case r.Msg.End:
 		v.Close()
@@ -258,6 +272,8 @@ func (s *Server) endVoices() {
 	for _, c := range s.voice.byID {
 		if c.v != nil {
 			open = append(open, c.v)
+		} else {
+			c.ended = true // still starting: it ends as it starts
 		}
 	}
 	s.voice.mu.Unlock()

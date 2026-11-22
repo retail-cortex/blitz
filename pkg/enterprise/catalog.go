@@ -154,9 +154,12 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 		kept := LoadCatalog(dir)
 		var r struct{ Code, Message string }
 		_ = json.Unmarshal(data, &r)
-		if r.Code == CatalogRemoved {
+		if r.Code == CatalogRemoved && policyTookOver(dir) {
 			// The service retired its catalog (its policy comes from
 			// /api/v1/policy, EN-38): one kept from before goes, quietly.
+			// Unsigned, so only once a signed policy from the policy API
+			// is kept: before that, anyone on the way could say it and
+			// drop the locked servers and connectors (EN-33a).
 			return nil, kept != nil, dropCatalog(dir, kept != nil)
 		}
 		if kept == nil {
@@ -190,7 +193,10 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 	if err := layOut(dir, m); err != nil {
 		return LoadCatalog(dir), false, err
 	}
-	rawKeys, _ := json.Marshal(keys)
+	rawKeys, err := json.Marshal(keys)
+	if err != nil {
+		return LoadCatalog(dir), false, fmt.Errorf("encoding catalog keys: %w", err)
+	}
 	files := []struct {
 		name string
 		data []byte
@@ -199,10 +205,13 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 	// the manifest while the service doesn't serve one of its own; once it
 	// does, its (with why) stands (EN-38).
 	if _, err := os.Stat(filepath.Join(dir, policyETag)); err != nil {
-		policy, _ := json.Marshal(struct {
+		policy, err := json.Marshal(struct {
 			Policy  Policy    `json:"policy"`
 			Expires time.Time `json:"expires"`
 		}{m.Policy, m.Expires})
+		if err != nil {
+			return LoadCatalog(dir), false, fmt.Errorf("encoding catalog policy: %w", err)
+		}
 		files = append(files, struct {
 			name string
 			data []byte
@@ -255,7 +264,10 @@ func (c *Client) fetchFiles(ctx context.Context, token, dir string, files []Cata
 			return err
 		}
 	}
-	entries, _ := os.ReadDir(store)
+	entries, err := os.ReadDir(store)
+	if err != nil {
+		return fmt.Errorf("listing catalog files: %w", err)
+	}
 	for _, e := range entries {
 		if !want[e.Name()] {
 			_ = os.Remove(filepath.Join(store, e.Name()))

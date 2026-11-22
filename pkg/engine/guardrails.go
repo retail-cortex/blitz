@@ -468,6 +468,25 @@ func (g guard) overLimits(gr gates.Guardrail, c runtime.GuardCall) string {
 // ToolResult applies the tool-result guardrails: the injection patterns
 // (confirmed by the judge when asked) and custom checks, warning the
 // agent in the result or withholding it.
+// ChecksWebResults reports whether a guardrail checks what the web tools
+// bring back (prompt_injection, a custom tool-result check) or holds them
+// to allowed domains: the provider's own web tools would skip both, so
+// Blitz's are used (spec_056 CA-81a; security review runtime#1).
+func (g guard) ChecksWebResults() bool {
+	all := g.w.Guardrails()
+	for _, gr := range all {
+		if !gr.Off && len(gr.Limits.AllowedDomains) > 0 {
+			return true
+		}
+	}
+	for _, gr := range gates.Active(all, gates.StageToolResult, "") {
+		if gr.Checks("web_fetch", true) || gr.Checks("web_search", true) {
+			return true
+		}
+	}
+	return false
+}
+
 func (g guard) ToolResult(ctx context.Context, c runtime.GuardCall, result map[string]any) runtime.GuardVerdict {
 	st := g.w.guardsFor(c.Session)
 	var v runtime.GuardVerdict

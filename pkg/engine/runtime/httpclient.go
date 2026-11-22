@@ -32,6 +32,7 @@ import (
 	openaioption "github.com/openai/openai-go/v3/option"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"google.golang.org/genai"
 )
 
@@ -101,7 +102,7 @@ var (
 
 // transport is the models' transport, with every limit but the body's.
 func (p retryPolicy) transport() *http.Transport {
-	base := http.DefaultTransport.(*http.Transport).Clone()
+	base := netutil.CloneDefaultTransport()
 	base.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
 	base.TLSHandshakeTimeout = tlsTimeout
 	base.ResponseHeaderTimeout = p.stall

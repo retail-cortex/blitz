@@ -167,6 +167,14 @@ func (h *Hooks) granted(ctx context.Context) bool {
 	return h.grants.ids[key]
 }
 
+// TextCallPrefix starts the ID of a tool call a local model wrote as
+// text rather than called (spec_056 CA-50a): such a call is asked about
+// in every mode, past an allow rule too.
+const TextCallPrefix = "text-call-"
+
+// FromText reports whether the call ctx runs was read from a model's text.
+func FromText(ctx context.Context) bool { return strings.HasPrefix(CallID(ctx), TextCallPrefix) }
+
 // CallID is the ID of the tool call ctx runs (the tool's context), or "".
 func CallID(ctx context.Context) string {
 	if c, ok := ctx.(interface{ FunctionCallID() string }); ok {

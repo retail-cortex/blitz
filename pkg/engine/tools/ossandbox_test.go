@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,9 +139,42 @@ func TestOSSandboxEnforcement(t *testing.T) {
 	// workspace. (Seatbelt denies the read; bubblewrap shows an empty file.)
 	out = run("cat .env")
 	assert.NotContains(t, out.Output, "API_KEY", "shell read a blocked file: %+v", out)
+	if caseInsensitiveFS {
+		// Another spelling of the same file, as read_file refuses it too.
+		// Seatbelt matches its regexes without case on such disks, so the
+		// profile needs no (?i) (checked for N26 engine-tools-2#10).
+		out = run("cat .ENV")
+		assert.NotContains(t, out.Output, "API_KEY", "shell read a blocked file by another case: %+v", out)
+	}
 	run("cp .env leaked.txt")
 	b, _ = os.ReadFile(filepath.Join(f.work, "leaked.txt"))
 	assert.NotContains(t, string(b), "API_KEY", "shell copied a blocked file's contents")
+	// git's config and hooks stay the person's: what's planted there runs
+	// outside the sandbox (SH-23b); git's other files are written as usual.
+	for _, cmd := range []string{
+		"echo '[core] fsmonitor = touch /tmp/x' >> .git/config",
+		"printf '#!/bin/sh\\n' > .git/hooks/pre-commit",
+		"mkdir -p .git/info && echo '* filter=x' > .git/info/attributes",
+	} {
+		out = run(cmd)
+		assert.NotEqual(t, 0, out.ExitCode, "sandbox allowed: %s", cmd)
+	}
+	b, _ = os.ReadFile(filepath.Join(f.work, ".git", "config"))
+	assert.Equal(t, "[core]\n", string(b), ".git/config was changed")
+	assert.NoFileExists(t, filepath.Join(f.work, ".git", "hooks", "pre-commit"))
+	out = run("echo ref: refs/heads/topic > .git/HEAD")
+	assert.Equal(t, 0, out.ExitCode, "git's other files are writable: %+v", out)
+	out = run("mkdir -p sub/.git && echo '[core]' > sub/.git/config")
+	assert.Equal(t, 0, out.ExitCode, "a repository made further down is the agent's: %+v", out)
+	// Unsafe mode runs the command outside the sandbox (APR-14e): the
+	// blocked file it couldn't read, it reads; back in bypass, it can't.
+	unsafe := NewHooks(Policy{Mode: api.ModeUnsafe})
+	unsafeCfg := cfg
+	unsafeCfg.Hooks = unsafe
+	out = runShellCommand(context.Background(), unsafeCfg, RunShellCommandInput{Command: "cat .env"})
+	assert.Contains(t, out.Output, "API_KEY", "unsafe mode ran the command in the sandbox: %+v", out)
+	out = run("cat .env")
+	assert.NotContains(t, out.Output, "API_KEY", "back in the sandbox")
 	// A read-only root nested in the writable workspace stays read-only.
 	out = run("echo pwned > vendor-ro/lib.go")
 	assert.NotEqual(t, 0, out.ExitCode, "shell wrote into a read-only root nested in the workspace")

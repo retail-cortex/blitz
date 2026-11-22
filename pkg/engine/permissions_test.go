@@ -18,10 +18,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,6 +117,10 @@ func TestPermissionRuleSavedForTheWorkspace(t *testing.T) {
 func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	w, _ := openTestWith(t, func(c *config.Config) {
 		c.ProjectPermissions = config.PermissionsConfig{Deny: []string{"shell(git push*)"}}
+		// The organization's tools.off, merged into the deny rules as
+		// loading the policy does.
+		c.Org.Policy.Tools.Off = []string{"web_search"}
+		c.Permissions.Deny = append(c.Permissions.Deny, "web_search")
 	})
 	_, err := w.AddPermissionRule("deny", "shell(make deploy)", api.ScopeSession)
 	require.NoError(t, err)
@@ -123,6 +130,7 @@ func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	}{
 		{name: "a project file's rule", rule: "shell(git push*)", refused: filepath.Join(".blitz", "settings.toml")},
 		{name: "a built-in rule", rule: "shell(ls)", refused: "read_only_defaults"},
+		{name: "an organization-disabled tool", rule: "web_search", refused: "organization's policy"},
 		{name: "a session rule", rule: "Bash(make deploy)", removed: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,7 +151,41 @@ func TestRemovePermissionRuleKeepsProjectAndBuiltInRules(t *testing.T) {
 	}
 	assert.Equal(t, "project", rules["shell(git push*)"], "the project's rule stays")
 	assert.Equal(t, "built-in", rules["shell(ls)"], "the built-in rule stays")
+	assert.Contains(t, rules, "web_search", "the organization's rule stays")
 	assert.NotContains(t, rules, "shell(make deploy)")
+}
+
+// Removing a rule with its effect removes only that one: a session's ask
+// leaves the settings' deny of the same text (N26 desktop-1#15); "" still
+// removes every effect, and an unknown effect is refused.
+func TestRemovePermissionRuleOfOneEffect(t *testing.T) {
+	w, _ := openTestWith(t, func(c *config.Config) { c.Permissions.Deny = []string{"shell(rm -rf *)"} })
+	_, err := w.AddPermissionRule("ask", "shell(rm -rf *)", api.ScopeSession)
+	require.NoError(t, err)
+	effects := func() []string {
+		var out []string
+		for _, r := range w.ListPermissionRules() {
+			if r.Rule == "shell(rm -rf *)" {
+				out = append(out, r.Effect)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	require.Equal(t, []string{"ask", "deny"}, effects())
+
+	res, err := w.RemovePermissionRuleOf("shell(rm -rf *)", "ask", api.ScopeSession)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Removed)
+	assert.Equal(t, []string{"deny"}, effects(), "the deny went with the ask")
+	assert.Equal(t, tools.VerdictDeny, w.tools.CommandPolicy().Evaluate("rm -rf build").Verdict)
+
+	_, err = w.RemovePermissionRuleOf("shell(rm -rf *)", "block", api.ScopeSession)
+	assert.ErrorIs(t, err, api.ErrBadRule)
+	res, err = w.RemovePermissionRule("shell(rm -rf *)", api.ScopeSession)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Removed, "no effect: every one")
+	assert.Empty(t, effects())
 }
 
 // A deny rule naming a tool refuses the call before it runs.
@@ -212,4 +254,47 @@ func TestPermissionsProblem(t *testing.T) {
 	good.Permissions.Deny = []string{"shell(rm *)"}
 	require.NoError(t, w.ReloadPermissions(&good))
 	assert.NoError(t, w.PermissionsProblem())
+}
+
+// Unsafe is chosen only while the agent isn't working in the workspace: a
+// switch then could be the agent's own (a command reaching the service),
+// so a turn, or a background process it started, refuses it; idle, it's
+// taken (APR-14e).
+func TestUnsafeOnlyWhileTheAgentIsIdle(t *testing.T) {
+	w := openTest(t)
+	w.turnStarted("s1")
+	_, err := w.SetPermissionMode("unsafe")
+	require.ErrorIs(t, err, api.ErrUnsafeWhileAgentWorks, "during a turn")
+	w.turnEnded("s1")
+
+	bp, err := w.tools.Processes().Start("s1", "sleep 30", w.Dir())
+	require.NoError(t, err)
+	_, err = w.SetPermissionMode("unsafe")
+	require.ErrorIs(t, err, api.ErrUnsafeWhileAgentWorks, "a background process of the agent's still running")
+	_, err = w.tools.Processes().Kill(bp.ID)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return len(w.RunningProcesses()) == 0 }, 5*time.Second, 20*time.Millisecond)
+
+	got, err := w.SetPermissionMode("fafo")
+	require.NoError(t, err, "idle: the person's choice")
+	assert.Equal(t, "unsafe", got)
+	_, err = w.SetPermissionMode("default")
+	require.NoError(t, err, "leaving it is always allowed")
+}
+
+// A workflow that asks for unsafe runs in the workspace's mode, held:
+// only a workspace the person put in unsafe runs one in it (APR-14e).
+func TestWorkflowNeverReachesUnsafe(t *testing.T) {
+	w := openTest(t)
+	_, err := w.SetPermissionMode("default")
+	require.NoError(t, err)
+	_, mode, held := w.flowMode(context.Background(), flows.Flow{Mode: "unsafe"})
+	assert.Equal(t, api.ModeDefault, mode)
+	assert.Equal(t, api.ModeUnsafe, held, "held, and said so")
+	_, err = w.SetPermissionMode("bypass")
+	if err == nil { // bypass needs the sandbox; where it's on, unsafe is still looser
+		_, mode, held = w.flowMode(context.Background(), flows.Flow{Mode: "unsafe"})
+		assert.Equal(t, api.ModeBypass, mode)
+		assert.Equal(t, api.ModeUnsafe, held)
+	}
 }

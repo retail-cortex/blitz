@@ -874,6 +874,15 @@ func TestWorkspaceHandlers(t *testing.T) {
 			})
 		}
 		assert.Equal(t, "BAD_RULE", reason(t, unary(w.AddPermissionRule, &pb.AddPermissionRuleRequest{Workspace: dir, Effect: "deny", Rule: "nope("})))
+		// The effect goes through: a session's ask leaves the deny of its text.
+		for _, effect := range []string{"deny", "ask"} {
+			_, err := w.AddPermissionRule(ctx, connect.NewRequest(&pb.AddPermissionRuleRequest{Workspace: dir, Effect: effect, Rule: "shell(make clean)"}))
+			require.NoError(t, err)
+		}
+		gone, err := w.RemovePermissionRule(ctx, connect.NewRequest(&pb.RemovePermissionRuleRequest{Workspace: dir, Rule: "shell(make clean)", Effect: "ask"}))
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), gone.Msg.Removed, "only the ask")
+		assert.Equal(t, "BAD_RULE", reason(t, unary(w.RemovePermissionRule, &pb.RemovePermissionRuleRequest{Workspace: dir, Rule: "shell(make clean)", Effect: "block"})))
 		rules, err := w.ListPermissionRules(ctx, connect.NewRequest(&pb.ListPermissionRulesRequest{Workspace: dir}))
 		require.NoError(t, err)
 		assert.NotEmpty(t, rules.Msg.Rules, "the built-in rules")

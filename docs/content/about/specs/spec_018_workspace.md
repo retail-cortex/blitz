@@ -31,7 +31,7 @@ weight: 18
 
 ## 3. Backend interface
 
-Front ends use only `api.Backend` (implemented by `*Workspace` and by the service client). Groups:
+Front ends use only `api.Backend` (implemented by `*Workspace` and by the service client). `Backend` is composed of domain sub-interfaces (`Lifecycle`, `TaskBackend`, `GoalBackend`, `StyleBackend`, `SpecBackend`, `TurnBackend`, `SessionBackend`, `AgentModelBackend`, `ExtensionBackend`, `ContextMemoryBackend`, `ChangeBackend`, `SearchBackend`, `DataBackend`, `ImageBackend`). Groups:
 
 | Group | Operations |
 |---|---|

@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -49,6 +50,15 @@ func (h *Hooks) Mode() api.PermissionMode {
 	return h.policy.Mode
 }
 
+// ModeOf is the mode ctx's actions run in: an agent's own (WithMode),
+// else the workspace's.
+func (h *Hooks) ModeOf(ctx context.Context) api.PermissionMode {
+	if m, ok := ctx.Value(modeKey{}).(api.PermissionMode); ok && m != "" {
+		return m
+	}
+	return h.Mode()
+}
+
 // setMode changes the mode; Registry.SetPermissionMode checks bypass's
 // requirement first.
 func (h *Hooks) setMode(m api.PermissionMode) {
@@ -65,6 +75,9 @@ func (r *Registry) SetPermissionMode(m api.PermissionMode) error {
 	}
 	if m == api.ModeBypass && !r.ShellSandbox().Active() {
 		return api.ErrBypassNeedsSandbox
+	}
+	if m == api.ModeUnsafe && r.orgActive {
+		return api.ErrUnsafeNotHere
 	}
 	r.hooks.setMode(m)
 	return nil

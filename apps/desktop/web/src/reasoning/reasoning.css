@@ -1,0 +1,129 @@
+/*
+ * Copyright 2026 Retail Cortex
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* The Reasoning view (spec_066_reasoning): the graph fills the drawer
+   under the top menu; the selected card reads in full beside it. Every
+   colour is a theme token, so light, dark and glass all follow. */
+.reasoning-drawer > .body { padding: 12px 16px 16px; gap: 10px; overflow: hidden; }
+.reasoning-drawer .drawer-head { gap: 4px; }
+.reasoning-drawer .drawer-head > h2 { flex: 0 1 auto; margin-right: 12px; }
+.rsn-turns { gap: 2px; min-width: 0; flex: 0 1 auto; }
+.rsn-turn-select { width: 320px; min-width: 120px; max-width: 32vw; }
+.rsn-head-line { flex: none; width: 1px; height: 24px; margin: 0 6px; background: var(--md-outline-variant); }
+
+.rsn-summary { gap: 8px; min-height: 28px; padding: 0 2px; }
+.rsn-chip { flex: none; padding: 2px 10px; border-radius: var(--md-shape-full, 999px); background: var(--md-surface-container-high); color: var(--md-on-surface-variant); font: 500 12px/20px var(--md-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.rsn-body { display: flex; gap: 12px; flex: 1; min-height: 0; }
+.rsn-canvas { position: relative; flex: 1; min-width: 0; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; background: var(--md-surface-container-lowest); outline: none; }
+.rsn-canvas:focus-visible { box-shadow: 0 0 0 2px var(--md-primary); }
+.rsn-canvas { container: rsn-canvas / inline-size; }
+/* A narrow canvas gives the map's room to the cards. */
+@container rsn-canvas (max-width: 900px) { .rsn-canvas .react-flow__minimap { display: none; } }
+.rsn-canvas .react-flow { --xy-background-color: transparent; --xy-background-pattern-dots-color-default: color-mix(in srgb, var(--md-outline-variant) 80%, transparent); }
+.rsn-canvas .react-flow__node { cursor: pointer; }
+.rsn-canvas .react-flow__handle { width: 6px; height: 6px; min-width: 0; min-height: 0; border: none; background: transparent; pointer-events: none; }
+
+/* Cards: one shape, a kind's colour in its accent bar, icon and links. */
+.rsn-card { --rsn: var(--md-primary); position: relative; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 10px 14px; overflow: hidden; border: 1px solid var(--md-outline-variant); border-radius: 14px; background: var(--md-surface-container-low); color: var(--md-on-surface); font: 400 13px/1.35 var(--md-font); box-shadow: var(--md-elevation-1); transition: box-shadow 0.15s, border-color 0.15s; }
+.rsn-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--rsn); }
+.rsn-card:hover { border-color: color-mix(in srgb, var(--rsn) 45%, var(--md-outline-variant)); box-shadow: var(--md-elevation-2); }
+.rsn-card.selected { border-color: var(--rsn); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rsn) 32%, transparent), var(--md-elevation-2); }
+.rsn-card.is-turn, .rsn-card-icon.is-turn, .rsn-mini.is-turn { --rsn: var(--accent-a); }
+.rsn-card.is-turn { background: color-mix(in srgb, var(--accent-a) 9%, var(--md-surface-container-low)); }
+.rsn-card.is-turn::before { width: 4px; background: var(--accent-grad); }
+.rsn-card.is-call, .rsn-card-icon.is-call, .rsn-mini.is-call { --rsn: var(--md-primary); }
+.rsn-card.is-thought, .rsn-card-icon.is-thought, .rsn-mini.is-thought { --rsn: var(--accent-b); }
+.rsn-card.is-thought { background: color-mix(in srgb, var(--accent-b) 6%, var(--md-surface-container-low)); }
+.rsn-card.is-tool, .rsn-card-icon.is-tool, .rsn-mini.is-tool { --rsn: var(--md-tertiary); }
+.rsn-card.is-agent, .rsn-card-icon.is-agent, .rsn-mini.is-agent { --rsn: var(--md-secondary); }
+.rsn-card.is-text, .rsn-card-icon.is-text, .rsn-mini.is-text { --rsn: var(--md-outline); }
+.rsn-card.is-live, .rsn-mini.is-live { --rsn: var(--accent-a); }
+.rsn-card.is-live { border-style: dashed; background: color-mix(in srgb, var(--accent-a) 5%, var(--md-surface-container-low)); }
+.rsn-card.is-failed { --rsn: var(--md-error); background: color-mix(in srgb, var(--md-error-container) 35%, var(--md-surface-container-low)); }
+.rsn-card.is-hidden .rsn-card-icon { opacity: 0.7; }
+
+.rsn-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rsn-card > * { flex-shrink: 0; }
+.rsn-card-took { flex: none; color: var(--md-on-surface-variant); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.rsn-card-icon { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 8px; background: color-mix(in srgb, var(--rsn) 15%, transparent); color: var(--rsn); }
+.rsn-card-title { flex: 1; min-width: 0; font-weight: 600; }
+.rsn-card-kicker { flex: 1; color: var(--rsn); font: 600 11px/16px var(--md-font); letter-spacing: 0.06em; text-transform: uppercase; }
+.rsn-card-prompt { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-weight: 600; font-size: 14px; line-height: 1.35; }
+.rsn-card-body { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--md-on-surface-variant); }
+.rsn-card-body.mono { -webkit-line-clamp: 1; font-family: var(--md-mono); font-size: 12px; word-break: break-all; }
+.rsn-card.is-text .rsn-card-body { -webkit-line-clamp: 2; }
+.rsn-card-meta { margin-top: auto; color: var(--md-on-surface-variant); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.rsn-status { display: grid; flex: none; color: var(--rsn); }
+.rsn-status.is-hidden { color: var(--md-on-surface-variant); }
+.rsn-toggle { display: inline-flex; align-items: center; gap: 2px; flex: none; padding: 1px 4px 1px 8px; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-full, 999px); background: var(--md-surface); color: var(--md-on-surface-variant); font: 500 11px/18px var(--md-font); cursor: pointer; }
+.rsn-toggle:hover, .rsn-toggle:focus-visible { border-color: var(--rsn); color: var(--rsn); outline: none; }
+
+/* Links: the calls' spine strongest; reasoning dashed; a failure red. */
+.rsn-canvas .react-flow__edge.rsn-link .react-flow__edge-path { stroke: var(--md-outline); stroke-width: 1.5; }
+.rsn-canvas .react-flow__edge.rsn-link.is-next .react-flow__edge-path { stroke: color-mix(in srgb, var(--md-primary) 65%, var(--md-outline)); stroke-width: 2; }
+.rsn-canvas .react-flow__edge.rsn-link.is-thought .react-flow__edge-path { stroke: var(--accent-b); stroke-dasharray: 4 4; opacity: 0.8; }
+.rsn-canvas .react-flow__edge.rsn-link.is-tool .react-flow__edge-path { stroke: var(--md-tertiary); opacity: 0.85; }
+.rsn-canvas .react-flow__edge.rsn-link.is-agent .react-flow__edge-path { stroke: var(--md-secondary); }
+.rsn-canvas .react-flow__edge.rsn-link.is-failed .react-flow__edge-path { stroke: var(--md-error); stroke-dasharray: 5 4; }
+.rsn-canvas .react-flow__edge.rsn-link.is-live .react-flow__edge-path { stroke: var(--accent-a); }
+
+/* The map and the zoom buttons, in the app's surfaces. */
+.rsn-canvas .react-flow__minimap.rsn-minimap { overflow: hidden; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-sm); background: var(--md-surface-container); box-shadow: var(--md-elevation-1); }
+.rsn-canvas .react-flow__minimap-node.rsn-mini { fill: var(--rsn); stroke: none; opacity: 0.75; }
+.rsn-canvas .react-flow__minimap-mask { fill: color-mix(in srgb, var(--md-surface-container-lowest) 55%, transparent); }
+.rsn-canvas .react-flow__controls { overflow: hidden; border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-sm); box-shadow: var(--md-elevation-1); }
+.rsn-canvas .react-flow__controls-button { border-bottom: 1px solid var(--md-outline-variant); background: var(--md-surface-container-high); color: var(--md-on-surface); fill: currentColor; }
+.rsn-canvas .react-flow__controls-button:hover { background: var(--md-surface-container-highest); }
+.rsn-canvas .react-flow__controls-button:last-child { border-bottom: none; }
+
+/* Nothing to draw yet. */
+.rsn-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; color: var(--md-on-surface-variant); }
+.rsn-empty > .icon { width: 48px; height: 48px; color: var(--accent-a); opacity: 0.8; }
+.rsn-empty .t-title { color: var(--md-on-surface); }
+
+/* The card in full. */
+.rsn-side .flow-side-head { min-height: 36px; }
+.rsn-detail { gap: 12px; }
+.rsn-detail-title { margin: 0; overflow-wrap: anywhere; }
+.rsn-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 13px; }
+.rsn-facts > div { display: contents; }
+.rsn-facts dt { color: var(--md-on-surface-variant); }
+.rsn-facts dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.rsn-text { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.rsn-json { gap: 6px; }
+.rsn-json .code-block { margin: 0; }
+.rsn-json .code-block pre { max-height: 320px; overflow: auto; }
+.rsn-note { background: var(--md-surface-container-high); font-size: 13px; }
+.rsn-detail > .btn { align-self: flex-start; }
+
+@media (prefers-reduced-motion: reduce) { .rsn-card { transition: none; } }
+
+/* Narrow: the card in full goes under the graph. */
+@container drawer (max-width: 860px) {
+  .rsn-turn-select { width: 180px; }
+  .rsn-body { flex-direction: column; }
+  .rsn-body > .rsn-side { width: auto !important; max-width: none; height: 40%; }
+  .rsn-body > .rsn-side.is-closed { height: 36px; }
+  .rsn-body > .rsn-side > .panel-resize { display: none; }
+  .rsn-body > .rsn-side.is-closed .flow-side-rail { flex-direction: row; width: 100%; height: 36px; padding: 0 12px; }
+  .rsn-body > .rsn-side.is-closed .flow-side-rail > span { writing-mode: horizontal-tb; }
+}
+
+/* Show in chat: the prompt it went to, marked a moment. */
+.turn-user.is-pointed { animation: rsn-pointed 1.6s ease-out; border-radius: var(--md-shape-md); }
+@keyframes rsn-pointed { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-a) 55%, transparent); } to { box-shadow: 0 0 0 3px transparent; } }
+@media (prefers-reduced-motion: reduce) { .turn-user.is-pointed { animation: none; outline: 2px solid var(--accent-a); } }

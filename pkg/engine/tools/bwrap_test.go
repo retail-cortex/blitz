@@ -29,6 +29,9 @@ func TestBwrapArgs(t *testing.T) {
 	ws := t.TempDir()
 	ro := filepath.Join(ws, "vendor-ro")
 	os.Mkdir(ro, 0o755)
+	writeFile(t, filepath.Join(ws, ".git", "config"), "[core]\n")
+	writeFile(t, filepath.Join(ws, ".git", "hooks", "pre-commit.sample"), "#!/bin/sh\n")
+	writeFile(t, filepath.Join(ws, ".git", "modules", "sub", "config"), "[core]\n")
 	spec := OSSandboxSpec{WritableDirs: []string{ws, "/definitely/missing"}, ReadOnlyDirs: []string{ro}}
 
 	args := bwrapArgs("bwrap", spec, []string{ws + "/.env"}, []string{ws + "/secrets"})
@@ -40,6 +43,10 @@ func TestBwrapArgs(t *testing.T) {
 		"--ro-bind /dev/null " + ws + "/.env",
 		"--tmpfs " + ws + "/secrets --remount-ro " + ws + "/secrets",
 		"--unshare-net",
+		// git's config and hooks stay the person's (SH-23b).
+		"--ro-bind " + ws + "/.git/config " + ws + "/.git/config",
+		"--ro-bind " + ws + "/.git/hooks " + ws + "/.git/hooks",
+		"--ro-bind " + ws + "/.git/modules/sub/config " + ws + "/.git/modules/sub/config",
 	} {
 		t.Run(want, func(t *testing.T) {
 			assert.Contains(t, joined, want, "args missing %q:\n%s", want, joined)
@@ -79,7 +86,7 @@ func TestExpandBlocked(t *testing.T) {
 		})
 	}
 	assert.NotContains(t, joined, "ok.txt", "unexpected entries: %s", joined)
-	assert.NotContains(t, joined, "node_modules", "unexpected entries: %s", joined)
+	assert.Contains(t, joined, filepath.Join(ws, "node_modules", "pkg", ".env"), "a blocked name under node_modules is masked too (SH-24d)")
 	assert.Contains(t, dirs, filepath.Join(home, ".ssh"), "~/.ssh should be masked as a directory")
 	f, d := expandBlocked(OSSandboxSpec{WritableDirs: []string{ws}})
 	assert.Equal(t, 0, len(f)+len(d), "no matcher -> nothing blocked")

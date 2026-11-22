@@ -19,8 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -283,6 +285,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 	// A conversation's first prompt says where the workspace stands and
 	// lists the earlier sessions (MEM-37, MEM-38), once it's recorded.
 	first := false
+	closeSteers := func() []string { return nil }
 	if !t.Aside {
 		w.activate(st, sessionID)
 		prompt := -1 // the prompt's index in the transcript, for /rewind
@@ -305,8 +308,8 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		defer w.turnEnded(sessionID)
 		// Steer messages are taken from here until the leftovers are
 		// collected (or the turn ends otherwise).
-		w.engine.OpenSteers(sessionID)
-		defer w.engine.CloseSteers(sessionID)
+		closeSteers = w.engine.OpenSteers(sessionID)
+		defer closeSteers()
 	}
 	// After recording: a front end may take steer messages from here on,
 	// and they must follow the prompt in the transcript.
@@ -525,7 +528,7 @@ func (w *Workspace) run(ctx context.Context, sessionID string, t turn, on func(a
 		if res.Output != "" {
 			w.recordIn(st, sessionID, on, "model", res.Output)
 		}
-		res.Leftover = w.engine.CloseSteers(sessionID)
+		res.Leftover = closeSteers()
 	}
 	return res, err
 }
@@ -549,20 +552,31 @@ func (w *Workspace) Steer(ctx context.Context, sessionID, text string) error {
 // their own (spec_032 BGA-06), and one started by an earlier turn mustn't
 // use up this turn's (spec_018 WS-29).
 func (w *Workspace) costSince(sessionID string, before float64) func() float64 {
-	tasks := func() float64 {
-		var sum float64
+	// Each task's cost by ID, the last seen kept: one that ended and was
+	// pruned from the list mid-turn still counts as its own, not this
+	// turn's (N26 engine-top-2#9).
+	var mu sync.Mutex
+	latest := map[string]float64{}
+	look := func() {
 		for _, t := range w.engine.ListTasks([]string{sessionID}) {
-			sum += t.Usage.CostUSD
+			latest[t.ID] = max(latest[t.ID], t.Usage.CostUSD)
 		}
-		return sum
 	}
-	tasksBefore := tasks()
+	look()
+	start := maps.Clone(latest)
 	return func() float64 {
 		spent := w.engine.Usage(sessionID).CostUSD - before
 		if spent <= 0 {
 			return spent
 		}
-		return spent - (tasks() - tasksBefore)
+		mu.Lock()
+		defer mu.Unlock()
+		look()
+		var tasks float64
+		for id, c := range latest {
+			tasks += c - start[id]
+		}
+		return spent - tasks
 	}
 }
 

@@ -95,3 +95,15 @@ func TestReceipt(t *testing.T) {
 	got, _ := json.Marshal(s.Receipts[0])
 	assert.JSONEq(t, string(want), string(got))
 }
+
+// An API step's path stays under its connector: a "..", plain or
+// escaped, is refused before anything is sent (security review
+// enterprise#5).
+func TestCallAPIPathStaysUnderItsConnector(t *testing.T) {
+	_, _, c, _, _ := setup(t)
+	ctx := context.Background()
+	for _, p := range []string{"../../me/library/skill/x", "/a/../../b", "%2e%2e/%2e%2e/me", `a\..\..\b`, "%zz"} {
+		_, err := c.CallAPI(ctx, "review", http.MethodGet, p, "", nil, nil)
+		assert.ErrorContains(t, err, "can't leave its connector", p)
+	}
+}

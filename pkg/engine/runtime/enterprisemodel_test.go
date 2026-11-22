@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,13 +26,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/agents"
+	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
 	"github.com/retail-cortex/blitz/pkg/redact"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
 )
 
 // orgService is the organization's service as Blitz meets it after
@@ -295,46 +301,38 @@ func TestEnterpriseListModels(t *testing.T) {
 	})
 }
 
-// The organization's policy and its catalog's expiry: a model named with
-// a provider of the person's own uses it when the policy allows (bare
-// names stay the organization's), and the organization's models wait
-// once its catalog is out of date (EN-33, EN-35).
+// While the organization is active it's the person's provider (EN-35a):
+// a model named with a provider of their own (but the local one) has the
+// organization's default stand in, whatever own_providers or the service
+// says by provider; bare names are the organization's; its models wait
+// once its catalog is out of date (EN-33).
 func TestEnterprisePolicy(t *testing.T) {
 	s := newOrgService(t)
 	cfg := signedIn(t, s)
 	cfg.LLM.Provider, cfg.LLM.Gemini.APIKey = "gemini", "a key of my own"
 	cfg.Org = config.OrgLayer{Defaults: t.TempDir(), Locked: t.TempDir()}
 
-	stood, err := NewModel(context.Background(), cfg, "openai/gpt-x")
-	require.NoError(t, err)
-	assert.Equal(t, "smart", stood.Name(), "not allowed: the organization's default stands in")
-	assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg))
-
-	cfg.Org.Policy.Models.OwnProviders = true
-	assert.Equal(t, []string{"enterprise", "gemini"}, ConfiguredProviders(cfg))
-	own, err := NewModel(context.Background(), cfg, "openai/gpt-x")
-	require.NoError(t, err)
-	assert.Equal(t, "gpt-x", own.Name(), "allowed: the person's own provider (the organization's would stand its default, smart, in)")
+	for _, policy := range []func(){
+		func() {},
+		func() { cfg.Org.Policy.Models.OwnProviders = true },
+		func() {
+			cfg.Org.Policy.Models.OwnProviders = false
+			cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"openai": {Allowed: true, Models: []string{"gpt-x*"}}, "gemini": {Allowed: true}}
+		},
+	} {
+		policy()
+		assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg), "the person's own key isn't offered")
+		for _, name := range []string{"openai/gpt-x", "gemini/gemini-3", "anthropic/claude-opus-5-5"} {
+			stood, err := NewModel(context.Background(), cfg, name)
+			require.NoError(t, err)
+			assert.Equal(t, "smart", stood.Name(), "%s: the organization's default stands in", name)
+		}
+	}
 	m, err := NewModel(context.Background(), cfg, "fast")
 	require.NoError(t, err)
 	_, _, err = callAPI(inSession("s"), m, helloRequest())
 	require.NoError(t, err)
 	assert.Equal(t, "/api/v1/responses", s.g.requests()[0].Path, "a bare name is the organization's")
-
-	// By provider, and its models by pattern: OpenAI's gpt-x* only, Gemini
-	// not, though its key is set (EN-35).
-	cfg.Org.Policy.Models.OwnProviders = false
-	cfg.Org.Policy.Models.Own = map[string]config.OwnProvider{"openai": {Allowed: true, Models: []string{"gpt-x*"}}}
-	assert.Equal(t, []string{"enterprise"}, ConfiguredProviders(cfg))
-	own, err = NewModel(context.Background(), cfg, "openai/gpt-x")
-	require.NoError(t, err)
-	assert.Equal(t, "gpt-x", own.Name())
-	_, err = NewModel(context.Background(), cfg, "openai/o9")
-	require.ErrorIs(t, err, ErrModelNotAllowed)
-	assert.ErrorContains(t, err, "o9 isn't one of the openai models the organization's policy allows (gpt-x*)")
-	stood, err = NewModel(context.Background(), cfg, "gemini/gemini-3")
-	require.NoError(t, err)
-	assert.Equal(t, "smart", stood.Name(), "a provider not allowed: the organization's stands in")
 
 	cfg.Org.Expires = time.Now().Add(-time.Minute)
 	_, err = NewModel(context.Background(), cfg, "fast")
@@ -360,4 +358,115 @@ func TestEnterpriseTokenIsMasked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "org-access-token-27", tok)
 	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-access-token-27"), "org-access-token-27")
+}
+
+// rotatingSource gives a new access token after each Invalidate.
+type rotatingSource struct {
+	toks []string
+	at   int
+}
+
+func (r *rotatingSource) AccessToken(context.Context) (string, error) { return r.toks[r.at], nil }
+func (r *rotatingSource) Invalidate()                                 { r.at = min(r.at+1, len(r.toks)-1) }
+
+// The token fetched again after a 401 is remembered by the redactor too,
+// not only the first (N26 engine-runtime#27's remainder).
+func TestEnterpriseTokenRenewedAfter401IsMasked(t *testing.T) {
+	src := &rotatingSource{toks: []string{"org-first-token-0001", "org-fresh-token-0002"}}
+	p := &apiProvider{source: src}
+	calls := 0
+	next := func(r *http.Request) (*http.Response, error) {
+		calls++
+		status := http.StatusOK
+		if calls == 1 {
+			status = http.StatusUnauthorized
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader("{}")), Header: http.Header{}, Request: r}, nil
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://gateway.example/v1/responses", strings.NewReader("{}"))
+	require.NoError(t, err)
+	res, err := p.middleware(req, next)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, 2, calls, "renewed once after the 401")
+	assert.NotContains(t, redact.Mask("the gateway said: Bearer org-fresh-token-0002"), "org-fresh-token-0002")
+}
+
+// Pictures, speech and voice of the person's own aren't used while
+// they're connected to an organization (EN-35a; review runtime#5, #6);
+// disconnected, they are.
+func TestOwnProvidersOffForPicturesSpeechAndVoice(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LLM.Gemini.APIKey = "a key of my own"
+	cfg.Images.Model = "gemini/gemini-3.1-flash-image"
+	cfg.Audio.Model = "gemini/gemini-2.5-flash-preview-tts"
+	cfg.Enterprise.URL = "https://blitz.example.com"
+	cfg.Org.Policy.Models.OwnProviders = true // what the policy says doesn't matter
+
+	_, err := NewPainter(context.Background(), cfg)
+	assert.ErrorIs(t, err, ErrOwnProviderOff)
+	_, err = NewSpeaker(context.Background(), cfg)
+	assert.ErrorIs(t, err, ErrOwnProviderOff)
+	_, err = NewVoiceModel(context.Background(), cfg)
+	assert.ErrorIs(t, err, ErrVoiceNotSetUp)
+	assert.ErrorContains(t, err, "your organization is your provider")
+	_, err = VoiceBackend(context.Background(), cfg)
+	assert.ErrorContains(t, err, "your organization is your provider")
+
+	cfg.Enterprise.URL = ""
+	p, err := NewPainter(context.Background(), cfg)
+	require.NoError(t, err)
+	assert.NotNil(t, p, "disconnected, the person's own")
+	assert.NoError(t, ownProviderOff(cfg, "gemini"))
+	cfg.Enterprise.URL = "https://blitz.example.com"
+	assert.NoError(t, ownProviderOff(cfg, "ollama"), "the local provider stays")
+	assert.NoError(t, ownProviderOff(cfg, "enterprise"))
+}
+
+// A signed thought is kept as the provider signed it, unless it holds a
+// secret's value: masked, it drops its signature rather than be stored
+// with the secret (CA-29a; security review runtime#2).
+func TestSignedThoughtWithASecretIsMasked(t *testing.T) {
+	redact.Remember("sk-thought-secret-29a")
+	e := &Engine{secrets: func(s string) (string, []string) { return s, nil }}
+	sig := []byte("signed-by-the-provider")
+	resp := &model.LLMResponse{Content: &genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{
+		{Thought: true, Text: "the key is sk-thought-secret-29a", ThoughtSignature: sig},
+		{Thought: true, Text: "nothing secret here", ThoughtSignature: sig},
+	}}}
+	e.guardOutput(nil, resp)
+	leaked := resp.Content.Parts[0]
+	assert.NotContains(t, leaked.Text, "sk-thought-secret-29a")
+	assert.Nil(t, leaked.ThoughtSignature, "a masked thought isn't the one signed")
+	clean := resp.Content.Parts[1]
+	assert.Equal(t, "nothing secret here", clean.Text)
+	assert.Equal(t, sig, clean.ThoughtSignature, "kept as signed")
+}
+
+// The gateway's debug log masks credential-named query values in a URL
+// (security review runtime#8: Azure's subscription-key matched no key
+// format).
+func TestMaskQuery(t *testing.T) {
+	assert.Equal(t, "https://gw.example/v1?api-version=2&subscription-key=REDACTED", maskQuery("https://gw.example/v1?subscription-key=abc123&api-version=2"))
+	assert.Equal(t, "https://gw.example/v1?a=1", maskQuery("https://gw.example/v1?a=1"))
+	assert.Equal(t, "https://gw.example/v1", maskQuery("https://gw.example/v1"))
+}
+
+// An agent's own permission_mode never takes its run to unsafe, though a
+// built-in agent's may loosen the mode otherwise (APR-14e): its context
+// keeps the workspace's mode.
+func TestAgentPermissionModeNeverUnsafe(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.WorkspaceDir = t.TempDir()
+	reg, err := tools.NewRegistry(cfg, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { reg.Close() })
+	require.NoError(t, reg.SetPermissionMode(api.ModeDefault))
+	e := &Engine{cfg: cfg, toolReg: reg}
+	for _, m := range []string{"unsafe", "fafo", "no-sandbox"} {
+		ctx := e.agentRun(context.Background(), &agents.AgentSpec{AgentMetadata: agents.AgentMetadata{Name: "helper", PermissionMode: m}})
+		assert.Equal(t, api.ModeDefault, reg.Hooks().ModeOf(ctx), m)
+	}
+	ctx := e.agentRun(context.Background(), &agents.AgentSpec{AgentMetadata: agents.AgentMetadata{Name: "helper", PermissionMode: "accept-edits"}})
+	assert.Equal(t, api.ModeAcceptEdits, reg.Hooks().ModeOf(ctx), "another looser mode still applies to a built-in agent")
 }

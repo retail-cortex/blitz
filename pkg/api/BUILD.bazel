@@ -29,6 +29,7 @@ go_library(
         "ledger.go",
         "models.go",
         "permissions.go",
+        "reasoning.go",
         "search.go",
         "sessions.go",
         "specs.go",

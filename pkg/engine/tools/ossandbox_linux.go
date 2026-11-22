@@ -55,6 +55,11 @@ func nativeSandbox(spec OSSandboxSpec) (sandboxWrapper, error) {
 		if err != nil {
 			return nil, err
 		}
+		if note := scan.limitNote(); note != "" {
+			if tell := turnNotices(ctx); tell != nil {
+				tell(note)
+			}
+		}
 		// The run folder is made now, so the sandbox hides it even before
 		// the service first starts.
 		if c, err := credentialsDir(); err == nil {

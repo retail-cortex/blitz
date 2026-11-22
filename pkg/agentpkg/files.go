@@ -117,7 +117,14 @@ func assetName(kind string, e fs.DirEntry) (string, bool) {
 func readAsset(root, kind, name string) (map[string]string, string) {
 	files := map[string]string{}
 	add := func(rel string) string {
-		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		// A link (a cloned repository's agent file pointing at
+		// ~/.aws/credentials) isn't read: what it leads to would be
+		// published or compiled in (security review packages#3).
+		if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
+			return rel + " is a link, not a file of its own"
+		}
+		b, err := os.ReadFile(path)
 		switch {
 		case err != nil:
 			return err.Error()
@@ -177,6 +184,11 @@ func readAsset(root, kind, name string) (map[string]string, string) {
 // WriteAsset writes an asset's files under root, replacing what it had;
 // every path must be its own (Owns).
 func WriteAsset(root, kind, name string, files map[string]string) error {
+	// The name is a folder or file under root: one an organization's
+	// service sends ("../..") never reaches outside it (packages#1).
+	if !ValidName(name) {
+		return &fs.PathError{Op: "write", Path: name, Err: fs.ErrInvalid}
+	}
 	for p := range files {
 		if !Owns(kind, name, p) {
 			return &fs.PathError{Op: "write", Path: p, Err: fs.ErrInvalid}
@@ -197,8 +209,12 @@ func WriteAsset(root, kind, name string, files map[string]string) error {
 	return nil
 }
 
-// RemoveAsset removes an asset's files under root.
+// RemoveAsset removes an asset's files under root; a name Blitz doesn't
+// give (ValidName) is refused, so nothing outside root is removed.
 func RemoveAsset(root, kind, name string) error {
+	if !ValidName(name) {
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
+	}
 	var err error
 	if kind == "skill" {
 		err = os.RemoveAll(filepath.Join(root, "skills", name))

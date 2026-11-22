@@ -37,6 +37,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
 	"github.com/retail-cortex/blitz/pkg/engine/browser"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -226,9 +227,12 @@ func (f *webFetcher) checkResolved(ctx context.Context, host string) error {
 	return nil
 }
 
-// defaultTLS is the TLS settings of Go's default transport (with
-// [network] ca_file's authorities, once set up).
+// defaultTLS is the TLS settings for web_fetch (with [network] ca_file's
+// authorities from netutil, or Go's default transport when set in tests).
 func defaultTLS() *tls.Config {
+	if tc := netutil.TLSConfig(); tc != nil {
+		return fetchTLS(tc)
+	}
 	if t, ok := http.DefaultTransport.(*http.Transport); ok && t.TLSClientConfig != nil {
 		return fetchTLS(t.TLSClientConfig)
 	}

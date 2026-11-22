@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // fileState is a file's state before a change. Its content is kept in the
@@ -206,7 +207,7 @@ func (c *Checkpoints) saveLocked() {
 	if c.index != "" {
 		var data []byte
 		if data, err = json.Marshal(checkpointIndex{Version: 1, NextID: c.nextID, Turns: c.turns}); err == nil {
-			err = writePrivate(c.index, data)
+			err = atomicfile.Write(c.index, data, 0o600)
 		}
 	}
 	if err == nil {
@@ -792,7 +793,7 @@ func (d diskBlobs) put(data []byte) (string, error) {
 	if _, err := os.Stat(p); err == nil {
 		return h, nil
 	}
-	return h, writePrivate(p, data)
+	return h, atomicfile.Write(p, data, 0o600)
 }
 
 func (d diskBlobs) get(hash string) ([]byte, error) {
@@ -826,29 +827,4 @@ func (d diskBlobs) keep(refs map[string]bool) {
 			os.Remove(filepath.Join(string(d), e.Name()))
 		}
 	}
-}
-
-// writePrivate writes a file atomically, owner-only.
-func writePrivate(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }

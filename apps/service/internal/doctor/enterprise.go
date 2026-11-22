@@ -17,10 +17,10 @@ package doctor
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/secrets"
 )
 
@@ -45,7 +45,9 @@ func checkEnterprise(ctx context.Context, raw string, store secrets.Store, onlin
 	if online {
 		ctx, cancel := context.WithTimeout(ctx, enterpriseTimeout)
 		defer cancel()
-		info, err := enterprise.Discover(ctx, http.DefaultClient, u)
+		hc := netutil.NewClient(enterpriseTimeout)
+		defer hc.CloseIdleConnections()
+		info, err := enterprise.Discover(ctx, hc, u)
 		if err != nil {
 			return statusFail, fmt.Sprintf("%s isn't reached: %v", name, err)
 		}

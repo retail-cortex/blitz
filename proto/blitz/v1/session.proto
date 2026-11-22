@@ -17,6 +17,7 @@ syntax = "proto3";
 package blitz.v1;
 
 import "blitz/v1/turn.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/retail-cortex/blitz/proto/blitz/v1;blitzv1";
@@ -45,6 +46,10 @@ service SessionService {
   // The tool calls a saved session made, each with its result and the
   // prompt it ran under, so a reopened chat shows them.
   rpc ListSessionTools(ListSessionToolsRequest) returns (ListSessionToolsResponse);
+  // A saved session's turns, and the reasoning graph of one of them: its
+  // model calls, the reasoning they shared, the tools they called and the
+  // sub-agents they asked (spec_066_reasoning RSN-01).
+  rpc GetReasoning(GetReasoningRequest) returns (GetReasoningResponse);
   // Saves a copy of the active session under a name (SNAPSHOT_NAME_TAKEN
   // unless force).
   rpc SaveSnapshot(SaveSnapshotRequest) returns (SaveSnapshotResponse);
@@ -649,4 +654,65 @@ message SessionTool {
 // Response message for SessionService.ListSessionTools.
 message ListSessionToolsResponse {
   repeated SessionTool tools = 1;
+}
+
+// Request message for SessionService.GetReasoning.
+message GetReasoningRequest {
+  string workspace = 1;
+  string session_id = 2;
+  // The turn to draw, from 0; unset (or past the end) is the last.
+  optional int32 turn = 3;
+}
+
+// One node of a turn's reasoning graph: parent is the ID of the node it
+// hangs from ("" for the turn).
+message ReasoningNode {
+  string id = 1;
+  string parent = 2;
+  // turn, call, thought, tool, agent or text.
+  string kind = 3;
+  // Its short label, and its whole text (a step of reasoning, an answer,
+  // the prompt; cut at 16 KiB).
+  string title = 4;
+  string text = 5;
+  // The agent whose call it is (a sub-agent's name inside one).
+  string author = 6;
+  // Who answered a call.
+  string provider = 7;
+  string model = 8;
+  // A tool's name, its arguments and what it returned.
+  string tool = 9;
+  google.protobuf.Struct args = 10;
+  google.protobuf.Struct result = 11;
+  // ok, failed or running.
+  string status = 12;
+  google.protobuf.Timestamp start = 13;
+  int64 duration_ms = 14;
+  // A call's tokens and estimated cost, or a turn's or a sub-agent's
+  // total; unset for the others.
+  Usage usage = 15;
+  // A call that reasoned without sharing its reasoning: the provider
+  // keeps it.
+  bool hidden = 16;
+}
+
+// One turn of a session, summed up for the turn picker.
+message ReasoningTurn {
+  int32 index = 1;
+  string prompt = 2;
+  google.protobuf.Timestamp start = 3;
+  int32 calls = 4;
+  // The steps of reasoning the model shared.
+  int32 thoughts = 5;
+  Usage usage = 6;
+}
+
+// Response message for SessionService.GetReasoning.
+message GetReasoningResponse {
+  repeated ReasoningTurn turns = 1;
+  // The turn nodes draw (-1 with no turns).
+  int32 turn = 2;
+  repeated ReasoningNode nodes = 3;
+  // The turn had more nodes than are drawn.
+  bool cut = 4;
 }

@@ -45,6 +45,9 @@ func (e *Engine) agentRun(ctx context.Context, spec *agents.AgentSpec) context.C
 			slog.WarnContext(ctx, "agent permission_mode not applied: a project's agent can't loosen the mode until the project is trusted", "agent", spec.Name, "mode", m)
 		case m == api.ModeBypass && !e.toolReg.ShellSandbox().Active():
 			slog.WarnContext(ctx, "agent permission_mode not applied: bypass needs the OS sandbox", "agent", spec.Name)
+		case m == api.ModeUnsafe:
+			// Only the person chooses to run outside the sandbox (APR-14e).
+			slog.WarnContext(ctx, "agent permission_mode not applied: unsafe is the person's choice alone", "agent", spec.Name)
 		case m == api.ModePlan:
 			ctx = tools.WithPlanGate(ctx, tools.NewPlanGate(true))
 		default:

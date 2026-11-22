@@ -18,14 +18,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/url"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/browser"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/tool"
@@ -153,21 +158,55 @@ func (r *Registry) pageURL(raw string) (string, error) {
 }
 
 // askRulePage puts u to the person when an ask web(…) rule names its
-// host: open_page otherwise needs no approval (AB-10), but an ask rule is
-// the person saying they want to see it.
+// host, or when the host is (or resolves to) a private, loopback or
+// link-local address (AB-10a): a public page needs no approval (AB-10),
+// but a page on this computer or its network opens with the person's own
+// browser and sign-ins, where a page the agent read could send it.
 func (r *Registry) askRulePage(ctx context.Context, u string) error {
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return err
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if effect, _ := r.rules.Decide(RuleWeb, []string{host}); effect != EffectAsk {
+	effect, _ := r.rules.Decide(RuleWeb, []string{host})
+	private := privateHost(ctx, host)
+	if effect != EffectAsk && !private {
 		return nil
 	}
+	detail := "open " + u + " in a browser"
+	if private {
+		detail += " (an address on this computer or its network)"
+	}
 	return r.hooks.Approve(ctx, api.ApprovalRequest{
-		Tool: "open_page", Kind: api.ActionNetwork, Detail: "open " + u + " in a browser",
+		Tool: "open_page", Kind: api.ActionNetwork, Detail: detail,
 		Targets: []string{host}, MustAsk: true,
 	})
+}
+
+// pageLookup resolves a page's host (a variable for tests).
+var pageLookup = func(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+}
+
+// privateHost reports whether host is an address that isn't public
+// (browser.PublicAddr), or a name any of whose addresses isn't: a name
+// that doesn't resolve isn't one (the page won't load either).
+func privateHost(ctx context.Context, host string) bool {
+	if a, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+		return !browser.PublicAddr(a.Unmap())
+	}
+	lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	addrs, err := pageLookup(lctx, host)
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if !browser.PublicAddr(a.Unmap()) {
+			return true
+		}
+	}
+	return false
 }
 
 // pageProfile is the browser profile open_page shows a page signed in
@@ -233,6 +272,9 @@ func (r *Registry) openPage(ctx context.Context, u, profile string) (string, err
 		if where != PageEmbedded {
 			profile = ""
 		}
+		if err := r.askProfileSite(ctx, u, profile); err != nil {
+			return "", err
+		}
 		err := opener(ctx, u, where, profile)
 		switch {
 		case err == nil:
@@ -279,4 +321,52 @@ func (r *Registry) pageWhere(ctx context.Context, u string) string {
 	p.where[session] = v
 	p.mu.Unlock()
 	return v
+}
+
+// askProfileSite asks before a page outside profile's own sites opens
+// signed in with it (BP-08a): its sign-ins go with the page's requests,
+// as the browser asks for such a site (BP-04). Allowed for the chat, a
+// site isn't asked about again. Its own sites, and no profile, open
+// without asking.
+func (r *Registry) askProfileSite(ctx context.Context, u, profile string) error {
+	if profile == "" || profile == config.AnonymousBrowserProfile {
+		return nil
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return err
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, p := range r.browserProfiles().All {
+		if p.Name == profile && matchDomain(p.Allow, host) {
+			return nil
+		}
+	}
+	return r.hooks.Approve(ctx, api.ApprovalRequest{
+		Tool: "open_page", Kind: api.ActionNetwork,
+		Detail:  fmt.Sprintf("open %s signed in with your browser profile %s (a site outside its own)", u, profile),
+		Targets: []string{host},
+		Key:     "open_page:profile:" + profile + ":" + host, KeyLabel: fmt.Sprintf("opening %s signed in as %s", host, profile),
+	})
+}
+
+// PageReach is what a page open_page shows may reach (BP-08a), held by
+// the window's network filter as the agent's browser is (EL-17):
+// private addresses only with browser.allow_local, never
+// web.deny_domains, and profile's own sites (names) on the private
+// network.
+func (r *Registry) PageReach(profile string) (allowLocal bool, deny, sites []string) {
+	if r.browser != nil {
+		allowLocal = r.browser.cfg.AllowLocal
+	}
+	deny = slices.Clone(r.web.DenyDomains)
+	if profile == "" {
+		return allowLocal, deny, nil
+	}
+	for _, p := range r.browserProfiles().All {
+		if p.Name == profile {
+			sites = profileSiteNames(p.Allow)
+		}
+	}
+	return allowLocal, deny, sites
 }

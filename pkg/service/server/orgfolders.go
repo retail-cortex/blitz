@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/config"
 )
 
@@ -87,18 +88,7 @@ func addShared(service, handle string, sf sharedFolder) error {
 		f[service] = map[string]sharedFolder{}
 	}
 	f[service][handle] = sf
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(sharedPath()), 0o700); err != nil {
-		return err
-	}
-	tmp := sharedPath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, sharedPath())
+	return atomicfile.WriteJSON(sharedPath(), f, 0o600)
 }
 
 // samePath reports whether a and b are the same folder, links followed

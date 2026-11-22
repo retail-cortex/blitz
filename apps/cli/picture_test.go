@@ -15,8 +15,10 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -255,12 +257,40 @@ func TestPictureHelpers(t *testing.T) {
 		assert.Equal(t, tc.want, numbered(tc.out, tc.i))
 	}
 	assert.Empty(t, defaultPictureModel(nil))
+	assert.Equal(t, "openai/gpt-image-2", defaultPictureModel([]*pb.PictureModel{{Ref: "openai/gpt-image-2"}}))
 	dir := t.TempDir()
 	_, err := workspacePath(dir, filepath.Join(dir, "..", "x.png"))
 	assert.Error(t, err)
 	rel, err := workspacePath(dir, filepath.Join(dir, "sub", "x.png"))
 	require.NoError(t, err)
 	assert.Equal(t, "sub/x.png", rel)
+	// Non-existent dir falls back to dir itself when EvalSymlinks fails.
+	missingDir := filepath.Join(dir, "does-not-exist")
+	rel, err = workspacePath(missingDir, filepath.Join(missingDir, "a.png"))
+	require.NoError(t, err)
+	assert.Equal(t, "a.png", rel)
+
+	cmd := newPictureCommand(&globalFlags{})
+	cmd.SetIn(errReader{errors.New("read boom")})
+	_, err = picturePrompt(cmd, []string{"-"})
+	assert.ErrorContains(t, err, "read boom")
+}
+
+func TestPictureServiceDown(t *testing.T) {
+	isolate(t)
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service down") }
+	t.Cleanup(func() { startShared = inner })
+	for _, args := range [][]string{
+		{"picture", "a fox"},
+		{"picture", "models"},
+		{"picture", "list"},
+		{"picture", "show", "pic-1"},
+		{"picture", "delete", "pic-1"},
+	} {
+		_, err := runCLI(t, args...)
+		assert.ErrorContains(t, err, "service down")
+	}
 }
 
 // show's text: a turn's settings in one line, a reference without a path

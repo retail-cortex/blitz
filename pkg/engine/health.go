@@ -160,6 +160,18 @@ func (w *Workspace) healthNext(st health.State) time.Time {
 	return sched.Next(st.LastCheck)
 }
 
+// healthScheduleProblem is why [health] schedule can't be read, or "".
+func (w *Workspace) healthScheduleProblem() string {
+	s := strings.TrimSpace(w.cfg.Health.Schedule)
+	if s == "" || strings.EqualFold(s, "off") {
+		return ""
+	}
+	if _, err := workers.ParseSchedule(s, ""); err != nil {
+		return "[health] schedule can't be read, so health checks don't run on their own: " + err.Error()
+	}
+	return ""
+}
+
 // HealthDue reports whether the schedule wants a check now.
 func (w *Workspace) HealthDue(now time.Time) bool {
 	next := w.healthNext(w.healthStore().State())

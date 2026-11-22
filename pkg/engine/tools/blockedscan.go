@@ -16,9 +16,9 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"log/slog"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,13 +35,11 @@ const (
 	blockedScanMaxDepth   = 12
 )
 
-// blockedScanSkip are the folders the scan doesn't descend into: grep's,
-// and .git.
-var blockedScanSkip = func() map[string]bool {
-	m := maps.Clone(grepSkipDirs)
-	m[".git"] = true
-	return m
-}()
+// blockedScanSkip are the folders the scan doesn't descend into: .git
+// alone. A blocked name under node_modules, vendor or target (a .env, a
+// key) is masked as anywhere else (security review engine-tools-1#7);
+// the scan keeps what it read between commands, so they're read once.
+var blockedScanSkip = map[string]bool{".git": true}
 
 // racyWindow is how close to when it was read a directory's modification
 // time can be and still change again without the time changing (file
@@ -69,6 +67,7 @@ type blockedScan struct {
 	// first time, the service's log says so.
 	limited string
 	warned  bool
+	told    bool // the turn was told of the limit (limitNote)
 }
 
 // scannedDir is a directory as last read.
@@ -102,6 +101,18 @@ func newBlockedScan(spec OSSandboxSpec) *blockedScan {
 func (s *blockedScan) expand() (files, dirs []string) {
 	files, dirs, _ = s.expandCtx(context.Background())
 	return files, dirs
+}
+
+// limitNote is what a turn is told, once a scan stopped at its limit, or
+// "" (security review engine-tools-1#7: only the log said so).
+func (s *blockedScan) limitNote() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.limited == "" || s.told {
+		return ""
+	}
+	s.told = true
+	return fmt.Sprintf("The workspace has more files than the sandbox looks through for blocked ones (%d, %d folders deep): blocked files past that (a .env, a key) aren't hidden from commands. Open a smaller folder as the workspace to have them all hidden.", blockedScanMaxEntries, blockedScanMaxDepth)
 }
 
 // expandCtx is expand, stopping with ctx's error when ctx ends: a cold

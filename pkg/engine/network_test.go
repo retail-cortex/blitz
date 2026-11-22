@@ -25,17 +25,20 @@ import (
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// [network] ca_file: clients built from Go's default transport trust it.
+// [network] ca_file: clients built via netutil trust it without mutating
+// http.DefaultTransport in place.
 func TestSetupNetwork(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "trusted") }))
 	defer srv.Close()
-	t.Cleanup(func() { http.DefaultTransport.(*http.Transport).TLSClientConfig = nil })
+	t.Cleanup(netutil.ResetExtraCAs)
 	get := func() error {
-		c := &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
+		c := &http.Client{Transport: netutil.CloneDefaultTransport()}
+		defer c.CloseIdleConnections()
 		resp, err := c.Get(srv.URL)
 		if err != nil {
 			return err
@@ -47,13 +50,18 @@ func TestSetupNetwork(t *testing.T) {
 	}
 	assert.Error(t, get(), "an unknown authority, before")
 
+	beforeTLS := http.DefaultTransport.(*http.Transport).TLSClientConfig
 	ca := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o644))
 	cfg := config.DefaultConfig()
 	require.NoError(t, SetupNetwork(cfg), "nothing to do")
 	cfg.Network.CAFile = ca
 	require.NoError(t, SetupNetwork(cfg))
+	assert.Equal(t, beforeTLS, http.DefaultTransport.(*http.Transport).TLSClientConfig, "http.DefaultTransport is never mutated")
 	assert.NoError(t, get())
+	// Another workspace opening without ca_file keeps the authorities.
+	require.NoError(t, SetupNetwork(config.DefaultConfig()))
+	assert.NoError(t, get(), "a workspace without ca_file took them away")
 
 	cfg.Network.CAFile = filepath.Join(t.TempDir(), "none.pem")
 	assert.ErrorContains(t, SetupNetwork(cfg), "ca_file")

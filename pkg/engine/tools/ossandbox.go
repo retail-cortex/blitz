@@ -197,6 +197,7 @@ func seatbeltProfile(spec OSSandboxSpec) string {
 		}
 		sb.WriteString(")\n")
 	}
+	sb.WriteString(gitControlSBPL(spec.WritableDirs))
 	denyPrivateDirs(&sb, privateDirs(), append(slices.Clone(spec.WritableDirs), spec.ReadOnlyDirs...))
 	if regexes := spec.Blocked.sbplRegexes(); len(regexes) > 0 {
 		sb.WriteString("(deny file-read* file-write*\n")

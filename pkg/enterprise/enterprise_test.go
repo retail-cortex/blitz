@@ -888,6 +888,15 @@ func TestCatalog(t *testing.T) {
 	// A service that retired its catalog: the kept one goes, quietly; then
 	// nothing more to say. A folder it can't be removed from says so.
 	s.CatalogRemoved = true
+	// Unsigned, it's believed only once the policy API's signed policy is
+	// kept (EN-33a, security review enterprise#8): before that it's a
+	// refusal, and the catalog stays.
+	kept, changed, err = c.RefreshCatalog(ctx, dir)
+	require.ErrorAs(t, err, &refusal)
+	assert.False(t, changed)
+	require.NotNil(t, kept)
+	assert.DirExists(t, filepath.Join(dir, "catalog"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, policyETag), []byte(`"v1"`), 0o600))
 	require.NoError(t, os.Chmod(dir, 0o500))
 	_, _, err = c.RefreshCatalog(ctx, dir)
 	assert.Error(t, err, "can't remove it")
@@ -1319,4 +1328,60 @@ func TestPolicyItems(t *testing.T) {
 		_, err := c.RefreshPolicy(ctx, dir)
 		assert.ErrorContains(t, err, "can't be a file")
 	})
+}
+
+// A policy newer than this client reads isn't taken: it may hold
+// restrictions it doesn't know, so the policy kept stays (EN-33b;
+// security review enterprise#6).
+func TestPolicyNewerSchemaRefused(t *testing.T) {
+	_, s, c, _, _ := setup(t)
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	s.Mu.Lock()
+	s.Policy = map[string]any{"schema": PolicySchema, "policy": map[string]any{"refresh": "5m"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{}}
+	s.Mu.Unlock()
+	_, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	kept, err := os.ReadFile(filepath.Join(dir, "policy.json"))
+	require.NoError(t, err)
+
+	s.Mu.Lock()
+	s.Policy = map[string]any{"schema": PolicySchema + 1, "policy": map[string]any{"refresh": "1m"}, "explain": map[string]any{}, "rules": []any{}, "guardrails": []any{}}
+	s.Mu.Unlock()
+	_, err = c.RefreshPolicy(ctx, dir)
+	require.ErrorIs(t, err, ErrPolicySchema)
+	now, err := os.ReadFile(filepath.Join(dir, "policy.json"))
+	require.NoError(t, err)
+	assert.Equal(t, string(kept), string(now), "the policy kept stays")
+
+	// With policy.json gone, the ETag isn't sent: the policy comes again
+	// (security review enterprise#9: a 304 left none for ever).
+	s.Mu.Lock()
+	s.Policy["schema"] = PolicySchema
+	s.Mu.Unlock()
+	require.NoError(t, os.Remove(filepath.Join(dir, "policy.json")))
+	changed, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assert.FileExists(t, filepath.Join(dir, "policy.json"))
+}
+
+// A swap that can't put the new policy in place puts the old one back:
+// never no policy/ at all (EN-33c, security review enterprise#10).
+func TestSwapPolicyFailureKeepsTheOld(t *testing.T) {
+	dir := t.TempDir()
+	cur := filepath.Join(dir, policyDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(cur, "rules"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(cur, "rules", "kept.md"), []byte("x"), 0o600))
+	err := swapPolicy(dir, filepath.Join(dir, "no-such-next"))
+	require.Error(t, err)
+	assert.FileExists(t, filepath.Join(cur, "rules", "kept.md"), "the old policy is back")
+	assert.NoDirExists(t, filepath.Join(dir, policyDir+".old"))
+
+	next := filepath.Join(dir, "staged")
+	require.NoError(t, os.MkdirAll(filepath.Join(next, "rules"), 0o700))
+	require.NoError(t, swapPolicy(dir, next))
+	assert.NoFileExists(t, filepath.Join(cur, "rules", "kept.md"), "swapped")
+	assert.False(t, policyTookOver(dir), "no ETag, no policy.json")
 }

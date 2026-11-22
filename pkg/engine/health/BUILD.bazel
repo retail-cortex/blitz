@@ -28,7 +28,10 @@ go_library(
         "//pkg/service:__subpackages__",
         "//pkg/engine:__subpackages__",
     ],
-    deps = ["//pkg/engine/audit"],
+    deps = [
+        "//pkg/atomicfile",
+        "//pkg/engine/audit",
+    ],
 )
 
 go_test(

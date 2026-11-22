@@ -16,7 +16,7 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   absolutePaths,
   pagePermission,
@@ -76,7 +76,7 @@ import {
   unsaved,
   waitForPrint,
   windowMethods,
-} from "./logic";
+  withTimeout, within } from "./logic";
 
 // The host's daily ping, sent through the system's network (spec_054
 // AI-14): a ping line is read only when whole, and its proxy field says
@@ -676,5 +676,70 @@ describe("pagePermission", () => {
   });
   it("refuses the microphone before the page is known", () => {
     expect(pagePermission("media", "https://127.0.0.1:4321", "", ["audio"])).toBe(false);
+  });
+});
+
+describe("withTimeout", () => {
+  it("clears the timeout timer when work resolves early", async () => {
+    vi.useFakeTimers();
+    try {
+      let settle!: (v: string) => void;
+      const work = new Promise<string>((r) => {
+        settle = r;
+      });
+      const pending = withTimeout(work, 60_000, "timed out");
+      expect(vi.getTimerCount()).toBe(1);
+      settle("ok");
+      await expect(pending).resolves.toBe("ok");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the timeout timer when work rejects early", async () => {
+    vi.useFakeTimers();
+    try {
+      let fail!: (e: Error) => void;
+      const work = new Promise<string>((_, reject) => {
+        fail = reject;
+      });
+      const pending = withTimeout(work, 60_000, "timed out");
+      expect(vi.getTimerCount()).toBe(1);
+      fail(new Error("boom"));
+      await expect(pending).rejects.toThrow("boom");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects with message when timeout elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<string>(() => {});
+      const pending = withTimeout(never, 60_000, "printing took longer than a minute");
+      const assertion = expect(pending).rejects.toThrow("printing took longer than a minute");
+      await vi.advanceTimersByTimeAsync(60_000);
+      await assertion;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// A dropped file that's really inside the workspace (the copy just made,
+// by another spelling) is never trashed (security review files#2).
+describe("within", () => {
+  it.each([
+    ["/Users/r/Projects/app/notes.md", "/Users/r/Projects/app", true, true],
+    ["/Users/r/Projects/app", "/Users/r/Projects/app", true, true],
+    ["/users/r/projects/APP/notes.md", "/Users/r/Projects/app", true, true],
+    ["/users/r/projects/APP/notes.md", "/Users/r/Projects/app", false, false],
+    ["/Users/r/Projects/app-old/notes.md", "/Users/r/Projects/app", true, false],
+    ["/Users/r/Downloads/notes.md", "/Users/r/Projects/app", true, false],
+  ])("%s in %s (fold case %s): %s", (p, root, fold, want) => {
+    expect(within(p, root, path.posix, fold)).toBe(want);
   });
 });

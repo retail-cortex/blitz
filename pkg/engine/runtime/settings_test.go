@@ -110,7 +110,11 @@ func TestSettingsWithoutLookupOrEntryLeaveTheRequestAlone(t *testing.T) {
 	} {
 		for range m.GenerateContent(ctx, &model.LLMRequest{Config: cfg}, false) {
 		}
-		require.Same(t, cfg, r.last(t), "request was copied or changed without settings for the model")
+		// Only Gemini's thoughts are asked for (withThoughts), on a copy.
+		got := r.last(t)
+		assert.Equal(t, int32(5), got.MaxOutputTokens)
+		assert.Nil(t, got.Temperature, "no settings applied")
+		assert.Nil(t, cfg.ThinkingConfig, "the shared request config was changed")
 	}
 }
 
@@ -364,4 +368,57 @@ func TestAgentModelSettingsWin(t *testing.T) {
 func TestSettingSupportedUnknownProvider(t *testing.T) {
 	assert.True(t, SettingSupported("bedrock", "x", "seed"))
 	assert.False(t, SettingSupported("gemini", "models/gemini-2.5-pro", "reasoning_effort"))
+}
+
+// A Gemini model that thinks is asked for its thought summaries, as a
+// copy of the shared request; not one that doesn't, nor one whose
+// thinking is turned off, nor another provider's (spec_066 RSN-06).
+func TestGeminiThoughtsAsked(t *testing.T) {
+	thinks := ModelInfo{Thinking: ThinkingBudget}
+	off := &genai.GenerateContentConfig{ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: ptr(int32(0))}}
+	for _, tc := range []struct {
+		name     string
+		provider string
+		info     ModelInfo
+		cfg      *genai.GenerateContentConfig
+		want     bool
+	}{
+		{"a Gemini model that thinks", "gemini", thinks, &genai.GenerateContentConfig{MaxOutputTokens: 5}, true},
+		{"its level kept", "gemini", thinks, &genai.GenerateContentConfig{ThinkingConfig: &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelHigh}}, true},
+		{"no config yet", "gemini", thinks, nil, true},
+		{"thinking turned off", "gemini", thinks, off, false},
+		{"a model that doesn't think", "gemini", ModelInfo{}, &genai.GenerateContentConfig{}, false},
+		{"another provider", "anthropic", thinks, &genai.GenerateContentConfig{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &model.LLMRequest{Config: tc.cfg}
+			got := withThoughts(tc.provider, tc.info, req)
+			if !tc.want {
+				assert.Same(t, req, got)
+				return
+			}
+			assert.NotSame(t, req, got)
+			require.NotNil(t, got.Config.ThinkingConfig)
+			assert.True(t, got.Config.ThinkingConfig.IncludeThoughts)
+			if tc.cfg != nil {
+				assert.Equal(t, tc.cfg.MaxOutputTokens, got.Config.MaxOutputTokens, "the rest of the config kept")
+				if tc.cfg.ThinkingConfig != nil {
+					assert.Equal(t, tc.cfg.ThinkingConfig.ThinkingLevel, got.Config.ThinkingConfig.ThinkingLevel)
+					assert.False(t, tc.cfg.ThinkingConfig.IncludeThoughts, "the shared request unchanged")
+				}
+			}
+		})
+	}
+	assert.Nil(t, withThoughts("gemini", thinks, nil))
+}
+
+// Through the model: a thinking Gemini model's calls ask for thoughts.
+func TestGeminiModelAsksForThoughts(t *testing.T) {
+	r := &recorder{name: "gemini-2.5-pro"}
+	require.NotEqual(t, ThinkingNone, Info("gemini", "gemini", "gemini-2.5-pro").Thinking)
+	for range withModelSettings(r, "gemini").GenerateContent(context.Background(), &model.LLMRequest{Config: &genai.GenerateContentConfig{}}, false) {
+	}
+	got := r.last(t)
+	require.NotNil(t, got.ThinkingConfig)
+	assert.True(t, got.ThinkingConfig.IncludeThoughts)
 }

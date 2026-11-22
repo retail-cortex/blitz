@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"testing"
 
 	"github.com/retail-cortex/blitz/pkg/api"
@@ -215,8 +216,10 @@ func TestOpenPageProfiles(t *testing.T) {
 		note    string
 		err     string
 	}{
-		{name: "the chat's, the workspace's own", where: PageEmbedded, want: "work"},
-		{name: "the workspace's own, named", where: PageEmbedded, profile: "work", want: "work"},
+		// mail.example isn't among work's sites: its sign-ins go only once allowed (BP-08a).
+		{name: "the chat's, the workspace's own", where: PageEmbedded, want: "work", asked: []string{"open_page:profile:work:mail.example"}},
+		{name: "the workspace's own, named", where: PageEmbedded, profile: "work", want: "work", asked: []string{"open_page:profile:work:mail.example"}},
+		// It is among home's: only the profile is asked about.
 		{name: "another, asked", where: PageEmbedded, profile: "home", want: "home", asked: []string{"browser:profile:home"}},
 		{name: "none", where: PageEmbedded, profile: "none", want: ""},
 		{name: "no such profile", where: PageEmbedded, profile: "play", err: "no browser profile \"play\""},
@@ -253,4 +256,105 @@ func TestOpenPageProfiles(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The tests never ask DNS: names resolve from this table, others to a
+// public address.
+func init() {
+	pageLookup = func(_ context.Context, host string) ([]netip.Addr, error) {
+		fake := map[string][]string{
+			"localhost":      {"127.0.0.1", "::1"},
+			"router.lan":     {"192.168.1.1"},
+			"rebind.example": {"93.184.216.34", "10.0.0.5"},
+		}
+		if host == "gone.example" {
+			return nil, errors.New("no such host")
+		}
+		list, ok := fake[host]
+		if !ok {
+			list = []string{"93.184.216.34"}
+		}
+		var out []netip.Addr
+		for _, a := range list {
+			out = append(out, netip.MustParseAddr(a))
+		}
+		return out, nil
+	}
+}
+
+// A page on this computer or its network is put to the person first,
+// whatever the mode, as it opens with their own browser and sign-ins
+// (AB-10a); a public one isn't.
+func TestOpenPagePrivateHosts(t *testing.T) {
+	for _, tc := range []struct {
+		url   string
+		asked bool
+	}{
+		{"https://example.com", false},
+		{"http://localhost:8080/admin", true},
+		{"http://127.0.0.1:3000", true},
+		{"http://[::1]/", true},
+		{"http://[::ffff:127.0.0.1]/", true},
+		{"http://169.254.169.254/latest/meta-data", true},
+		{"http://10.1.2.3", true},
+		{"https://router.lan", true},
+		{"https://rebind.example", true},
+		{"https://gone.example", false},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			hooks, reqs := decisionHooks(api.DecisionDeny)
+			r := &Registry{hooks: hooks}
+			opened := 0
+			r.SetPageOpener(func(context.Context, string, string, string) error { opened++; return nil })
+			r.page.open = PageEmbedded
+			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
+			if !tc.asked {
+				assert.Empty(t, *reqs)
+				assert.Empty(t, errOf(out))
+				assert.Equal(t, 1, opened)
+				return
+			}
+			require.Len(t, *reqs, 1)
+			assert.True(t, (*reqs)[0].MustAsk, "asked in every mode")
+			assert.Contains(t, (*reqs)[0].Detail, "on this computer or its network")
+			assert.Contains(t, errOf(out), "declined")
+			assert.Zero(t, opened, "opened though declined")
+		})
+	}
+}
+
+// A page outside a profile's own sites isn't opened signed in with it
+// when the person says no (BP-08a); the page's reach is the browser's:
+// allow_local, the denied domains and the profile's own site names.
+func TestOpenPageProfileSiteRefusedAndReach(t *testing.T) {
+	work := BrowserProfile{Name: "work", Dir: "/profiles/work", Allow: []string{"*.corp.example", "jira.example", "10.1.2.3"}}
+	hooks, reqs := decisionHooks(api.DecisionDeny)
+	r := &Registry{hooks: hooks, web: WebFetchConfig{DenyDomains: []string{"evil.example"}}}
+	r.browser = &browserTool{r: r}
+	r.browser.cfg.AllowLocal = true
+	r.SetBrowserProfiles(func() BrowserProfiles { return BrowserProfiles{Current: work, All: []BrowserProfile{work}} })
+	r.page.open = PageEmbedded
+	opened := 0
+	r.SetPageOpener(func(context.Context, string, string, string) error { opened++; return nil })
+
+	out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": "https://attacker.example/csrf.html"})
+	assert.NotEmpty(t, errOf(out))
+	assert.Zero(t, opened, "not opened with the profile's sign-ins")
+	require.Len(t, *reqs, 1)
+	assert.Equal(t, "opening attacker.example signed in as work", (*reqs)[0].KeyLabel)
+
+	out = runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": "wiki.corp.example"})
+	assert.Empty(t, errOf(out), "its own site opens without asking")
+	assert.Equal(t, 1, opened)
+	assert.Len(t, *reqs, 1)
+
+	local, deny, sites := r.PageReach("work")
+	assert.True(t, local)
+	assert.Equal(t, []string{"evil.example"}, deny)
+	assert.Equal(t, []string{"*.corp.example", "jira.example"}, sites, "names only")
+	local, _, sites = (&Registry{}).PageReach("")
+	assert.False(t, local)
+	assert.Nil(t, sites)
+	assert.NoError(t, r.askProfileSite(context.Background(), "https://x.example", ""), "no profile: nothing to ask")
+	assert.NoError(t, r.askProfileSite(context.Background(), "https://x.example", "anonymous"))
 }

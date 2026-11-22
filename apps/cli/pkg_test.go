@@ -15,6 +15,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -96,6 +98,14 @@ func TestPkgCommand(t *testing.T) {
 	assert.Equal(t, exitUsage, exitCodeFor(err))
 	_, err = runCLI(t, "-d", ws, "pkg", "publish", "skill/nope")
 	assert.Error(t, err)
+	// What looks like a secret isn't published, and a linked agent file
+	// isn't read (security review packages#3).
+	put(ws, ".agents/agents/keyed.md", "---\nname: keyed\n---\nUse AKIAIOSFODNN7EXAMPLE.\n")
+	_, err = runCLI(t, "-d", ws, "pkg", "publish", "agent/keyed")
+	assert.ErrorContains(t, err, "look like secrets")
+	require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "credentials"), filepath.Join(ws, ".agents", "agents", "linked.md")))
+	_, err = runCLI(t, "-d", ws, "pkg", "publish", "agent/linked")
+	assert.ErrorContains(t, err, "is a link")
 
 	idp := enterprisetest.NewProvider(t)
 	org := enterprisetest.NewService(t, idp.URL)
@@ -162,6 +172,26 @@ func TestPkgRegistryErrors(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(ws, ".agents", "blitz.lock"), []byte("{nope"), 0o644))
 	_, err = runCLI(t, "-d", ws, "pkg", "verify")
 	assert.Error(t, err, "a lockfile that doesn't read")
+	_, err = runCLI(t, "-d", ws, "pkg", "list")
+	assert.Error(t, err, "list with corrupt lockfile")
 	_, err = runCLI(t, "-d", t.TempDir(), "hook", "run", "pre-commit")
 	assert.Error(t, err, "not a repository")
+
+	// Publish & search with unreachable/invalid registry and validate with service down.
+	ws2 := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(ws2, ".agents", "skills", "tone"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ws2, ".agents", "skills", "tone", "SKILL.md"), []byte("---\nname: tone\ndescription: Tone\n---\nHi.\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".blitz", ".env.toml"), []byte(""), 0o600))
+	_, err = runCLI(t, "-d", ws2, "pkg", "publish", "skill/tone", "--registry", "::not a url")
+	assert.Error(t, err)
+	_, err = runCLI(t, "-d", ws2, "pkg", "search", "tone", "--registry", "http://127.0.0.1:1")
+	assert.Error(t, err)
+	_, err = runCLI(t, "-d", ws2, "pkg", "publish", "skill/tone", "--registry", "http://127.0.0.1:1")
+	assert.Error(t, err)
+
+	inner := startShared
+	startShared = func(context.Context, string) error { return errors.New("service down") }
+	t.Cleanup(func() { startShared = inner })
+	_, err = runCLI(t, "-d", ws2, "pkg", "validate")
+	assert.ErrorContains(t, err, "service down")
 }

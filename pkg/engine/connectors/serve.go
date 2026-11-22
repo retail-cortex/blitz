@@ -162,6 +162,20 @@ func can(cat Catalog, env *Env, conn Connection, c Capability) (Backend, *Kind, 
 		return nil, nil, conn, fmt.Errorf("%s can't %s", conn.Name, c)
 	}
 	env.Category, _ = cat.Category(conn.Category)
+	// The person's own connection, sent to be tested, tried or queried,
+	// is held to the organization's rules as one saved and served is
+	// (connectors.own, connectors.kinds; spec_053 EN-35b).
+	if r := rulesFor(env.Dirs, cat, env.Category); r.active && !IsOrg(conn.Scope) {
+		// Judged by what it would connect to: a form's connection by the
+		// file it makes, as a save is.
+		text := conn.Text
+		if text == "" {
+			text, _ = b.Render(env.Category, k, conn)
+		}
+		if why := r.personal(conn.Name, text); why != "" {
+			return nil, nil, conn, fmt.Errorf("%s: %s", conn.Name, why)
+		}
+	}
 	return b, k, conn, nil
 }
 

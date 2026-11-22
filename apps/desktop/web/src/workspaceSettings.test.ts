@@ -55,6 +55,12 @@ describe("keepPermissionMode", () => {
     expect(setPermissionMode).toHaveBeenCalledWith({ workspace: "/ws", mode: pick });
     expect(setConfigValue).toHaveBeenCalledWith({ workspace: "/ws", key: "blitz.permission_mode", value: canonical });
   });
+  it("unsafe is applied for now, never kept (APR-14e)", async () => {
+    setPermissionMode.mockResolvedValue({ mode: "unsafe" });
+    expect(await keepPermissionMode("/ws", "unsafe")).toBe("unsafe");
+    expect(setPermissionMode).toHaveBeenCalledWith({ workspace: "/ws", mode: "unsafe" });
+    expect(setConfigValue).not.toHaveBeenCalled();
+  });
   it("a mode the service refuses isn't kept", async () => {
     setPermissionMode.mockRejectedValue(new Error("bypass mode needs the OS sandbox"));
     await expect(keepPermissionMode("/ws", "bypass")).rejects.toThrow("sandbox");

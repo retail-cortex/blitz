@@ -175,9 +175,19 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 		in: make(chan []byte, inputQueue),
 	}
 	m.mu.Lock()
-	if m.closed { // closed while it started
+	// Counted again as it's kept: opens at once each passed the check
+	// before any was kept (security review terminal#5).
+	tooMany := len(m.terms) >= m.max
+	if m.closed || tooMany { // closed while it started, or the limit reached meanwhile
 		m.mu.Unlock()
-		t.close()
+		// Its reader and waiter aren't started, so t.close() would wait for
+		// them for ever (security review terminal#2): ended here instead.
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = f.Close()
+		if tooMany {
+			return nil, fmt.Errorf("%w (%d)", ErrTooMany, m.max)
+		}
 		return nil, ErrClosed
 	}
 	m.terms[t.info.ID] = t
@@ -187,6 +197,13 @@ func (m *Manager) Open(o Options) (*Terminal, error) {
 	go t.wait()
 	go t.write()
 	return t, nil
+}
+
+// Running is how many terminals are open.
+func (m *Manager) Running() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.terms)
 }
 
 // Get is terminal id.
@@ -435,6 +452,13 @@ func (t *Terminal) finish() {
 	}
 }
 
+// exited reports whether the shell has ended and been waited for.
+func (t *Terminal) exited() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.info.Exited
+}
+
 // wake tells the watchers there's news; t.mu is held.
 func (t *Terminal) wake() {
 	close(t.changed)
@@ -444,11 +468,18 @@ func (t *Terminal) wake() {
 // close hangs the shell up, kills it if it hasn't ended in killAfter, and
 // waits for it.
 func (t *Terminal) close() {
-	hangUp(t.cmd)
+	// Only a live shell is signalled: once it's reaped and its group is
+	// empty, the group's ID may be another's (security review
+	// terminal#6).
+	if !t.exited() {
+		hangUp(t.cmd)
+	}
 	select {
 	case <-t.done:
 	case <-time.After(killAfter):
-		kill(t.cmd)
+		if !t.exited() {
+			kill(t.cmd)
+		}
 		<-t.done
 	}
 	_ = t.pty.Close()

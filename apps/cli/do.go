@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -30,6 +31,12 @@ import (
 
 // errNotConfirmed is blitz do's answer when the person says no.
 var errNotConfirmed = errors.New("nothing was changed")
+
+// errAgentConfirm refuses to confirm a change in a blitz the agent's
+// command started (activity.AgentEnv): neither --yes nor an answer piped
+// in is the person's. The agent's blitz tool asks them instead
+// (spec_060_blitz_tools DRV-04a).
+var errAgentConfirm = errors.New("nothing was changed: a blitz started by the agent's command can't confirm changes (--yes or an answer piped in); use the blitz tool, which asks the person")
 
 // newDoCommand is `blitz do <command> [name=value…]`: one of Blitz's own
 // commands, the same catalog as the agent's blitz tool (spec_060_blitz_tools
@@ -68,6 +75,9 @@ hidden. --json prints the result as JSON.`,
 				return err
 			}
 			if res.Confirm != "" {
+				if os.Getenv(activity.AgentEnv) != "" {
+					return withCode(exitFailure, errAgentConfirm)
+				}
 				fmt.Fprintln(out, res.Confirm)
 				if res.Diff != "" {
 					fmt.Fprintln(out, res.Diff)

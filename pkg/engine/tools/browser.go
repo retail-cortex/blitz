@@ -446,7 +446,10 @@ func (bt *browserTool) syncProfile(ctx context.Context, name, site string) (Brow
 	}
 	p := bt.effective(session, all)
 	bt.actMu.Lock()
-	changed := bt.profile != p.Dir
+	// A change of the profile's sites restarts the browser too: its reach
+	// to the private network is fixed as it starts (BP-04b; security
+	// review electron#3: a site removed kept it).
+	changed := bt.profile != p.Dir || !slices.Equal(bt.allow, p.Allow)
 	bt.profile, bt.profileName, bt.allow = p.Dir, p.Name, p.Allow
 	bt.actMu.Unlock()
 	if changed && bt.b != nil {
@@ -675,12 +678,12 @@ func (bt *browserTool) browser(ctx context.Context) (*browser.Browser, error) {
 		sites = slices.Clone(bt.allow)
 	}
 	bt.actMu.Unlock()
-	privateHost := func(host string) bool { return matchDomain(sites, host) }
+	privateHost := profileSiteHost(sites)
 	// The desktop app's own view when a window is watching (AB-01),
 	// watched or silent as the chat chose; else Chrome, headless.
 	if host := bt.r.agentBrowserHost(); host != nil {
 		show := bt.show(ctx)
-		if t, err := host(ctx, AgentBrowserOptions{Show: show, Profile: profileName, AllowLocal: bt.cfg.AllowLocal, DenyDomains: bt.web.DenyDomains, PrivateSites: sites}); err == nil {
+		if t, err := host(ctx, AgentBrowserOptions{Show: show, Profile: profileName, AllowLocal: bt.cfg.AllowLocal, DenyDomains: bt.web.DenyDomains, PrivateSites: profileSiteNames(sites)}); err == nil {
 			b, err := browser.AttachTransport(ctx, t, browser.Options{Width: bt.cfg.Width, Height: bt.cfg.Height, Timeout: bt.timeout, KeepViewport: show == "watch", Navigation: bt.navigation})
 			if err != nil {
 				return nil, err
@@ -769,4 +772,36 @@ func (bt *browserTool) close() {
 	bt.mu.Lock()
 	defer bt.mu.Unlock()
 	bt.closeLocked()
+}
+
+// profileSiteHost reports whether a host is one of a profile's own sites,
+// which may be on the private network (BP-04a): a name, never a literal
+// address, and only by a site that names a domain (security review
+// electron#1: a site of "*" or "10.*" opened the whole private network to
+// every page).
+func profileSiteHost(sites []string) func(string) bool {
+	named := profileSiteNames(sites)
+	return func(host string) bool {
+		if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+			return false
+		}
+		return matchDomain(named, host)
+	}
+}
+
+// profileSiteNames are the sites that name a domain: not a literal
+// address, not a pattern matching any host.
+func profileSiteNames(sites []string) []string {
+	var named []string
+	for _, s := range sites {
+		bare := strings.TrimPrefix(strings.TrimSpace(s), "*.")
+		if strings.ContainsAny(bare, "*?[") || !strings.Contains(bare, ".") {
+			continue
+		}
+		if _, err := netip.ParseAddr(strings.Trim(bare, "[]")); err == nil {
+			continue
+		}
+		named = append(named, s)
+	}
+	return named
 }

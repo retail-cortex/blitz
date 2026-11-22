@@ -15,9 +15,9 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,6 +25,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 )
 
 // BrowserProfiles keeps the person's browser profiles and which one each
@@ -202,8 +204,8 @@ func (s *BrowserProfiles) SetWorkspace(workspace, name string) error {
 // readLocked reads the file; a missing or damaged one has no profiles.
 func (s *BrowserProfiles) readLocked() browserProfilesFile {
 	var f browserProfilesFile
-	if data, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(data, &f)
+	if _, err := atomicfile.ReadJSONOrQuarantine(s.path, &f); err != nil {
+		slog.Warn("browser profiles store unreadable; using empty defaults", "path", s.path, "error", err)
 	}
 	if f.Workspaces == nil {
 		f.Workspaces = map[string]string{}
@@ -214,5 +216,5 @@ func (s *BrowserProfiles) readLocked() browserProfilesFile {
 
 func (s *BrowserProfiles) writeLocked(f browserProfilesFile) error {
 	f.Version = 1
-	return writeJSONAtomic(s.path, f)
+	return atomicfile.WriteJSON(s.path, f, 0o600)
 }

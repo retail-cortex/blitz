@@ -38,6 +38,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/audit"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 	"github.com/retail-cortex/blitz/pkg/observability"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -153,6 +154,10 @@ const maxHookFailures = 5
 type ScriptHooks struct {
 	hooks map[string][]config.HookConfig // by event
 	exec  *ExecEnv
+	// HeaderScrub are the variables (sandbox.scrub_env's globs) an HTTP
+	// hook's headers never carry, even when its allowed_env_vars name them;
+	// command hooks keep the full environment.
+	HeaderScrub []string
 	// Info adds session context (prompt ID, transcript, mode, agent) to
 	// events; nil adds none.
 	Info      func(ctx context.Context, session string) HookInfo
@@ -222,7 +227,7 @@ func NewScriptHooks(cfg config.HooksConfig, env *ExecEnv, workspace string, log 
 	}
 	return &ScriptHooks{
 		hooks: cfg.ByEvent(), exec: env, workspace: workspace, audit: log, Warn: func(string) {},
-		HTTP: &http.Client{}, ifs: ifs, failures: map[string][]HookFailure{},
+		HTTP: netutil.NewClient(0), ifs: ifs, failures: map[string][]HookFailure{},
 	}, nil
 }
 
@@ -689,9 +694,9 @@ func (s *ScriptHooks) post(ctx context.Context, h config.HookConfig, payload []b
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "blitz-hooks")
-	var scrub []string
+	scrub := slices.Clone(s.HeaderScrub)
 	if s.exec != nil {
-		scrub = s.exec.ScrubEnv
+		scrub = append(scrub, s.exec.ScrubEnv...)
 	}
 	for k, v := range h.Headers {
 		req.Header.Set(k, expandAllowed(v, h.AllowedEnvVars, scrub))

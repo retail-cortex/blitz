@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/engine/lsp"
 )
 
@@ -95,6 +96,80 @@ func (w *Workspace) projectTrusted() bool {
 		return true
 	}
 	return w.project.Loaded && w.project.State != api.TrustTrusted
+}
+
+// repoCodeKey is what the code trust store keeps the decision under: one
+// for the folder, whatever its code is.
+const repoCodeKey = "repo-code"
+
+// Code trust states, as RepoCodeTrust gives them.
+const (
+	RepoCodeNone     = ""         // the servers run none of the workspace's code
+	RepoCodeAsk      = "ask"      // they would, and the person hasn't said
+	RepoCodeTrusted  = "trusted"  // they may
+	RepoCodeDeclined = "declined" // they start without it
+)
+
+// repoCodeTrusted reports whether the language servers may run code the
+// workspace supplies (VE-43a): its project settings are trusted, or the
+// person trusted its code.
+func (w *Workspace) repoCodeTrusted() bool {
+	if w.ProjectSettings().State == api.TrustTrusted {
+		return true
+	}
+	dir, err := config.CanonicalWorkspace(w.Dir())
+	if err != nil {
+		return false
+	}
+	return codeTrustStore(w.cfg).State(dir, repoCodeKey) == config.TrustTrusted
+}
+
+// RepoCodeTrust is whether the language servers may run the workspace's
+// own code, and what that code is (VE-43a): RepoCodeNone when they'd
+// run none.
+func (w *Workspace) RepoCodeTrust() (string, []string) {
+	m := w.tools.LSP()
+	if m == nil {
+		return RepoCodeNone, nil
+	}
+	code := m.RepoCode()
+	if len(code) == 0 {
+		return RepoCodeNone, nil
+	}
+	if w.repoCodeTrusted() {
+		return RepoCodeTrusted, code
+	}
+	dir, err := config.CanonicalWorkspace(w.Dir())
+	if err == nil && codeTrustStore(w.cfg).State(dir, repoCodeKey) == config.TrustDeclined {
+		return RepoCodeDeclined, code
+	}
+	return RepoCodeAsk, code
+}
+
+// TrustRepoCode records whether the language servers may run the
+// workspace's own code, and restarts those that would (VE-43a).
+func (w *Workspace) TrustRepoCode(trusted bool) error {
+	dir, err := config.CanonicalWorkspace(w.Dir())
+	if err != nil {
+		return err
+	}
+	if err := codeTrustStore(w.cfg).Set(dir, repoCodeKey, trusted); err != nil {
+		return err
+	}
+	if m := w.tools.LSP(); m != nil {
+		for _, lang := range []string{"go", "python"} {
+			_ = m.Restart(lang) // one not running is started as it's next needed
+		}
+	}
+	return nil
+}
+
+func codeTrustStore(cfg *config.Config) *config.TrustStore {
+	dir := cfg.Dir
+	if dir == "" {
+		dir = config.ConfigDir("")
+	}
+	return config.OpenCodeTrustStore(dir)
 }
 
 // languages is the workspace's language servers.

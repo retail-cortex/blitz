@@ -36,6 +36,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/engine/session"
 	"github.com/retail-cortex/blitz/pkg/engine/tools"
 	"github.com/retail-cortex/blitz/pkg/i18n"
+	"github.com/retail-cortex/blitz/pkg/terminal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -758,4 +759,25 @@ func TestBuiltinsOff(t *testing.T) {
 		assert.NotEqual(t, gates.BuiltinSecrets, g.Builtin)
 	}
 	assert.NotEmpty(t, w.Guardrails(), "the others stay")
+}
+
+// A workspace's terminals start in the folder checked, through a link
+// too; once it's closed, none opens (security review terminal#4, #7).
+func TestTerminalsFolderAndClose(t *testing.T) {
+	w := openTest(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(w.Dir(), "src"), 0o755))
+	require.NoError(t, os.Symlink("src", filepath.Join(w.Dir(), "link")))
+	term, err := w.OpenTerminal("link", 80, 24, "test")
+	require.NoError(t, err)
+	real, err := filepath.EvalSymlinks(filepath.Join(w.Dir(), "src"))
+	require.NoError(t, err)
+	assert.Equal(t, real, term.Info().Dir)
+	w.closeTerminals()
+	_, err = w.OpenTerminal("", 80, 24, "test")
+	assert.ErrorIs(t, err, terminal.ErrClosed)
+
+	fresh := openTest(t)
+	fresh.closeTerminals() // closed before any terminal opened
+	_, err = fresh.Terminals().Open(terminal.Options{Dir: fresh.Dir()})
+	assert.ErrorIs(t, err, terminal.ErrClosed)
 }

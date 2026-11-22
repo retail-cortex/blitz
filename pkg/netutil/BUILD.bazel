@@ -15,16 +15,16 @@
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "atomicfile",
-    srcs = ["atomicfile.go"],
-    importpath = "github.com/retail-cortex/blitz/pkg/engine/atomicfile",
-    visibility = ["//pkg/engine:__subpackages__"],
+    name = "netutil",
+    srcs = ["netutil.go"],
+    importpath = "github.com/retail-cortex/blitz/pkg/netutil",
+    visibility = ["//visibility:public"],
 )
 
 go_test(
-    name = "atomicfile_test",
-    srcs = ["atomicfile_test.go"],
-    embed = [":atomicfile"],
+    name = "netutil_test",
+    srcs = ["netutil_test.go"],
+    embed = [":netutil"],
     deps = [
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

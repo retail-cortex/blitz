@@ -159,7 +159,7 @@ export function EvalsPane({
       // A list a picker offers: a failure is said, not taken for none.
       (e) => snack(message(e), { error: true }),
     );
-    void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.flatMap((f) => (f.agent && !f.problem ? [f.agent.name] : [])), () => [] as string[]))).then((all) =>
+    void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.flatMap((f) => (f.agent && !f.problem ? [f.agent.name] : [])), (e) => (snack(message(e), { error: true }), [] as string[])))).then((all) =>
       setOwnAgents([...new Set(all.flat())]),
     );
     workspaces.listSkills({ workspace }).then(
@@ -786,7 +786,7 @@ function Refine({ workspace, results }: { workspace: string; results: EvalResult
   useEffect(() => {
     if (!names.length) return;
     let live = true;
-    void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.map((file) => ({ file, scope })), () => [])))
+    void Promise.all([AgentScope.WORKSPACE, AgentScope.USER].map((scope) => workspaces.listAgentFiles({ workspace, scope }).then((r) => r.files.map((file) => ({ file, scope })), (e) => (snack(message(e), { error: true }), []))))
       .then((all) => live && setFiles(all.flat().filter((f) => f.file.agent && names.includes(f.file.agent.name))));
     return () => {
       live = false;

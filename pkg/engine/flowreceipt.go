@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/atomicfile"
 	"github.com/retail-cortex/blitz/pkg/textutil"
 )
 
@@ -234,18 +235,7 @@ func pruneReceipts(dir string) {
 // never sees half of one). Call with mu held.
 func (lr *liveReceipt) saveLocked() {
 	lr.version++
-	if err := os.MkdirAll(filepath.Dir(lr.path), 0o700); err != nil {
-		return
-	}
-	snap := lr.snapshotLocked()
-	data, err := json.MarshalIndent(snap, "", "  ")
-	if err != nil {
-		return
-	}
-	tmp := lr.path + ".tmp"
-	if os.WriteFile(tmp, data, 0o600) == nil {
-		_ = os.Rename(tmp, lr.path)
-	}
+	_ = atomicfile.WriteJSON(lr.path, lr.snapshotLocked(), 0o600)
 	lr.saved = time.Now()
 }
 

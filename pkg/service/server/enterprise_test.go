@@ -1731,8 +1731,21 @@ func TestOwnItems(t *testing.T) {
 	}
 	assert.Contains(t, skipped, "its name")
 
-	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "Big Notes"}))
+	// What looks like a secret never leaves the computer (EN-36a).
+	keyed := filepath.Join(home, "skills", "keyed", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(keyed), 0o755))
+	require.NoError(t, os.WriteFile(keyed, []byte("---\nname: keyed\n---\nUse AKIAIOSFODNN7EXAMPLE.\n"), 0o644))
+	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "keyed"}))
 	_, info := errorReason(t, err)
+	assert.Equal(t, "SECRETS_FOUND", info.Reason)
+	assert.ErrorContains(t, err, "skills/keyed/SKILL.md:4")
+	org.Mu.Lock()
+	assert.Empty(t, org.Submissions, "a skill with a key was submitted")
+	org.Mu.Unlock()
+	require.NoError(t, os.RemoveAll(filepath.Dir(keyed)))
+
+	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "Big Notes"}))
+	_, info = errorReason(t, err)
 	assert.Equal(t, "INVALID_ARGUMENT", info.Reason)
 	_, err = c.ShareOwnItem(ctx, connect.NewRequest(&pb.ShareOwnItemRequest{Kind: "skill", Name: "nope"}))
 	_, info = errorReason(t, err)

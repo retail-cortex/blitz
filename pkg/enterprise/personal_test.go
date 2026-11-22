@@ -16,15 +16,18 @@ package enterprise
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/retail-cortex/blitz/pkg/agentpkg"
 	"github.com/retail-cortex/blitz/pkg/enterprise/enterprisetest"
 )
 
@@ -67,11 +70,15 @@ func TestSyncPersonal(t *testing.T) {
 	write(t, root, "skills/Big Notes/SKILL.md", "x")
 	write(t, root, "workflows/w.flow.yaml", "nodes: []\n")
 	write(t, root, "rules/r.md", "Be brief.\n")
+	write(t, root, "skills/keyed/SKILL.md", "---\nname: keyed\n---\nUse AKIAIOSFODNN7EXAMPLE.\n")
+	write(t, root, "skills/allowed/SKILL.md", "---\nname: allowed\n---\nAn example: AKIAIOSFODNN7EXAMPLE blitz:allow-secret\n")
 	require.NoError(t, os.Symlink(filepath.Join(root, "skills", "s"), filepath.Join(root, "skills", "linked")))
 
 	rep, err := SyncPersonal(ctx, c, root, state)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"agent/a", "skill/s", "workflow/w"}, rep.Sent)
+	assert.Equal(t, []string{"agent/a", "skill/allowed", "skill/s", "workflow/w"}, rep.Sent, "a false alarm marked on its line goes")
+	// What looks like a secret never leaves the computer (EN-36a).
+	assert.Contains(t, rep.Skipped["skill/keyed"], "skills/keyed/SKILL.md:4 (AWS access key")
 	assert.Contains(t, rep.Skipped["rule/r"], "doesn't keep")
 	assert.Contains(t, rep.Skipped["skill/bin"], "isn't text")
 	assert.Contains(t, rep.Skipped["skill/Big Notes"], "its name")
@@ -79,6 +86,7 @@ func TestSyncPersonal(t *testing.T) {
 	assert.NotContains(t, rep.Sent, "skill/linked", "a linked folder is someone else's")
 	s.Mu.Lock()
 	assert.NotContains(t, s.Personal["skill/s"].Files, "skills/s/.DS_Store")
+	assert.NotContains(t, s.Personal, "skill/keyed")
 	assert.Equal(t, "echo hi\n", s.Personal["skill/s"].Files["skills/s/scripts/x.sh"])
 	s.Mu.Unlock()
 
@@ -205,3 +213,127 @@ func TestRunsAndShares(t *testing.T) {
 }
 
 func errorsAs(err error) (*Refusal, bool) { return errors.AsType[*Refusal](err) }
+
+// EN-93: a damaged personal-sync state file is quarantined aside and
+// recovered atomically; unreadable or unwritable state files fail clearly.
+func TestSyncPersonalStateRecoveryAndErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T, state string)
+		wantErr string
+		check   func(t *testing.T, state string, rep SyncReport)
+	}{
+		{
+			name: "corrupt JSON is quarantined and recovered atomically",
+			setup: func(t *testing.T, state string) {
+				require.NoError(t, os.WriteFile(state, []byte("{damaged"), 0o600))
+			},
+			check: func(t *testing.T, state string, rep SyncReport) {
+				assert.Equal(t, []string{"agent/a"}, rep.Sent)
+				assert.FileExists(t, state+".damaged")
+				damaged, err := os.ReadFile(state + ".damaged")
+				require.NoError(t, err)
+				assert.Equal(t, "{damaged", string(damaged))
+
+				raw, err := os.ReadFile(state)
+				require.NoError(t, err)
+				var st syncState
+				require.NoError(t, json.Unmarshal(raw, &st))
+				assert.Contains(t, st.Items, "agent/a")
+				if goruntime.GOOS != "windows" {
+					info, err := os.Stat(state)
+					require.NoError(t, err)
+					assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+				}
+			},
+		},
+		{
+			name: "unreadable state file fails clearly",
+			setup: func(t *testing.T, state string) {
+				require.NoError(t, os.Mkdir(state, 0o700))
+			},
+			wantErr: "reading sync state",
+		},
+		{
+			name: "unwritable state directory fails clearly",
+			setup: func(t *testing.T, state string) {
+				if os.Geteuid() == 0 {
+					t.Skip("root writes to read-only directories")
+				}
+				parent := filepath.Dir(state)
+				require.NoError(t, os.Chmod(parent, 0o500))
+				t.Cleanup(func() { _ = os.Chmod(parent, 0o700) })
+			},
+			wantErr: "saving sync state",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, s, c, _, _ := setup(t)
+			ctx := context.Background()
+			require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+			s.Mu.Lock()
+			s.Personal = map[string]*enterprisetest.PersonalAsset{}
+			s.PersonalAllowed = map[string]bool{"agent": true}
+			s.Mu.Unlock()
+
+			root := t.TempDir()
+			write(t, root, "agents/a.md", "---\nname: a\n---\nA.\n")
+			state := filepath.Join(t.TempDir(), "nested", "personal.json")
+			require.NoError(t, os.MkdirAll(filepath.Dir(state), 0o700))
+			tc.setup(t, state)
+
+			rep, err := SyncPersonal(ctx, c, root, state)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tc.check != nil {
+				tc.check(t, state, rep)
+			}
+		})
+	}
+}
+
+// A sync never takes what's here for removed elsewhere when the last sync
+// was another person's, or when the service lists none of what it
+// remembers (a reset): the local assets stay and are sent (EN-93b;
+// security review enterprise#3).
+func TestSyncPersonalKeepsLocalAfterAccountChangeOrReset(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		person string // the last sync's
+		remote map[string]*enterprisetest.PersonalAsset
+	}{
+		{name: "another person's state", person: "someone-else", remote: map[string]*enterprisetest.PersonalAsset{"skill/other": {Revision: 1, Files: map[string]string{"skills/other/SKILL.md": "---\nname: other\n---\nO.\n"}}}},
+		{name: "the service lists nothing", person: "", remote: map[string]*enterprisetest.PersonalAsset{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, s, c, _, _ := setup(t)
+			ctx := context.Background()
+			require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+			root, state := t.TempDir(), filepath.Join(t.TempDir(), "personal.json")
+			write(t, root, "agents/a.md", "---\nname: a\n---\nA.\n")
+			files, _ := PersonalFiles(root)
+			person := tc.person
+			if person == "" {
+				person = c.Status().Person.ID
+			}
+			st := syncState{Person: person, Items: map[string]syncedItem{"agent/a": {Revision: 3, SHA256: agentpkg.Digest(files["agent/a"])}}}
+			raw, err := json.Marshal(st)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(state, raw, 0o600))
+			s.Mu.Lock()
+			s.Personal, s.PersonalAllowed = tc.remote, map[string]bool{"agent": true, "skill": true}
+			s.Mu.Unlock()
+
+			rep, err := SyncPersonal(ctx, c, root, state)
+			require.NoError(t, err)
+			assert.Empty(t, rep.Removed, "nothing removed")
+			assert.FileExists(t, filepath.Join(root, "agents", "a.md"))
+			assert.Contains(t, rep.Sent, "agent/a", "sent again")
+		})
+	}
+}

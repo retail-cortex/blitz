@@ -71,7 +71,7 @@ func TestBrowserProfilesOverTheAPI(t *testing.T) {
 	assert.ErrorContains(t, err, "ask, embedded, system")
 
 	// Signing in by hand: the system's browser on the profile's folder.
-	chrome := filepath.Join(t.TempDir(), "chrome")
+	chrome := filepath.Join(t.TempDir(), "chromium")
 	require.NoError(t, os.WriteFile(chrome, []byte("#!/bin/sh\n"), 0o755))
 	t.Setenv("PATH", filepath.Dir(chrome)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	var opened []string

@@ -200,14 +200,22 @@ const (
 	// sandboxes still apply, and the registry allows it only while the
 	// OS sandbox is active.
 	ModeBypass PermissionMode = "bypass"
+	// ModeUnsafe is bypass with the shell's commands run outside the OS
+	// sandbox (spec_005 APR-14e): nothing is asked, and a command can read
+	// and write what the person can. Deny rules, guardrails and the file
+	// tools' blocked paths still apply. Only the person chooses it (never a
+	// project's settings, an agent or the agent itself), and not while
+	// connected to an organization.
+	ModeUnsafe PermissionMode = "unsafe"
 )
 
-// Modes are the permission modes in Shift+Tab order; bypass is last and
-// is only offered when the session started in it.
-var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModeAuto, ModePlan, ModeDontAsk, ModeBypass}
+// Modes are the permission modes in Shift+Tab order; bypass is only
+// offered when the session started in it, and unsafe never (it's chosen
+// by name).
+var Modes = []PermissionMode{ModeDefault, ModeAcceptEdits, ModeAuto, ModePlan, ModeDontAsk, ModeBypass, ModeUnsafe}
 
 // modeRank orders the permission modes from the strictest.
-var modeRank = map[PermissionMode]int{ModePlan: 0, ModeDontAsk: 1, ModeDefault: 2, ModeAcceptEdits: 3, ModeAuto: 3, ModeBypass: 4}
+var modeRank = map[PermissionMode]int{ModePlan: 0, ModeDontAsk: 1, ModeDefault: 2, ModeAcceptEdits: 3, ModeAuto: 3, ModeBypass: 4, ModeUnsafe: 5}
 
 // Looser reports whether mode a lets more through without asking than b
 // (accept-edits and auto are level: each lets through what the other
@@ -220,6 +228,25 @@ var ErrUnknownMode = errors.New("unknown permission mode")
 // ErrSandboxUnavailable means sandbox.shell is "required" and the OS
 // sandbox can't run here, so the workspace doesn't open.
 var ErrSandboxUnavailable = errors.New("the OS sandbox is unavailable")
+
+// ErrUnsafeNotHere refuses unsafe mode where only the person may choose it
+// and hasn't (a project's settings, an agent, the agent itself), or while
+// connected to an organization.
+var ErrUnsafeNotHere = errors.New("unsafe mode runs commands outside the sandbox: only you can switch to it (with /mode unsafe, or in the window), and not while you're connected to an organization")
+
+// ErrUnsafeChosenEachTime is a setting asking to start in unsafe mode:
+// it's never kept, so the workspace opens in default.
+var ErrUnsafeChosenEachTime = errors.New("unsafe mode isn't kept in settings: choose it each time, with /mode unsafe or the window's mode menu")
+
+// ErrConfirmWhileAgentWorks refuses a change confirmed from outside the
+// window (blitz do) while the agent is at work in the workspace: the
+// confirmation may be the agent's own command (spec_060 DRV-04a).
+var ErrConfirmWhileAgentWorks = errors.New("not changed: the agent is working in this workspace, so a change confirmed from the command line waits until it finishes (or approve it in the window)")
+
+// ErrUnsafeWhileAgentWorks refuses unsafe mode while the agent is at work
+// in the workspace (a turn, a background task, a background process it
+// started): only the person switches to it, when the agent isn't acting.
+var ErrUnsafeWhileAgentWorks = errors.New("unsafe mode can't be chosen while the agent is working here (a turn, a background task or a background process): wait for it to finish, or stop it, then choose unsafe")
 
 // ErrBypassNeedsSandbox refuses bypass mode without an active OS sandbox.
 var ErrBypassNeedsSandbox = errors.New("bypass mode needs the OS sandbox (sandbox.shell), which isn't active")
@@ -241,8 +268,10 @@ func ParsePermissionMode(s string) (PermissionMode, error) {
 		return ModeAuto, nil
 	case "bypass", "bypasspermissions":
 		return ModeBypass, nil
+	case "unsafe", "fafo", "nosandbox":
+		return ModeUnsafe, nil
 	}
-	return "", fmt.Errorf("%w %q (use default, accept-edits, auto, plan, dont-ask or bypass)", ErrUnknownMode, s)
+	return "", fmt.Errorf("%w %q (use default, accept-edits, auto, plan, dont-ask, bypass or unsafe)", ErrUnknownMode, s)
 }
 
 // ErrBadRule reports a rule that can't be parsed.

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -213,6 +214,10 @@ func TestCommandDeniedSpellings(t *testing.T) {
 		{"nice -n 10 rm -rf ~", true},
 		{"nohup rm -rf / &", true},
 		{"time rm -rf ~", true},
+		{"find / -print0 | xargs -0 rm -rf ~", true},
+		{"xargs -n 1 -P 4 rm -rf / < list", true},
+		{"xargs -I{} rm -rf ~", true},
+		{"xargs --max-args=2 sudo rm -rf /", true},
 		{`bash -c "rm -rf ~"`, true},
 		{`sh -c 'cd /tmp && rm -rf /'`, true},
 		{`bash -lc "git push -f"`, true},
@@ -224,6 +229,8 @@ func TestCommandDeniedSpellings(t *testing.T) {
 		{"git commit -f -m x", false},
 		{"sudo -u root rm -rf /tmp/build", false},
 		{"env -i make test", false},
+		{"ls | xargs -n 1 echo", false},
+		{"xargs -I {} rm -rf ./build/{}", false},
 		{`bash -c "rm -rf ./dist"`, false},
 		{"echo $(date)", false},
 	} {
@@ -447,4 +454,26 @@ func TestRedactInjection(t *testing.T) {
 	for _, c := range passed {
 		assert.Empty(t, Injection(c), c)
 	}
+}
+
+// FuzzCommandDenied: a command the limits guardrail refuses stays refused
+// behind sudo, env, nohup or xargs, and in a list after another: what a
+// shell would run (a $(…) the fuzzer leaves unclosed wouldn't). Seeds run
+// in every test; go test -fuzz explores).
+func FuzzCommandDenied(f *testing.F) {
+	for _, s := range []string{"rm -rf ~", "rm -rf /", "git push -f", "git push --force origin main", "mkfs.ext4 /dev/sda", "dd if=/dev/zero of=/dev/sda", "ls", "echo hi"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, cmd string) {
+		// A plain command line (words, flags, paths): the shell's own syntax
+		// (an assignment, a substitution left open) runs something else.
+		if strings.TrimSpace(cmd) == "" || strings.ContainsAny(cmd, "()|&;<>`$\"'\\=*?[]{}#\n\t\r") || CommandDenied(cmd, DefaultCommands) == "" {
+			return
+		}
+		for _, wrapped := range []string{"sudo " + cmd, "env A=1 " + cmd, "nohup " + cmd, "xargs " + cmd, "true && " + cmd} {
+			if CommandDenied(wrapped, DefaultCommands) == "" {
+				t.Fatalf("%q refused, %q not", cmd, wrapped)
+			}
+		}
+	})
 }

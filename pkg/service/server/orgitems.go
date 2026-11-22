@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"os"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/enterprise"
+	"github.com/retail-cortex/blitz/pkg/secretscan"
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 )
 
@@ -174,6 +176,12 @@ func (h configService) ShareOwnItem(ctx context.Context, r req[pb.ShareOwnItemRe
 	}
 	if !found {
 		return nil, apiError(connect.CodeNotFound, "NOT_FOUND", errors.New("you have no "+key+" of your own (~/.blitz)"))
+	}
+	// Read for secrets before it leaves the computer (EN-36a).
+	if secrets := enterprise.PersonalSecrets(files); len(secrets) > 0 {
+		return nil, apiError(connect.CodeFailedPrecondition, "SECRETS_FOUND", fmt.Errorf(
+			"nothing was shared: %s holds what look like secrets: %s. Remove them, or mark a false alarm with %s on its line",
+			key, enterprise.SecretsSummary(secrets), secretscan.AllowMarker))
 	}
 	sub, err := c.Share(ctx, r.Msg.GetKind(), r.Msg.GetName(), files, r.Msg.GetNote())
 	if ref, ok := errors.AsType[*enterprise.Refusal](err); ok && ref.Status/100 == 4 && ref.Code != "" {

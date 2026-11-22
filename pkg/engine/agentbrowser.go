@@ -204,12 +204,15 @@ func (w *Workspace) openPage(ctx context.Context, u, where, profile string) erro
 	}
 	win := h.windows[len(h.windows)-1]
 	h.mu.Unlock()
-	kind := "page"
+	cmd := api.AgentBrowserCommand{Kind: "page", URL: u, Profile: profile}
 	if where == tools.PageSystem {
-		kind = "external"
+		cmd.Kind = "external"
+	} else {
+		// The tab's reach, held by the window's network filter (BP-08a).
+		cmd.AllowLocal, cmd.DenyDomains, cmd.PrivateSites = w.tools.PageReach(profile)
 	}
 	select {
-	case win.send <- api.AgentBrowserCommand{Kind: kind, URL: u, Profile: profile}:
+	case win.send <- cmd:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

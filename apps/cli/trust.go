@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/retail-cortex/blitz/apps/cli/internal/tui"
 	"github.com/retail-cortex/blitz/pkg/client"
@@ -30,7 +31,7 @@ import (
 // project settings (.blitz/settings.toml), and trusting or declining the
 // part that runs code or loosens a policy (spec_031_project_config).
 func newTrustCommand(g *globalFlags) *cobra.Command {
-	var revoke bool
+	var revoke, code bool
 	cmd := &cobra.Command{
 		Use:   "trust [dir]",
 		Short: "Show a workspace's project settings, and trust or decline them",
@@ -51,6 +52,15 @@ func newTrustCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("code") {
+				// The language servers' use of the folder's own code
+				// (spec_037 VE-43a), apart from the project settings.
+				if err := t.TrustRepoCode(code); err != nil {
+					return err
+				}
+				fmt.Fprintln(out, i18n.T(map[bool]string{true: "desktop.lsp.code_trusted", false: "desktop.lsp.code_declined"}[code]))
+				return nil
+			}
 			if revoke {
 				if err := t.ForgetProjectTrust(); err != nil {
 					return err
@@ -60,6 +70,13 @@ func newTrustCommand(g *globalFlags) *cobra.Command {
 			}
 			p := t.ProjectSettings()
 			tui.ShowProject(out, p)
+			if state, files, err := t.RepoCodeTrust(); err == nil && state != "" {
+				key := map[string]string{"ask": "desktop.lsp.code_ask", "trusted": "desktop.lsp.code_state_trusted", "declined": "desktop.lsp.code_state_declined"}[state]
+				fmt.Fprintln(out, i18n.T(key, "files", strings.Join(files, ", ")))
+				if state != "trusted" {
+					fmt.Fprintln(out, i18n.T("cli.trust.code_hint"))
+				}
+			}
 			if len(p.Pending) > 0 && p.Hash != "" && tui.StdinIsTerminal() {
 				tui.DecideTrust(cmd.Context(), tui.NewLineReader(os.Stdin, out), out, t, p)
 			}
@@ -67,6 +84,7 @@ func newTrustCommand(g *globalFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&revoke, "revoke", false, "Forget the decision, so it's asked again")
+	cmd.Flags().BoolVar(&code, "code", false, "Let the language servers run the folder's own code (its Bazel driver, its .venv's Python); --code=false: they work without it")
 	return cmd
 }
 

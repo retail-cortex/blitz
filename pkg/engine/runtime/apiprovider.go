@@ -204,7 +204,7 @@ func buildAPIModel(ctx context.Context, p *apiProvider, name string, pol retryPo
 	}
 	if log := gatewayLog(); log.Enabled(ctx, slog.LevelDebug) {
 		log.DebugContext(ctx, "gateway model", "api", apiNames[p.format], "model", name,
-			"base_url", redact.Mask(p.cfg.BaseURL), "path", p.cfg.PathOf(apiNames[p.format]),
+			"base_url", maskQuery(redact.Mask(p.cfg.BaseURL)), "path", p.cfg.PathOf(apiNames[p.format]),
 			"headers", slices.Sorted(maps.Keys(p.cfg.Headers)), "token_script", p.cfg.UsesToken(), "organization", p.source != nil)
 	}
 	if p.format == formatMessages {
@@ -356,7 +356,7 @@ func (p *apiProvider) logCall(ctx context.Context, r *http.Request, token, why s
 		u = strings.NewReplacer(url.QueryEscape(token), config.TokenPlaceholder, token, config.TokenPlaceholder).Replace(u)
 	}
 	attrs := []any{"api", apiNames[p.format], "model", p.model, "method", r.Method,
-		"url", redact.Mask(u), "attempt", attempt, "why", why, "ms", took.Milliseconds()}
+		"url", maskQuery(redact.Mask(u)), "attempt", attempt, "why", why, "ms", took.Milliseconds()}
 	if session := sessionOf(ctx); session != "" {
 		attrs = append(attrs, "session", session)
 	}
@@ -400,6 +400,7 @@ func (p *apiProvider) middleware(req *http.Request, next option.MiddlewareNext) 
 		p.source.Invalidate()
 		if fresh, ferr := p.source.AccessToken(ctx); ferr == nil {
 			discardResponse(res)
+			redact.Remember(fresh) // kept out of the logs as the first one is
 			token = fresh
 			res, err = send("the organization's token renewed after 401", p.sign(req, body, fresh))
 		}
@@ -776,3 +777,32 @@ type maskedError struct {
 
 func (e maskedError) Error() string { return redact.Mask(e.text) }
 func (e maskedError) Unwrap() error { return e.err }
+
+// queryKey is a query parameter's name that says it holds a credential
+// (Azure's subscription-key, api_key, token, sig).
+var queryKey = regexp.MustCompile(`(?i)key|token|secret|sig|password|auth|credential`)
+
+// maskQuery is u with the values of its credential-named query
+// parameters masked, for the debug log: a static key in base_url's query
+// matches no key format (security review runtime#8).
+func maskQuery(u string) string {
+	parsed, err := url.Parse(u)
+	if err != nil || parsed.RawQuery == "" {
+		return u
+	}
+	q := parsed.Query()
+	changed := false
+	for k, vs := range q {
+		if queryKey.MatchString(k) {
+			for i := range vs {
+				vs[i] = "REDACTED"
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return u
+	}
+	parsed.RawQuery = q.Encode()
+	return parsed.String()
+}

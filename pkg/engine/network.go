@@ -15,46 +15,20 @@
 package engine
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"fmt"
-	"net/http"
-	"os"
-	"sync"
-
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/netutil"
 )
 
-var networkOnce sync.Mutex
-
 // SetupNetwork trusts [network] ca_file's certificate authorities besides
-// the system's, in every client built from Go's default transport (the
-// model SDKs, MCP, web search) and in web_fetch (spec_027_parity
-// PAR-MOD-05). Proxies come from the environment already.
+// the system's, in every client built via netutil (the model SDKs, MCP,
+// web search, web_fetch) without mutating http.DefaultTransport in place
+// (spec_027_parity PAR-MOD-05). Proxies come from the environment already.
+// The authorities are the process's, as before netutil: a workspace
+// without ca_file leaves them be, so opening it in the service doesn't
+// take another workspace's away.
 func SetupNetwork(cfg *config.Config) error {
-	file := cfg.Network.CAFile
-	if file == "" {
+	if cfg == nil || cfg.Network.CAFile == "" {
 		return nil
 	}
-	pem, err := os.ReadFile(config.ExpandHome(file))
-	if err != nil {
-		return fmt.Errorf("[network] ca_file: %w", err)
-	}
-	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		pool = x509.NewCertPool()
-	}
-	if !pool.AppendCertsFromPEM(pem) {
-		return fmt.Errorf("[network] ca_file %s: no PEM certificates in it", file)
-	}
-	networkOnce.Lock()
-	defer networkOnce.Unlock()
-	t := http.DefaultTransport.(*http.Transport)
-	tc := &tls.Config{MinVersion: tls.VersionTLS12}
-	if t.TLSClientConfig != nil {
-		tc = t.TLSClientConfig.Clone()
-	}
-	tc.RootCAs = pool
-	t.TLSClientConfig = tc
-	return nil
+	return netutil.SetExtraCAs(config.ExpandHome(cfg.Network.CAFile))
 }

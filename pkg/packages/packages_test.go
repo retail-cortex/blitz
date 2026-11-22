@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -134,6 +135,14 @@ func TestAddAndVerify(t *testing.T) {
 	_, err = Add(ctx, root, filepath.Join(src, "rules", "mine.md"), o)
 	assert.NoError(t, err)
 	o.Force = false
+
+	// A skill's folder of the workspace's own without a SKILL.md is its
+	// own too (security review packages#5): kept, not replaced.
+	write(t, root, "skills/mynotes/notes.md", "my notes")
+	write(t, src, "skills/mynotes/SKILL.md", "---\nname: mynotes\ndescription: d\n---\nx\n")
+	_, err = Add(ctx, root, "file://"+filepath.Join(src, "skills", "mynotes"), o)
+	assert.ErrorIs(t, err, ErrTaken)
+	assert.FileExists(t, filepath.Join(root, "skills", "mynotes", "notes.md"))
 
 	for _, bad := range []string{"castor://tone", "mod://github.com/acme/x@v1", "maven://a:b:1"} {
 		_, err := Add(ctx, root, bad, o)
@@ -328,4 +337,21 @@ func TestCompileUnwritable(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
 	_, err := Compile(root, true)
 	assert.Error(t, err)
+}
+
+// A fetched archive expands to at most maxArchiveFiles files (security
+// review packages#4: a crafted one could fill the disk).
+func TestUntarCaps(t *testing.T) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(zw)
+	for i := range maxArchiveFiles + 1 {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: fmt.Sprintf("repo/f%d.txt", i), Mode: 0o644, Size: 1, Typeflag: tar.TypeReg}))
+		_, err := tw.Write([]byte("x"))
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, zw.Close())
+	err := untar(&buf, t.TempDir())
+	assert.ErrorContains(t, err, "more than 20000 files")
 }

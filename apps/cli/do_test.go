@@ -17,6 +17,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"github.com/retail-cortex/blitz/pkg/activity"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,6 +125,26 @@ func TestDoCommand(t *testing.T) {
 	text, err := os.ReadFile(filepath.Join(ws, ".blitz", "commands", "hello.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(text), "Say hello.")
+}
+
+// A blitz the agent's command started confirms nothing: not --yes, not
+// an answer piped in (DRV-04a, N26 tools#5); reading stays open to it.
+func TestDoFromTheAgent(t *testing.T) {
+	isolate(t)
+	ws := t.TempDir()
+	t.Setenv(activity.AgentEnv, "1")
+	for _, args := range [][]string{
+		{"command", "save", "name=sneak", "prompt=x", "--yes"},
+		{"command", "save", "name=sneak", "prompt=x"},
+	} {
+		_, err := doCLI(t, "y\n", append(args, "--dir", ws)...)
+		assert.ErrorIs(t, err, errAgentConfirm)
+	}
+	_, err := os.Stat(filepath.Join(ws, ".blitz", "commands", "sneak.md"))
+	assert.ErrorIs(t, err, os.ErrNotExist, "nothing saved")
+	out, err := doCLI(t, "", "settings", "show", "--dir", ws)
+	require.NoError(t, err)
+	assert.Contains(t, out, `"mode": `)
 }
 
 // A secret that can't be read (the input ended) is an error.
