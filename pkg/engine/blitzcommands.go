@@ -109,6 +109,7 @@ func init() {
 		"secret remove":      (*Workspace).cmdSecretRemove,
 		"workflow remove":    (*Workspace).cmdWorkflowRemove,
 		"skill remove":       (*Workspace).cmdSkillRemove,
+		"agent remove":       (*Workspace).cmdAgentRemove,
 		"settings reference": (*Workspace).cmdSettingsReference,
 		"mcp enable":         (*Workspace).cmdMCPOn,
 		"mcp disable":        (*Workspace).cmdMCPOn,

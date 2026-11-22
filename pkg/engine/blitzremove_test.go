@@ -125,3 +125,21 @@ func TestDeclinedRemoveKeepsIt(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, slices.ContainsFunc(w.Rules(), func(r gates.Rule) bool { return r.Name == "tidy" }), "still there")
 }
+
+// An agent of the workspace's own goes, asked with its file; a built-in
+// one doesn't.
+func TestAgentRemove(t *testing.T) {
+	w, asked, _ := blitzWorkspace(t, api.DecisionOnce, "", nil)
+	_, err := runCmd(t, w, "agent save", map[string]any{"name": "reviewer", "description": "Reviews", "instructions": "Review the diff."})
+	require.NoError(t, err)
+	_, err = runCmd(t, w, "agent remove", map[string]any{"name": "reviewer"})
+	require.NoError(t, err)
+	assert.Contains(t, (*asked)[len(*asked)-1].Diff, "Review the diff.")
+	assert.False(t, slices.ContainsFunc(w.ListAgents(), func(a api.AgentInfo) bool { return a.Name == "reviewer" }), "gone")
+	before := len(*asked)
+	_, err = runCmd(t, w, "agent remove", map[string]any{"name": "blitz"})
+	assert.ErrorContains(t, err, "built-in")
+	_, err = runCmd(t, w, "agent remove", map[string]any{"name": "reviewer"})
+	assert.ErrorContains(t, err, "no agent")
+	assert.Len(t, *asked, before, "nothing asked")
+}

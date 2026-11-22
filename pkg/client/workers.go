@@ -76,6 +76,13 @@ func (w *Workers) DisableWorker(name string) (api.WorkerInfo, error) {
 	return workerInfo(res.Msg.Worker), nil
 }
 
+// DeleteWorker removes the named worker: its folder and whether it's on;
+// one running is refused (WorkerService.DeleteWorker).
+func (w *Workers) DeleteWorker(name string) error {
+	_, err := w.c.DeleteWorker(context.Background(), connect.NewRequest(&pb.DeleteWorkerRequest{Workspace: w.dir, Name: name}))
+	return fromAPI(err)
+}
+
 // RunWorker runs the worker now in the service, passes its events to
 // on while it runs, and returns its record when it finishes.
 func (w *Workers) RunWorker(ctx context.Context, name string, on func(api.Event)) (api.Run, error) {

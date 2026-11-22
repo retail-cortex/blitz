@@ -221,7 +221,7 @@ func newMCPCommand(g *globalFlags) *cobra.Command {
 			},
 		}
 	}
-	remove := edit("remove", "Remove an MCP server", "mcp.removed", func(dir, n string) (string, error) { return config.RemoveMCPServer(g.config, dir, n) })
+	remove := asksBeforeRemove(edit("remove", "Remove an MCP server", "mcp.removed", func(dir, n string) (string, error) { return config.RemoveMCPServer(g.config, dir, n) }), removeQuestion("remove.mcp"))
 	enable := edit("enable", "Start an MCP server again (with --workspace, a global one there)", "mcp.enabled_in", func(dir, n string) (string, error) { return config.SetMCPServerEnabled(g.config, dir, n, true) })
 	disable := edit("disable", "Keep an MCP server configured without starting it (with --workspace, a global one off there alone)", "mcp.disabled_in", func(dir, n string) (string, error) {
 		return config.SetMCPServerEnabled(g.config, dir, n, false)

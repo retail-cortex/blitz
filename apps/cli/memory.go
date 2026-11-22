@@ -138,7 +138,7 @@ func newMemoryCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(list, show, edit, forget)
+	cmd.AddCommand(list, show, edit, asksBeforeRemove(forget, removeQuestion("remove.note")))
 	return cmd
 }
 

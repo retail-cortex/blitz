@@ -214,3 +214,21 @@ func (s *Settings) SetConfigValue(ctx context.Context, dir, key, value string) (
 	c := r.Msg.GetChange()
 	return ConfigChange{Path: c.GetPath(), ModelError: c.GetModelError(), Problems: c.GetProblems()}, nil
 }
+
+// KeyCheck is whether a provider took an API key, why not, and the models
+// it reaches.
+type KeyCheck struct {
+	Works  bool
+	Error  string
+	Models []string
+}
+
+// CheckAPIKey asks provider whether it takes key, before it's saved
+// (ConfigService.CheckApiKey; spec_067_cli_parity CLP-41).
+func (s *Settings) CheckAPIKey(ctx context.Context, dir, provider, key string) (KeyCheck, error) {
+	r, err := s.c.CheckApiKey(ctx, connect.NewRequest(&pb.CheckApiKeyRequest{Workspace: dir, Provider: provider, Key: key}))
+	if err != nil {
+		return KeyCheck{}, err
+	}
+	return KeyCheck{Works: r.Msg.GetWorks(), Error: r.Msg.GetError(), Models: r.Msg.GetModels()}, nil
+}

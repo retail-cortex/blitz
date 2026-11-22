@@ -21,6 +21,9 @@ The command line gets the care the desktop app has had. Blitz now greets you wit
 - **Configure by asking.** `/configure` (or `blitz configure`) hands a setup to Blitz's agent. It reads the page you name and finds what the setup needs. You see every setting before it's saved, and you type secrets yourself, hidden; they're kept as Blitz secrets. Then it checks the setup works.
 - **Every setting from the terminal.** `blitz config get`, `set` and `reference` for any setting, with `-w` for this workspace alone. `blitz config edit` opens the file and checks it when you save.
 - **The Reasoning view, in the terminal.** `/reasoning` draws a turn as a tree: each model call with its tokens, time and cost, the steps of reasoning it shared, its tools (✓ or ✗) and sub-agents.
+- **Providers in one place.** `blitz providers add anthropic` asks for the key and checks it works before saving it. `list`, `use`, `check` and `remove` do the rest.
+- **The service's log, from the terminal.** `blitz service logs` shows what the service has been doing, filtered by level or words, and `-f` keeps watching. It reads the log files itself, so it works even when the service won't start.
+- **Removing asks first.** Removing an MCP server, plugin, skill, note, job or Pictures session asks on a terminal (`-y` skips it). Scripts go ahead as before.
 - **More for scripts.** `blitz sessions list`, `blitz runs` for background runs, and `--json` on more lists.
 
 ### Good to know

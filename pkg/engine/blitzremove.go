@@ -24,6 +24,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/engine/agents"
 	"github.com/retail-cortex/blitz/pkg/engine/connectors"
 	"github.com/retail-cortex/blitz/pkg/engine/flows"
 	"github.com/retail-cortex/blitz/pkg/engine/gates"
@@ -173,4 +174,25 @@ func (w *Workspace) cmdSkillRemove(ctx context.Context, c api.BlitzCommand, args
 		return nil, err
 	}
 	return map[string]any{"removed": name}, w.DeleteSkill(name)
+}
+
+// cmdAgentRemove removes an agent of this workspace's own (not a built-in
+// one), asked with its file.
+func (w *Workspace) cmdAgentRemove(ctx context.Context, c api.BlitzCommand, args map[string]any) (any, error) {
+	name := str(args, "name")
+	path := filepath.Join(w.ProjectAgentsDir(), name+".md")
+	if w.agents.IsBuiltin(name) {
+		return nil, fmt.Errorf("%s is a built-in agent: it can be turned off in Studio, not removed", name)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("this workspace has no agent %q of its own (agent list)", name)
+	}
+	if err := w.askChange(ctx, c, "Remove the agent "+name+" (its evals stay)", fileDiff(w.relTo(path), fileText(path), "")); err != nil {
+		return nil, err
+	}
+	if err := agents.Delete(w.ProjectAgentsDir(), name); err != nil {
+		return nil, err
+	}
+	w.RefreshAgents(ctx)
+	return map[string]any{"removed": name}, nil
 }

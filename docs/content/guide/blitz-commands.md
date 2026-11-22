@@ -17,7 +17,7 @@ Ask the agent to change Blitz itself, in words: "create a SQLite database of my 
 | `picture` | opens Pictures with the prompt, where you see the cost and make it |
 | `eval`, `spec`, `job` | run an agent's evals (asked first: they cost), check, verify and plan a spec, list and create jobs |
 | `memory`, `chat`, `process`, `approval`, `secret` | what Blitz remembers, new and past chats, background processes, saved approvals, secrets' names (`secret remove` takes one out) |
-| `workflow`, `agent`, `skill`, `rule`, `guardrail`, `command` | list them, add or change this workspace's (a change shows what it changes), and remove a workflow, skill, rule or guardrail |
+| `workflow`, `agent`, `skill`, `rule`, `guardrail`, `command` | list them, add or change this workspace's (a change shows what it changes), and remove an agent, workflow, skill, rule or guardrail |
 | `mcp`, `hook`, `plugin` | list them; add an MCP server with its environment or headers (a secret you type yourself), change, test or remove one, or turn one on or off |
 
 `/configure <what>` in a session, or `blitz configure <what>` in a shell, hands a setup to Blitz's own agent: "the MCP server at <page>", "use the dracula theme and turn workspace search on". It reads the page you name, makes the change with these commands, and checks it worked.

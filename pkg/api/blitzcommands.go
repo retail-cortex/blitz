@@ -204,6 +204,7 @@ var BlitzCommands = []BlitzCommand{
 			{Name: "instructions", Type: "string", Description: "What it does and how", Required: true},
 			{Name: "tools", Type: "list", Description: "The tools it may use"},
 			{Name: "model", Type: "string", Description: "provider/model; empty: the workspace's"}}},
+	{Name: "agent remove", Summary: "Remove an agent of this workspace (not a built-in one), asked with its file", Effect: EffectChanges, Phase: 5, Args: []CommandArg{argName}},
 	{Name: "skill list", Summary: "The skills", Effect: EffectReads, Phase: 3},
 	{Name: "skill save", Summary: "Add or change a skill of this workspace (its SKILL.md), asked first", Effect: EffectChanges, Phase: 3,
 		Args: []CommandArg{argName, {Name: "description", Type: "string", Description: "When to use it: what makes an agent load it", Required: true},

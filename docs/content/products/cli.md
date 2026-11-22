@@ -109,8 +109,10 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 | `blitz pkg add \| verify \| validate \| compile \| list \| search \| publish` | [The workspace's agents, skills and workflows as packages](../guide/packages.md): from your organization's registry, GitHub or a folder, locked and verified |
 | `blitz search <terms>` | [Searches the workspace](../guide/search.md#workspace-search): files, PDFs and notebooks, chats, notes (`--in`, `--json`, `--status`, `--reindex`) |
 | `blitz data list`, `blitz data query <connection> ["<sql>"]` | [The workspace's databases](../guide/databases.md#in-the-terminal): lists them and their saved queries; runs SQL or a saved query (`--query`) read-only and prints the table (`--params`, `--max-rows`, `--json`, `--csv`) |
-| `blitz jobs …` | Lists, enables, runs, undoes and shows the history of [jobs](../guide/workers.md) |
+| `blitz jobs …` | Lists, enables, runs, undoes, removes and shows the history of [jobs](../guide/workers.md) |
 | `blitz mcp add\|list\|get\|remove\|enable\|disable\|login\|logout …` | Adds and manages [MCP servers](../guide/mcp.md); `login` signs in to one over OAuth |
+| `blitz providers list\|add\|check\|use\|remove` | The model providers in one place: `add` asks for the key (hidden) and checks it works before saving it; see [providers](../guide/providers.md) |
+| `blitz service logs [--level l] [--grep words] [--day d] [-f]`, `--days` | The service's log, read from its files (so it works when the service doesn't): the newest day, oldest record first, filtered; `-f` keeps watching |
 | `blitz service install\|uninstall\|restart\|status` | Starts the service at login, or stops doing so; `restart` restarts it so it reads changed settings, MCP servers and plugins |
 | `blitz init` | Runs `/setup` unattended: sets up the project for agents (`.agents/AGENTS.md` and the files that import it) |
 | `blitz license [full\|third-party]` | The NOTICE, the Apache License, or the notices of the software Blitz includes |
@@ -135,6 +137,7 @@ Decisions are `once`, `session`, `always` or `deny`; a question is answered with
 - **Line editing** with history (`~/.blitz/history`, owner-only) and Ctrl+R search.
 - **Completion**: Tab completes `/commands` at every level (`/skills registry add`, `/permissions allow … --save`), their values (models of every provider, agents, themes, sessions, `/config mode=` and the rest) and `@path` references; several candidates open a menu you move through with Tab or the arrows. As you type a command, the rest of it shows dimmed (→ takes it), then what it does. A slip is forgiven: Tab turns `/pmod` into `/pin_model`, and `/permisions` asks "Did you mean /permissions?". `/help <command>` shows a command's sub-commands, values and flags.
 - **Reasoning**: `/reasoning` draws the last turn as a tree: each model call with its tokens, time and cost, the steps of reasoning it shared, its tools (✓ or ✗) and sub-agents; `/reasoning 3 --full` shows turn 3 with every step's text, `/reasoning turns` lists them.
+- **Removing asks first**: `mcp remove`, `plugin remove`, `skills uninstall`, `memory forget`, `picture delete`, `jobs remove` and `providers remove` ask on a terminal (`-y` doesn't; a script goes ahead as it always has), and each also answers to `remove`, `rm` and `delete`.
 - **Help that answers**: `? how do I add an MCP server that needs a token` asks Blitz. It answers from its own docs, which it carries, with the command to type and a link, as an aside the chat doesn't keep; without a model it shows the docs' sections and the commands that match. `/help` with words does the same, `/help <command>` explains one, `/docs` reads the docs.
 - **Shell completion**: `blitz completion install` sets it up for zsh, bash or fish, so `blitz mcp remove <Tab>` offers your servers and `--permission-mode <Tab>` the modes.
 - **Multi-line input**: end a line with `\`, or put a block between two lines of `"""`.

@@ -55,10 +55,14 @@ The form edits the settings every workspace shares. A workspace can use its own 
 ## Set up on the command line
 
 ```bash
-blitz config init                 # writes a commented ~/.blitz/.env.toml
-blitz config set-key anthropic    # reads the key from stdin, stores it in the keychain
-blitz doctor                      # checks the provider, the key and the model
+blitz providers add anthropic     # asks for the key, hidden; checks it works, then saves it to the keychain
+blitz providers list              # what's set up, how each signs in (never a key), * the one in use
+blitz providers use gemini gemini-flash   # switch provider (and model)
+blitz providers check gemini      # does it answer? with how many models
+blitz providers remove openai     # remove its key (asks first on a terminal; -y doesn't)
 ```
+
+`providers add gemini --auth adc --project my-project --location us-central1` sets Gemini up through Google Cloud instead of a key, and `--keep-default` sets a provider up without switching to it. `-w` makes any of them this workspace's own. The older `blitz config set-key`, `set-auth` and `keys` still work.
 
 Then choose the provider in `~/.blitz/.env.toml`:
 

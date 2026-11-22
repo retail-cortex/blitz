@@ -123,7 +123,7 @@ func newPictureCommand(g *globalFlags) *cobra.Command {
 	fl.BoolVar(&f.enhance, "enhance", false, "Let the model improve the prompt (Imagen)")
 	fl.StringVarP(&f.out, "out", "o", "", "Where to save the picture in the workspace (several are numbered: poster.png, poster-2.png)")
 	fl.StringVar(&f.session, "continue", "", "Add the turn to this Pictures session (blitz picture list)")
-	cmd.AddCommand(newPictureModelsCommand(g), newPictureListCommand(g), newPictureShowCommand(g), newPictureDeleteCommand(g))
+	cmd.AddCommand(newPictureModelsCommand(g), newPictureListCommand(g), newPictureShowCommand(g), asksBeforeRemove(newPictureDeleteCommand(g), removeQuestion("remove.picture")))
 	return cmd
 }
 
