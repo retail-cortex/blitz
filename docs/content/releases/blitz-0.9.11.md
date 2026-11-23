@@ -1,6 +1,6 @@
 ---
 title: Blitz 0.9.11
-weight: 10
+weight: 11
 ---
 
 Your agents stop rereading the same files. They remember what they've already seen, so turns are faster and each one costs fewer tokens.
