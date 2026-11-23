@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -159,32 +160,38 @@ func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
 		// Above the stall body, so a heartbeat still counts as the stream
 		// being alive.
-		resp.Body = newSSECommentFilter(b)
+		resp.Body = newSSEFilter(b, strings.Contains(req.URL.Path, ":streamGenerateContent"))
 	}
 	return resp, nil
 }
 
-// sseCommentFilter drops an event stream's comment lines (":heartbeat",
-// which gateways and proxies send to keep a quiet stream open), and the
-// blank line that ends an event of nothing but comments. The SSE standard
-// says to ignore comments, but the Gemini SDK splits the stream at blank
-// lines and fails the reply on any chunk that isn't "data:" ("invalid
-// stream chunk: :heartbeat"). The events the stream carries are unchanged.
-type sseCommentFilter struct {
+// sseFilter keeps an event stream to the lines its SDK reads. The SSE
+// standard says a client ignores comments (":heartbeat", which gateways and
+// proxies send to keep a quiet stream open) and fields it doesn't know,
+// but the Gemini SDK splits the stream at blank lines and fails the reply
+// on any chunk that isn't "data:" ("invalid stream chunk: :heartbeat").
+//
+// Every stream loses its comments and undefined fields. A Gemini stream
+// (onlyData) keeps only its data lines, since the SDK fails on the defined
+// event, id and retry fields too, and lines of bare JSON, which it reads
+// as an error. The blank line that would end an event with nothing left in
+// it goes too, so the events the stream carries are unchanged.
+type sseFilter struct {
 	rc         io.ReadCloser
 	br         *bufio.Reader
+	onlyData   bool
 	out        []byte // filtered bytes not yet read
 	err        error  // the body's error, once out is drained
 	midLine    bool   // the last read ended inside a line too long for br
-	inComment  bool   // the current line is a comment
+	dropping   bool   // the current line is dropped
 	eventEmpty bool   // no line of the current event has been kept
 }
 
-func newSSECommentFilter(rc io.ReadCloser) *sseCommentFilter {
-	return &sseCommentFilter{rc: rc, br: bufio.NewReader(rc), eventEmpty: true}
+func newSSEFilter(rc io.ReadCloser, onlyData bool) *sseFilter {
+	return &sseFilter{rc: rc, br: bufio.NewReader(rc), onlyData: onlyData, eventEmpty: true}
 }
 
-func (f *sseCommentFilter) Read(p []byte) (int, error) {
+func (f *sseFilter) Read(p []byte) (int, error) {
 	for len(f.out) == 0 && f.err == nil {
 		f.next()
 	}
@@ -198,21 +205,19 @@ func (f *sseCommentFilter) Read(p []byte) (int, error) {
 
 // next reads a line (or as much of a long one as fits) into out, unless
 // it is dropped.
-func (f *sseCommentFilter) next() {
+func (f *sseFilter) next() {
 	line, err := f.br.ReadSlice('\n')
 	if !f.midLine {
-		f.inComment = len(line) > 0 && line[0] == ':'
 		switch blank := string(line) == "\n" || string(line) == "\r\n"; {
-		case f.inComment:
-		case blank && f.eventEmpty:
-			line = nil
 		case blank:
+			f.dropping = f.eventEmpty
 			f.eventEmpty = true
 		case len(line) > 0:
-			f.eventEmpty = false
+			f.dropping = !f.keeps(line)
+			f.eventEmpty = f.eventEmpty && f.dropping
 		}
 	}
-	if f.inComment {
+	if f.dropping {
 		line = nil
 	}
 	f.out = append(f.out[:0], line...) // ReadSlice's bytes are reused
@@ -222,7 +227,23 @@ func (f *sseCommentFilter) next() {
 	}
 }
 
-func (f *sseCommentFilter) Close() error { return f.rc.Close() }
+// keeps says whether a line that isn't blank stays in the stream. Its
+// field is named up to its first colon, or by the whole line when it has
+// none, and a comment's name is "".
+func (f *sseFilter) keeps(line []byte) bool {
+	name, _, _ := bytes.Cut(bytes.TrimRight(line, "\r\n"), []byte(":"))
+	switch string(name) {
+	case "data":
+		return true
+	case "event", "id", "retry":
+		return !f.onlyData
+	}
+	// The Gemini SDK reads a line of JSON (or of one spread over lines) as
+	// the error it reports, so it stays.
+	return f.onlyData && len(name) > 0 && bytes.IndexByte([]byte("{}[]\" \t"), name[0]) >= 0
+}
+
+func (f *sseFilter) Close() error { return f.rc.Close() }
 
 type stallBody struct {
 	rc     io.ReadCloser
