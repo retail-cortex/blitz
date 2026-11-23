@@ -460,3 +460,73 @@ func TestConnErrorIsTheGist(t *testing.T) {
 		})
 	}
 }
+
+// oneByteReader hands out its text a byte per read, so a comment line
+// spans reads.
+type oneByteReader struct{ s string }
+
+func (r *oneByteReader) Read(p []byte) (int, error) {
+	if r.s == "" {
+		return 0, io.EOF
+	}
+	p[0], r.s = r.s[0], r.s[1:]
+	return 1, nil
+}
+
+func (r *oneByteReader) Close() error { return nil }
+
+func TestSSECommentFilter(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"no comments", "data: {}\n\ndata: {}\n\n", "data: {}\n\ndata: {}\n\n"},
+		{"heartbeat event between events", "data: {}\n\n:hearbeat\n\ndata: {}\n\n", "data: {}\n\ndata: {}\n\n"},
+		{"comment inside an event", "event: x\n:note\ndata: {}\n\n", "event: x\ndata: {}\n\n"},
+		{"heartbeat first", ": heartbeat\ndata: {}\n\n", "data: {}\n\n"},
+		{"crlf heartbeat", ":ping\r\n\r\ndata: {}\r\n\r\n", "data: {}\r\n\r\n"},
+		{"colon inside a line stays", "data: {\"a\":\":b\"}\n\n", "data: {\"a\":\":b\"}\n\n"},
+		{"only comments", ":a\n:b\n\n", ""},
+		{"line longer than the buffer", "data: " + strings.Repeat("x", 10000) + "\n\n:" + strings.Repeat("y", 10000) + "\n\n", "data: " + strings.Repeat("x", 10000) + "\n\n"},
+		{"unterminated comment at the end", "data: {}\n\n:hea", "data: {}\n\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := io.ReadAll(newSSECommentFilter(io.NopCloser(strings.NewReader(c.in))))
+			require.NoError(t, err)
+			assert.Equal(t, c.want, string(got))
+
+			got, err = io.ReadAll(newSSECommentFilter(&oneByteReader{s: c.in}))
+			require.NoError(t, err)
+			assert.Equal(t, c.want, string(got), "a byte per read")
+		})
+	}
+}
+
+// TestGeminiStreamSurvivesHeartbeats streams a Gemini reply with comment
+// lines between its chunks, as a gateway keeping the stream open sends:
+// the SDK failed it with "invalid stream chunk: :hearbeat".
+func TestGeminiStreamSurvivesHeartbeats(t *testing.T) {
+	chunk := func(text string) string {
+		return `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"` + text + `"}]}}]}` + "\n\n"
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, s := range []string{":hearbeat\n\n", chunk("o"), ":hearbeat\n\n", ": keep-alive\n", chunk("k")} {
+			io.WriteString(w, s)
+			w.(http.Flusher).Flush()
+		}
+	}))
+	defer srv.Close()
+
+	gc := retryPolicy{stall: time.Minute}.geminiConfig("test-key")
+	gc.Backend = genai.BackendGeminiAPI
+	gc.HTTPOptions.BaseURL = srv.URL
+	client, err := genai.NewClient(context.Background(), gc)
+	require.NoError(t, err)
+	var text strings.Builder
+	for resp, err := range client.Models.GenerateContentStream(context.Background(), "gemini-3.8-flash", genai.Text("hi"), nil) {
+		require.NoError(t, err)
+		text.WriteString(resp.Text())
+	}
+	assert.Equal(t, "ok", text.String())
+}

@@ -15,6 +15,7 @@
 package runtime
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,6 +26,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -154,8 +156,73 @@ func (t *stallTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	b := &stallBody{rc: resp.Body, ctx: ctx, cancel: cancel, stall: t.stall}
 	b.timer = time.AfterFunc(t.stall, func() { cancel(ErrStalled) })
 	resp.Body = b
+	if strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+		// Above the stall body, so a heartbeat still counts as the stream
+		// being alive.
+		resp.Body = newSSECommentFilter(b)
+	}
 	return resp, nil
 }
+
+// sseCommentFilter drops an event stream's comment lines (":heartbeat",
+// which gateways and proxies send to keep a quiet stream open), and the
+// blank line that ends an event of nothing but comments. The SSE standard
+// says to ignore comments, but the Gemini SDK splits the stream at blank
+// lines and fails the reply on any chunk that isn't "data:" ("invalid
+// stream chunk: :heartbeat"). The events the stream carries are unchanged.
+type sseCommentFilter struct {
+	rc         io.ReadCloser
+	br         *bufio.Reader
+	out        []byte // filtered bytes not yet read
+	err        error  // the body's error, once out is drained
+	midLine    bool   // the last read ended inside a line too long for br
+	inComment  bool   // the current line is a comment
+	eventEmpty bool   // no line of the current event has been kept
+}
+
+func newSSECommentFilter(rc io.ReadCloser) *sseCommentFilter {
+	return &sseCommentFilter{rc: rc, br: bufio.NewReader(rc), eventEmpty: true}
+}
+
+func (f *sseCommentFilter) Read(p []byte) (int, error) {
+	for len(f.out) == 0 && f.err == nil {
+		f.next()
+	}
+	if len(f.out) == 0 {
+		return 0, f.err
+	}
+	n := copy(p, f.out)
+	f.out = f.out[n:]
+	return n, nil
+}
+
+// next reads a line (or as much of a long one as fits) into out, unless
+// it is dropped.
+func (f *sseCommentFilter) next() {
+	line, err := f.br.ReadSlice('\n')
+	if !f.midLine {
+		f.inComment = len(line) > 0 && line[0] == ':'
+		switch blank := string(line) == "\n" || string(line) == "\r\n"; {
+		case f.inComment:
+		case blank && f.eventEmpty:
+			line = nil
+		case blank:
+			f.eventEmpty = true
+		case len(line) > 0:
+			f.eventEmpty = false
+		}
+	}
+	if f.inComment {
+		line = nil
+	}
+	f.out = append(f.out[:0], line...) // ReadSlice's bytes are reused
+	f.midLine = errors.Is(err, bufio.ErrBufferFull)
+	if err != nil && !f.midLine {
+		f.err = err
+	}
+}
+
+func (f *sseCommentFilter) Close() error { return f.rc.Close() }
 
 type stallBody struct {
 	rc     io.ReadCloser
