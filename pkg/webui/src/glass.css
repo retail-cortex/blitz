@@ -155,8 +155,10 @@
 :root[data-glass="on"] .topbar { background: transparent; border-bottom: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* Light: the menus in the darkest ink, over the backdrop's glows. */
 :root[data-glass="on"]:not([data-theme="dark"]) :is(.topbar, .welcome-bar) .menubar-item { color: var(--md-on-surface); }
-/* Fields and their lists on glass: the field's own surface, nearly opaque. */
-:root[data-glass="on"] :is(.input, .select) { background: var(--glass-strong); }
+/* Fields and their lists on glass: the field's own surface, nearly opaque.
+   Its colour only: the shorthand reset .select's background-image, its
+   arrow, and left drop-downs looking like text fields. */
+:root[data-glass="on"] :is(.input, .select) { background-color: var(--glass-strong); }
 :root[data-glass="on"] .select option { background: var(--glass-strong); }
 /* A disabled button on light glass: a little more there than on a solid
    surface, where 38% left it a smudge on the frosted pane. */

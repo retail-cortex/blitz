@@ -18,7 +18,8 @@
 // query missing its brace) quietly nests every rule after it, which then
 // applies only where that query holds.
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const dir = import.meta.dirname;
@@ -82,5 +83,32 @@ describe("the title bar", () => {
   it("goes on in a view's header, whose controls stay clickable", () => {
     expect(css).toMatch(/\.drawer > \.drawer-head:not\(\.below\) \{ -webkit-app-region: drag; app-region: drag; \}/);
     expect(css).toMatch(/\.drawer > \.drawer-head:not\(\.below\) :is\(button, input, select, textarea, label, a, \[role="tab"\], \[tabindex\], \[contenteditable\], \.menu-anchor\) \{ -webkit-app-region: no-drag; app-region: no-drag; \}/);
+  });
+});
+
+// A drop-down's arrow is .select's background-image (@blitz/webui's
+// m3.css): a rule for .select that sets the background shorthand resets
+// it, and the drop-down looks like a text field (glass.css's did,
+// 2026-11-24); it sets background-color. Here and in @blitz/webui.
+function arrowResets(css: string): string[] {
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+\{[^{}]*\}/g) ?? [];
+  return rules
+    .map((r) => ({ sel: r.split("{")[0].trim(), body: r.slice(r.indexOf("{")) }))
+    .filter(({ sel }) => /\.select(?![\w-])/.test(sel) && !/\.select\s+option\b/.test(sel) && sel !== ".input, .select, textarea.input")
+    .filter(({ body }) => /[{;\s]background\s*:/.test(body))
+    .map(({ sel }) => sel);
+}
+
+describe("drop-downs", () => {
+  const webui = dirname(createRequire(import.meta.url).resolve("@blitz/webui/glass.css"));
+  const sheets = [...stylesheets(dir).map((f) => join(dir, f)), ...readdirSync(webui).filter((f) => f.endsWith(".css")).map((f) => join(webui, f))];
+  it("are checked in @blitz/webui too", () => {
+    expect(sheets.some((f) => f.endsWith("glass.css"))).toBe(true);
+    expect(arrowResets(':root[data-glass="on"] :is(.input, .select) { background: var(--glass-strong); }')).toHaveLength(1);
+    expect(arrowResets(':root[data-glass="on"] :is(.input, .select) { background-color: var(--glass-strong); }')).toEqual([]);
+    expect(arrowResets(".select option { background: red; } .select-like { background: red; }")).toEqual([]);
+  });
+  it.each(sheets)("%s keeps their arrow", (file) => {
+    expect(arrowResets(readFileSync(file, "utf8"))).toEqual([]);
   });
 });
