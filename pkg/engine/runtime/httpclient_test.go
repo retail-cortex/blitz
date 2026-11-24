@@ -460,3 +460,96 @@ func TestConnErrorIsTheGist(t *testing.T) {
 		})
 	}
 }
+
+// oneByteReader hands out its text a byte per read, so a comment line
+// spans reads.
+type oneByteReader struct{ s string }
+
+func (r *oneByteReader) Read(p []byte) (int, error) {
+	if r.s == "" {
+		return 0, io.EOF
+	}
+	p[0], r.s = r.s[0], r.s[1:]
+	return 1, nil
+}
+
+func (r *oneByteReader) Close() error { return nil }
+
+func TestSSEFilter(t *testing.T) {
+	long := strings.Repeat("x", 10000)
+	cases := []struct {
+		name, in, want, gemini string // gemini: what a Gemini stream keeps, when not want
+	}{
+		{name: "no comments", in: "data: {}\n\ndata: {}\n\n", want: "data: {}\n\ndata: {}\n\n"},
+		{name: "heartbeat event between events", in: "data: {}\n\n:hearbeat\n\ndata: {}\n\n", want: "data: {}\n\ndata: {}\n\n"},
+		{name: "heartbeat first", in: ": heartbeat\ndata: {}\n\n", want: "data: {}\n\n"},
+		{name: "crlf heartbeat", in: ":ping\r\n\r\ndata: {}\r\n\r\n", want: "data: {}\r\n\r\n"},
+		{name: "colon inside a line stays", in: "data: {\"a\":\":b\"}\n\n", want: "data: {\"a\":\":b\"}\n\n"},
+		{name: "data without a colon stays", in: "data\n\n", want: "data\n\n"},
+		{name: "only comments", in: ":a\n:b\n\n", want: ""},
+		{name: "unterminated comment at the end", in: "data: {}\n\n:hea", want: "data: {}\n\n"},
+		{name: "line longer than the buffer", in: "data: " + long + "\n\n:" + long + "\n\n", want: "data: " + long + "\n\n"},
+		{name: "undefined fields", in: "ping: 1\n\nheartbeat\n\nx-gateway: up\ndata: {}\n\n", want: "data: {}\n\n"},
+		{name: "undefined field longer than the buffer", in: "pad: " + long + "\n\ndata: {}\n\n", want: "data: {}\n\n"},
+		{
+			name:   "defined fields",
+			in:     "event: message_start\nid: 7\nretry: 1000\ndata: {}\n\nevent: ping\n\n",
+			want:   "event: message_start\nid: 7\nretry: 1000\ndata: {}\n\nevent: ping\n\n",
+			gemini: "data: {}\n\n",
+		},
+		{
+			name:   "an error as JSON",
+			in:     "{\n  \"error\": {\"code\": 500}\n}\n",
+			want:   "",
+			gemini: "{\n  \"error\": {\"code\": 500}\n}\n",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gemini := c.want
+			if c.gemini != "" {
+				gemini = c.gemini
+			}
+			for _, onlyData := range []bool{false, true} {
+				want := map[bool]string{false: c.want, true: gemini}[onlyData]
+				got, err := io.ReadAll(newSSEFilter(io.NopCloser(strings.NewReader(c.in)), onlyData))
+				require.NoError(t, err)
+				assert.Equal(t, want, string(got), "gemini: %v", onlyData)
+
+				got, err = io.ReadAll(newSSEFilter(&oneByteReader{s: c.in}, onlyData))
+				require.NoError(t, err)
+				assert.Equal(t, want, string(got), "gemini: %v, a byte per read", onlyData)
+			}
+		})
+	}
+}
+
+// TestGeminiStreamSurvivesHeartbeats streams a Gemini reply with lines
+// between its chunks that aren't data, as a gateway keeping the stream open
+// sends: comments, defined fields and undefined ones. The SDK failed it
+// with "invalid stream chunk: :hearbeat".
+func TestGeminiStreamSurvivesHeartbeats(t *testing.T) {
+	chunk := func(text string) string {
+		return `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"` + text + `"}]}}]}` + "\n\n"
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, s := range []string{":hearbeat\n\n", chunk("o"), "event: ping\n\n", ": keep-alive\nid: 2\n", "x-gateway: up\n\n", chunk("k")} {
+			io.WriteString(w, s)
+			w.(http.Flusher).Flush()
+		}
+	}))
+	defer srv.Close()
+
+	gc := retryPolicy{stall: time.Minute}.geminiConfig("test-key")
+	gc.Backend = genai.BackendGeminiAPI
+	gc.HTTPOptions.BaseURL = srv.URL
+	client, err := genai.NewClient(context.Background(), gc)
+	require.NoError(t, err)
+	var text strings.Builder
+	for resp, err := range client.Models.GenerateContentStream(context.Background(), "gemini-3.8-flash", genai.Text("hi"), nil) {
+		require.NoError(t, err)
+		text.WriteString(resp.Text())
+	}
+	assert.Equal(t, "ok", text.String())
+}
