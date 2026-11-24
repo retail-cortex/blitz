@@ -955,7 +955,7 @@ func TestPolicy(t *testing.T) {
 		"explain":    map[string]any{"connectors.own": map[string]any{"value": true, "level": "group", "by": []string{"Data"}}},
 		"rules":      []map[string]any{{"kind": "rule", "name": "tested", "body": "Say how it was tested."}},
 		"guardrails": []map[string]any{{"kind": "guardrail", "name": "no-pii", "body": "---\nstage: output\n---\nNo personal data."}},
-		"expires":    time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC),
+		"expires":    time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second),
 	}
 	changed, err := c.RefreshPolicy(ctx, dir)
 	require.NoError(t, err)
@@ -1384,4 +1384,54 @@ func TestSwapPolicyFailureKeepsTheOld(t *testing.T) {
 	require.NoError(t, swapPolicy(dir, next))
 	assert.NoFileExists(t, filepath.Join(cur, "rules", "kept.md"), "swapped")
 	assert.False(t, policyTookOver(dir), "no ETag, no policy.json")
+}
+
+// A policy kept within a day of its expiry is fetched whole, not asked
+// for with its ETag: a service whose ETag leaves the expiry out answers
+// 304 to an unchanged policy for ever, and the policy ran out however
+// often Blitz asked (EN-33d; the owner, 2026-11-24).
+func TestPolicyRenewedNearItsExpiry(t *testing.T) {
+	_, s, c, _, clock := setup(t)
+	now := *clock
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "blitz.acme.com")
+	require.NoError(t, c.SignInBrowser(ctx, browse(t), nil))
+	policy := func(expires time.Time) map[string]any {
+		return map[string]any{"schema": PolicySchema, "policy": map[string]any{"refresh": "15m"}, "explain": map[string]any{},
+			"rules": []any{}, "guardrails": []any{}, "expires": expires.UTC().Truncate(time.Second)}
+	}
+	kept := func() time.Time { return keptExpiry(dir) }
+
+	s.Mu.Lock()
+	s.Policy = policy(now.Add(5 * 24 * time.Hour))
+	s.Mu.Unlock()
+	_, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	first := kept()
+
+	// Days left: an unchanged policy is a 304, the expiry kept.
+	s.Mu.Lock()
+	s.Policy = policy(now.Add(7 * 24 * time.Hour))
+	s.Mu.Unlock()
+	changed, err := c.RefreshPolicy(ctx, dir)
+	require.NoError(t, err)
+	assert.False(t, changed, "304")
+	assert.True(t, first.Equal(kept()))
+
+	// Kept with 12 hours left, the same policy is fetched whole, renewed.
+	for _, left := range []time.Duration{12 * time.Hour, -time.Hour} {
+		s.Mu.Lock()
+		s.Policy = policy(now.Add(left))
+		s.Mu.Unlock()
+		require.NoError(t, os.Remove(filepath.Join(dir, policyETag))) // so it's kept with that expiry
+		_, err = c.RefreshPolicy(ctx, dir)
+		require.NoError(t, err)
+		require.WithinDuration(t, now.Add(left), kept(), time.Minute)
+		s.Mu.Lock()
+		s.Policy = policy(now.Add(7 * 24 * time.Hour))
+		s.Mu.Unlock()
+		_, err = c.RefreshPolicy(ctx, dir)
+		require.NoError(t, err)
+		assert.WithinDuration(t, now.Add(7*24*time.Hour), kept(), time.Minute, "%s left: renewed though unchanged", left)
+	}
 }
