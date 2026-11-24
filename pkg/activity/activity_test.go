@@ -71,7 +71,7 @@ var start = time.Date(2026, 11, 4, 15, 0, 0, 0, time.UTC)
 
 func newRecorder(t *testing.T, url string, now *time.Time) *Recorder {
 	t.Helper()
-	return &Recorder{Dir: filepath.Join(t.TempDir(), ".blitz"), Version: "v0.9.0", URL: url, Now: func() time.Time { return *now }}
+	return &Recorder{Dir: filepath.Join(t.TempDir(), ".blitz"), Version: "1.3.1", URL: url, Now: func() time.Time { return *now }}
 }
 
 // A front end's use is a ping the first time each day, with exactly
@@ -106,7 +106,7 @@ func TestOncePerDayPerFront(t *testing.T) {
 	require.NoError(t, err)
 	got := s.pings()
 	require.Len(t, got, 3)
-	assert.Equal(t, map[string]string{"install": id, "day": "2026-11-04", "front": "cli", "version": "v0.9.0", "os": goruntime.GOOS, "arch": goruntime.GOARCH, "proxy": "N"}, got[0], "these fields, nothing else")
+	assert.Equal(t, map[string]string{"install": id, "day": "2026-11-04", "front": "cli", "version": "v1.3.1", "os": goruntime.GOOS, "arch": goruntime.GOARCH, "proxy": "N"}, got[0], "these fields, nothing else")
 	assert.Equal(t, "desktop", got[1]["front"])
 	assert.Equal(t, "2026-11-05", got[2]["day"])
 	s.mu.Lock()
@@ -121,6 +121,25 @@ func TestOncePerDayPerFront(t *testing.T) {
 	due, err = r.Mark("tray")
 	require.NoError(t, err)
 	assert.False(t, due, "not a front end")
+}
+
+// A ping's version is a release's with its "v", however the build
+// stamped it (it drops the "v"), and any other build is "dev": the license
+// server refuses anything else, and a refused ping is lost (AI-10a).
+func TestPingVersion(t *testing.T) {
+	for _, tc := range []struct{ name, stamped, want string }{
+		{"a release, as stamped", "1.3.1", "v1.3.1"},
+		{"a pre-release, as stamped", "1.4.0-rc.1", "v1.4.0-rc.1"},
+		{"with its v already", "v0.9.0", "v0.9.0"},
+		{"unstamped", "dev", "dev"},
+		{"a commit's build", "45d292fc", "dev"},
+		{"a commit with changes", "45d292fc-dirty.5f3e2a1", "dev"},
+		{"nothing", "", "dev"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, pingVersion(tc.stamped))
+		})
+	}
 }
 
 // Switched off, nothing is marked or sent, and no ID is made (AI-30).

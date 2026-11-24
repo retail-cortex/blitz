@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.3.1
-weight: 1
+weight: 2
 ---
 
 Gemini keeps talking through a quiet stretch. When your connection goes through a gateway or proxy, a Gemini reply that paused to think could stop with an error. Now it carries on to the end.
