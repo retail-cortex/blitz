@@ -13,3 +13,7 @@ Gemini keeps talking through a quiet stretch. When your connection goes through 
 ### Fixed
 
 - **Gemini replies no longer stop with "invalid stream chunk".** A gateway or proxy between Blitz and the model can add lines of its own to a reply's stream: a keep-alive (`:heartbeat`) to hold a quiet connection open, or a field of its own. Streams are meant to skip lines they don't read, and Claude and OpenAI always did, but Google's Gemini library failed the whole reply on any line that wasn't the reply itself: `Agent execution error: [llm.api] iteratedResponseStream: invalid stream chunk: :hearbeat`. Blitz now sets aside every line a model's library doesn't read before the reply reaches it. Keep-alives still count as the stream being alive, so a reply that is slow but on its way is never taken for a stalled one.
+
+### Security
+
+- **A safer connection to the agent's browser.** Blitz drives its browser over a WebSocket, and the library it uses for that picked the masks for what it sends with a weak random generator ([GO-2026-6278](https://pkg.go.dev/vuln/GO-2026-6278)). Blitz now uses the library's fixed version.

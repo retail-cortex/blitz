@@ -142,7 +142,7 @@ Go modules linked into blitz, blitzd and the desktop app
   github.com/googleapis/enterprise-certificate-proxy v0.3.23     Apache-2.0
   github.com/googleapis/gax-go/v2 v2.26.2                        BSD-3-Clause
   github.com/gorilla/css v1.0.1                                  BSD-3-Clause
-  github.com/gorilla/websocket v1.5.3                            BSD-2-Clause
+  github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4 BSD-2-Clause
   github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0              BSD-3-Clause
   github.com/in-toto/attestation v1.2.0                          Apache-2.0
   github.com/in-toto/in-toto-golang v0.11.0                      Apache-2.0
@@ -2344,8 +2344,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-github.com/gorilla/websocket v1.5.3
------------------------------------
+github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
+-----------------------------------------------------------------
 
 Copyright (c) 2013 The Gorilla WebSocket Authors. All rights reserved.
 
