@@ -1523,6 +1523,19 @@ func TestShareWithOrganization(t *testing.T) {
 		assert.Empty(t, id+readOnly, "not the organization's")
 	}
 
+	// The service slow to say: the workspace opens on what it last said,
+	// and the service isn't taken for down, so the next call reaches it
+	// (a busy runner's slow answer once failed the calls after it).
+	orgForWait = 20 * time.Millisecond
+	org.Mu.Lock() // its workspaces wait
+	id, readOnly = s.OrgWorkspaceFor(ctx, board)
+	org.Mu.Unlock()
+	orgForWait = 5 * time.Second
+	assert.Equal(t, enterprisetest.WorkspaceID("board"), id)
+	assert.Contains(t, readOnly, "a Viewer of Acme Assist's workspace Board")
+	_, err = c.ListOrgWorkspaces(ctx, connect.NewRequest(&pb.ListOrgWorkspacesRequest{}))
+	require.NoError(t, err, "a lookup that gave up isn't the service down")
+
 	// The service gone (EN-37): each is what it last said, a Viewer's
 	// clone still read-only.
 	org.Close()

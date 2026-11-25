@@ -132,7 +132,8 @@ func (c *Client) RefreshCatalog(ctx context.Context, dir string) (*Manifest, boo
 		return nil, false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	if tag, err := os.ReadFile(filepath.Join(dir, catalogETag)); err == nil && LoadCatalog(dir) != nil {
+	// Not near its expiry, as for the policy (EN-33d).
+	if tag, err := os.ReadFile(filepath.Join(dir, catalogETag)); err == nil && LoadCatalog(dir) != nil && !c.expiresSoon(LoadCatalog(dir).Expires) {
 		req.Header.Set("If-None-Match", string(tag))
 	}
 	res, err := c.hc.Do(req)

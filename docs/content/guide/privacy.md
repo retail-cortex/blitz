@@ -29,7 +29,7 @@ On a day you use Blitz, it tells Retail Cortex once that this install was in use
 | A random ID for this install, made on this machine and kept in `~/.blitz/install-id` | `9f2c…e41a` |
 | The day it was used | `2026-11-04` |
 | Which front end: the desktop app, the CLI or VS Code | `desktop` |
-| Blitz's version | `v0.9.0` |
+| Blitz's version | `v1.3.2` |
 | The operating system and processor | `darwin`, `arm64` |
 | Whether it went through a proxy (not which one) | `Y` or `N` |
 

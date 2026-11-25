@@ -606,7 +606,12 @@ func NewService(t testing.TB, issuer string) *Service {
 			_, key, _ = ed25519.GenerateKey(nil)
 		}
 		env := seal(s.KeyID, key, s.Policy)
-		sum := sha256.Sum256(env)
+		// As the service before its PO-20a: the ETag is of the content
+		// without its expiry, so a renewed expiry alone is a 304.
+		content := maps.Clone(s.Policy)
+		delete(content, "expires")
+		raw, _ := json.Marshal(content)
+		sum := sha256.Sum256(raw)
 		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
 		w.Header().Set("ETag", etag)
 		if r.Header.Get("If-None-Match") == etag {

@@ -33,6 +33,10 @@ import (
 // gets for it: its own origin, if it has one, stays as it was.
 const sharedRemote = "organization"
 
+// orgForWait is how long opening a workspace waits for the service to say
+// whether it's the organization's (OrgWorkspaceFor).
+var orgForWait = 5 * time.Second
+
 // sharedFolder is a folder shared with the organization where it was,
 // instead of a clone in the organization's folder (EN-66).
 type sharedFolder struct {
@@ -129,8 +133,14 @@ func (s *Server) OrgWorkspaceFor(ctx context.Context, dir string) (id, readOnly 
 	if err != nil {
 		return "", ""
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// Opening the workspace waits orgForWait at most, then goes on with
+	// what the service last said. It gives up (a cancel, not a deadline)
+	// so a slow answer isn't taken for a service that's down
+	// (enterprise.ErrUnreachable), which would fail every other call to
+	// it for a while.
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	defer time.AfterFunc(orgForWait, cancel).Stop()
 	list, err := c.Workspaces(ctx)
 	if err != nil {
 		// Offline (EN-37): what it was when the service last said.

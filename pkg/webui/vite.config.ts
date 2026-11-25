@@ -19,7 +19,9 @@ import { dirname } from "node:path";
 import { defineConfig } from "vite";
 
 // The package's own tests (//pkg/webui:test). Under Bazel they start in
-// the runfiles tree, whose files are links: Node runs their real paths.
+// the runfiles tree, whose files are links: Node runs their real paths,
+// in Bazel's output tree, where the other targets' runfiles trees hold
+// copies of src too: only the package's own run.
 export default defineConfig({
-  test: { root: dirname(realpathSync("package.json")) },
+  test: { root: dirname(realpathSync("package.json")), include: ["src/**/*.test.{ts,tsx}"] },
 });

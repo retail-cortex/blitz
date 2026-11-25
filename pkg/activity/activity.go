@@ -34,6 +34,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	goruntime "runtime"
 	"slices"
 	"strings"
@@ -206,7 +207,12 @@ func (r *Recorder) Flush(ctx context.Context) error {
 	var sent []entry
 	for _, e := range pending {
 		switch err := r.send(ctx, id, e); {
-		case err == nil, errors.Is(err, errRefused):
+		case err == nil:
+			sent = append(sent, e)
+		case errors.Is(err, errRefused):
+			// Not sent again, so never quietly: a ping every install's
+			// refused is a count that's lost (AI-12).
+			slog.Warn("activity ping refused; not sent again", "day", e.Day, "front", e.Front, "version", pingVersion(r.Version), "error", err)
 			sent = append(sent, e)
 		default:
 			errs = append(errs, err)
@@ -235,7 +241,7 @@ var errRefused = errors.New("the ping isn't counted")
 // adds proxy).
 func (r *Recorder) send(ctx context.Context, id string, e entry) error {
 	ping := map[string]string{
-		"install": id, "day": e.Day, "front": e.Front, "version": r.Version, "os": goruntime.GOOS, "arch": goruntime.GOARCH,
+		"install": id, "day": e.Day, "front": e.Front, "version": pingVersion(r.Version), "os": goruntime.GOOS, "arch": goruntime.GOARCH,
 	}
 	ctx, cancel := context.WithTimeout(ctx, Wait)
 	defer cancel()
@@ -254,6 +260,22 @@ func (r *Recorder) send(ctx context.Context, id string, e entry) error {
 		return fmt.Errorf("%w: HTTP %d", errRefused, status)
 	}
 	return fmt.Errorf("HTTP %d", status)
+}
+
+// release is a release's version, with or without its "v".
+var release = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+`)
+
+// pingVersion is version as a ping says it (AI-10): a release with its
+// "v" (v1.3.1; the build stamp drops it), and anything else (a commit's
+// build, abc1234) "dev", which Retail Cortex takes (AI-10a).
+func pingVersion(version string) string {
+	switch {
+	case !release.MatchString(version):
+		return "dev"
+	case strings.HasPrefix(version, "v"):
+		return version
+	}
+	return "v" + version
 }
 
 // post sends ping with Go's HTTP client: the proxy the environment names

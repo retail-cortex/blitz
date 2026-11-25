@@ -243,6 +243,7 @@ go_library(
         "content/tutorials/studio-recipe-app.md",
         "content/releases/blitz-1.3.0.md",
         "content/releases/blitz-1.3.1.md",
+        "content/releases/blitz-1.3.2.md",
     ],
     importpath = "github.com/retail-cortex/blitz/docs",
     visibility = ["//visibility:public"],

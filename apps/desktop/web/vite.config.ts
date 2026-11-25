@@ -46,6 +46,11 @@ export default defineConfig({
     // links; Node runs (and reports coverage for) their real paths, in
     // the directory the real package.json is in.
     root: dirname(realpathSync("package.json")),
+    // That directory, in Bazel's output tree, also holds the other
+    // targets' runfiles trees (dev_, test_, typecheck_, coverage_), each
+    // with a copy of src: only the package's own tests run, not five
+    // copies of them (which took the coverage run past its limit).
+    include: ["src/**/*.test.{ts,tsx}"],
     // The shared controls are TypeScript sources, compiled as the page's
     // own rather than run as a built dependency.
     server: { deps: { inline: ["@blitz/webui"] } },

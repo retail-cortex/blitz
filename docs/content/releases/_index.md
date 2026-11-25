@@ -5,6 +5,7 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 1.3.2](blitz-1.3.2.md): your organization's models stay on week after week; drop-downs get their arrow back; room to write a permission rule in Studio.
 - [Blitz 1.3.1](blitz-1.3.1.md): Gemini replies through a gateway or proxy no longer stop with "invalid stream chunk" when the stream pauses.
 - [Blitz 1.3.0](blitz-1.3.0.md): the command line's turn: a banner, completion that knows every command and value, help that answers from the docs (offline too), and Blitz set up by asking, an MCP server from its page with your token kept secret.
 - [Blitz 1.2.0](blitz-1.2.0.md): the Reasoning view draws each turn's calls, thinking and tools, live and for every past chat; Gemini shows its thinking; unsafe mode, only ever your choice; the most hardened Blitz yet.

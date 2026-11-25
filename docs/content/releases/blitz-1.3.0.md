@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.3.0
-weight: 2
+weight: 3
 ---
 
 The command line gets the care the desktop app has had. Blitz now greets you with its banner and finishes your commands as you type, sub-commands and values included. It answers questions about itself from the docs it carries, even offline, and sets itself up when you ask: point it at an MCP server's page and it does the rest, asking you only for the token.

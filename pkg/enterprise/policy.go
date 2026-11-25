@@ -105,8 +105,10 @@ func (c *Client) RefreshPolicy(ctx context.Context, dir string) (bool, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	// The ETag only stands for a policy kept: with policy.json gone, the
 	// service's 304 would leave none for ever (security review
-	// enterprise#9).
-	if tag, err := os.ReadFile(filepath.Join(dir, policyETag)); err == nil && fileExists(filepath.Join(dir, "policy.json")) {
+	// enterprise#9). Nor near its expiry: a 304 keeps the expiry too, and
+	// a service whose ETag leaves the expiry out (before the service's
+	// PO-20a) would answer 304 until the policy ran out (EN-33d).
+	if tag, err := os.ReadFile(filepath.Join(dir, policyETag)); err == nil && fileExists(filepath.Join(dir, "policy.json")) && !c.expiresSoon(keptExpiry(dir)) {
 		req.Header.Set("If-None-Match", string(tag))
 	}
 	res, err := c.hc.Do(req)
@@ -321,4 +323,26 @@ func (c *Client) SetItem(ctx context.Context, kind, name string, on bool) (confi
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// RenewWithin is how near its expiry a kept policy or catalog is fetched
+// whole, without If-None-Match, so it comes renewed (EN-33d).
+const RenewWithin = 24 * time.Hour
+
+// expiresSoon says whether expires (zero: none) is within RenewWithin.
+func (c *Client) expiresSoon(expires time.Time) bool {
+	return !expires.IsZero() && c.now().Add(RenewWithin).After(expires)
+}
+
+// keptExpiry is the expiry of the policy.json kept in dir; zero when
+// there's none, or it can't be read (then it's fetched whole anyway).
+func keptExpiry(dir string) time.Time {
+	var st struct {
+		Expires time.Time `json:"expires"`
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, PolicyFile))
+	if err != nil || json.Unmarshal(raw, &st) != nil {
+		return time.Time{}
+	}
+	return st.Expires
 }

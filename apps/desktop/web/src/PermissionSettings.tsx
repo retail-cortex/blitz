@@ -141,14 +141,17 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
       {desc.rules.length ? list(desc.rules, true) : <p className="t-body-sm muted">{t("desktop.perm.none")}</p>}
 
       <section className={`card rule-add ${compact ? "compact" : ""}`}>
-        <div className="rule-add-row">
-          <select className="select rule-effect" value={effect} disabled={busy} onChange={(e) => setEffect(e.target.value)} aria-label={t("desktop.rs.effect")}>
-            {effects.map((e) => (
-              <option key={e} value={e}>
-                {t(`desktop.rs.effect.${e}`)}
-              </option>
-            ))}
-          </select>
+        {/* The effect, then the rule on a line of its own: beside the
+            effect, a narrow pane (Studio's) left the rule no room. */}
+        <select className="select rule-effect" value={effect} disabled={busy} onChange={(e) => setEffect(e.target.value)} aria-label={t("desktop.rs.effect")}>
+          {effects.map((e) => (
+            <option key={e} value={e}>
+              {t(`desktop.rs.effect.${e}`)}
+            </option>
+          ))}
+        </select>
+        <label className="field">
+          <span className="t-label">{t("desktop.rs.rule")}</span>
           <input
             className="input mono"
             value={rule}
@@ -156,10 +159,9 @@ export function PermissionSettings({ workspace, compact, onChanged }: { workspac
             onChange={(e) => setRule(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="shell(npm test)"
-            aria-label={t("desktop.rs.rule")}
             spellCheck={false}
           />
-        </div>
+        </label>
         <label className="field">
           <span className="t-label">{t("desktop.perm.try")}</span>
           <input className="input mono" value={sample} disabled={busy} onChange={(e) => setSample(e.target.value)} placeholder={t("desktop.perm.try_placeholder")} spellCheck={false} />
