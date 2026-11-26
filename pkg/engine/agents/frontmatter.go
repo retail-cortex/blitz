@@ -151,6 +151,20 @@ type AgentSpec struct {
 // key it doesn't know is an error: a misspelt permission_mode would leave
 // the agent in the workspace's mode.
 func ParseMarkdownSpec(content []byte) (*AgentSpec, error) {
+	spec, err := ReadMarkdownSpec(content)
+	if err != nil {
+		return nil, err
+	}
+	return spec, nil
+}
+
+// ReadMarkdownSpec reads an agent file for an editor: as
+// ParseMarkdownSpec, but when the file can be read and only a value in
+// it is one an agent can't have (an agency_level that isn't one, written
+// by a model that guessed), what it says is returned with the error, so
+// the editor can show the agent and have the value put right. Such an
+// agent is never loaded.
+func ReadMarkdownSpec(content []byte) (*AgentSpec, error) {
 	if !bytes.HasPrefix(bytes.TrimSpace(bytes.TrimPrefix(content, []byte("\ufeff"))), []byte("---")) {
 		return nil, fmt.Errorf("markdown spec missing starting frontmatter delimiter '---'")
 	}
@@ -165,7 +179,7 @@ func ParseMarkdownSpec(content []byte) (*AgentSpec, error) {
 	}
 
 	if err := meta.Check(); err != nil {
-		return nil, err
+		return &AgentSpec{AgentMetadata: meta, SystemPrompt: string(promptBytes)}, err
 	}
 	if meta.Effort != "" {
 		meta.Effort, _ = config.ParseEffort(meta.Effort)

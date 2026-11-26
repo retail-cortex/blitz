@@ -47,7 +47,13 @@ export function installFake() {
       service(WorkspaceService, fakeWorkspaceService());
       service(ConfigService, fakeConfigService());
       service(TerminalService, fakeTerminals());
-      service(VoiceService, fakeVoice((workspace) => fakePersonalities().find((p) => p.name === fakePersonalityIn(workspace))?.voice ?? ""));
+      service(
+        VoiceService,
+        fakeVoice((workspace) => {
+          const p = fakePersonalities().find((x) => x.name === fakePersonalityIn(workspace));
+          return { voice: p?.voice ?? "", locale: p?.locale ?? "", speed: p?.speed ?? 0, pitch: p?.pitch ?? 0 };
+        }),
+      );
       service(FileService, fakeFileService());
       service(WorkerService, fakeWorkerService());
     }),

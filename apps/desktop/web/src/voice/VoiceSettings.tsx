@@ -19,12 +19,16 @@ import { mdiMicrophoneOutline, mdiPlayOutline } from "@mdi/js";
 import { config, voices } from "../api";
 import { message } from "../errors";
 import type { DescribeVoiceResponse } from "../gen/blitz/v1/voice_pb";
-import { t } from "../i18n";
+import { language, t } from "../i18n";
+import { useModelCatalog } from "../ModelInput";
+import { modelOptions } from "../models";
+import { localeName } from "../personality/tuning";
 import { configChanged, openSettings } from "../events";
 import { useApp } from "../state";
 import { Button, Icon, Segmented, Switch, useSnackbar } from "@blitz/webui";
 import { micPermission, microphones, openMic, Player, type Mic } from "./audio";
 import { voiceErrorText } from "./useVoice";
+import { hearChoice, hearChoices } from "./voice";
 
 /**
  * Settings › Personality › Voice (spec_063_voice VOX-40, VOX-41): the switch, and with
@@ -63,6 +67,8 @@ export function VoiceSettings() {
     }
   };
   if (!d) return error ? <p className="error-text">{error}</p> : null;
+  // As set: automatic unless the person chose one (VOX-70a).
+  const engine = d.engine === "cloud" || d.engine === "live" ? d.engine : "auto";
   return (
     <div className="stack voice-settings" style={{ gap: 12 }}>
       <div className="setting">
@@ -76,7 +82,25 @@ export function VoiceSettings() {
       </div>
       {d.enabled && (
         <>
-          {d.notSetUp ? (
+          <label className="field">
+            <span className="t-label">{t("desktop.voice.settings.engine")}</span>
+            <Segmented<string>
+              label={t("desktop.voice.settings.engine")}
+              value={engine}
+              onChange={(v) => void set("voice.engine", v === "auto" ? "" : v)}
+              options={[
+                { value: "auto", label: t("desktop.voice.settings.engine.auto") },
+                { value: "live", label: t("desktop.voice.settings.engine.live") },
+                { value: "cloud", label: t("desktop.voice.settings.engine.cloud") },
+              ]}
+            />
+            <span className="t-body-sm muted">
+              {engine === "cloud" ? t("desktop.voice.settings.engine.cloud_detail") : engine === "live" ? t("desktop.voice.settings.engine.live_detail") : t("desktop.voice.settings.engine.auto_detail")}
+            </span>
+          </label>
+          {engine !== "live" && <CloudEngine d={d} workspace={workspace} busy={busy} onSet={(key, v) => set(key, v)} />}
+          {engine !== "cloud" &&
+            (d.notSetUp ? (
             <div className="card warn row" style={{ gap: 8 }}>
               <span className="spacer t-body-sm">{t("desktop.voice.settings.not_set_up")}</span>
               <Button small variant="tonal" onClick={() => openSettings({ section: "providers" })}>
@@ -85,7 +109,7 @@ export function VoiceSettings() {
             </div>
           ) : (
             <label className="field">
-              <span className="t-label">{t("desktop.voice.settings.model")}</span>
+              <span className="t-label">{t("desktop.voice.settings.live_model")}</span>
               <select className="select" value={d.model} disabled={busy} onChange={(e) => void set("voice.model", e.target.value)}>
                 <option value="">{t("desktop.voice.settings.model_default", { model: (d.modelInUse || "").replace(/^gemini\//, "") || "Gemini Live" })}</option>
                 {d.model && !d.models.includes(d.model.replace(/^gemini\//, "")) && <option value={d.model}>{d.model.replace(/^gemini\//, "")}</option>}
@@ -97,7 +121,7 @@ export function VoiceSettings() {
               </select>
               <span className="t-body-sm muted">{t(d.backend === "vertex" ? "desktop.voice.settings.on_vertex" : "desktop.voice.settings.on_gemini")}</span>
             </label>
-          )}
+          ))}
           <VoicePicker d={d} workspace={workspace} busy={busy} onSet={(v) => void set("voice.voice", v)} />
           <MicPicker device={prefs.voice_mic} onDevice={(id) => update((p) => ({ ...p, voice_mic: id }))} />
           <label className="field">
@@ -156,14 +180,94 @@ export function VoiceSettings() {
                 <span className="t-body-sm muted">{t("desktop.voice.settings.noise_detail")}</span>
               </label>
               <MsField label={t("desktop.voice.settings.pause")} detail={t("desktop.voice.settings.pause_detail", { min: 200, max: 5000 })} value={d.pauseMs} min={200} max={5000} busy={busy} onSet={(v) => void set("voice.pause_ms", v)} />
-              <MsField label={t("desktop.voice.settings.start")} detail={t("desktop.voice.settings.start_detail", { min: 20, max: 2000 })} value={d.startMs} min={20} max={2000} busy={busy} onSet={(v) => void set("voice.start_ms", v)} />
+              {engine !== "cloud" && <MsField label={t("desktop.voice.settings.start")} detail={t("desktop.voice.settings.start_detail", { min: 20, max: 2000 })} value={d.startMs} min={20} max={2000} busy={busy} onSet={(v) => void set("voice.start_ms", v)} />}
             </>
           )}
           <MsField label={t("desktop.voice.settings.buffer")} detail={t("desktop.voice.settings.buffer_detail", { min: 20, max: 2000 })} value={d.bufferMs} min={20} max={2000} busy={busy} onSet={(v) => void set("voice.buffer_ms", v)} />
-          <p className="t-body-sm muted">{t("desktop.voice.settings.cost")}</p>
+          {engine !== "cloud" && <p className="t-body-sm muted">{t("desktop.voice.settings.cost")}</p>}
+          {engine !== "live" && <p className="t-body-sm muted">{t("desktop.voice.settings.cost_cloud")}</p>}
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The cloud engine's settings (VOX-70, VOX-74): what it's missing, in the
+ * service's words (they say what to run), else the Google Cloud project
+ * it works in; the language you speak, for Speech-to-Text; the model
+ * that writes what's said, from those the providers list; and how it
+ * hears, from the Speech-to-Text models tried (VOX-73a). Menus, not
+ * names to type.
+ */
+function CloudEngine({ d, workspace, busy, onSet }: { d: DescribeVoiceResponse; workspace: string; busy: boolean; onSet: (key: string, value: string) => Promise<void> }) {
+  // The models the providers list, for the one that writes the replies.
+  const catalog = useModelCatalog(workspace);
+  const models = modelOptions(catalog, d.textModel ? [d.textModel] : []);
+  const heard = hearChoice(d.hearModel, d.hearLocation);
+  const hearLabels: Record<(typeof hearChoices)[number]["id"], string> = {
+    default: t("desktop.voice.settings.hear.default"),
+    telephony: t("desktop.voice.settings.hear.telephony"),
+    chirp_3: t("desktop.voice.settings.hear.chirp_3"),
+    chirp_2: t("desktop.voice.settings.hear.chirp_2"),
+  };
+  // Both settings, one after the other: a model and where it runs go together.
+  const hear = async (id: string) => {
+    const c = hearChoices.find((x) => x.id === id);
+    if (!c) return;
+    await onSet("voice.hear_model", c.model);
+    await onSet("voice.hear_location", c.location);
+  };
+  return (
+    <>
+      {d.cloudNotSetUp ? (
+        <div className="card warn stack" style={{ gap: 4 }}>
+          <span className="t-title-sm">{t("desktop.voice.settings.cloud_not_set_up")}</span>
+          <span className="t-body-sm">{d.cloudNotSetUp}</span>
+        </div>
+      ) : (
+        <p className="t-body-sm muted">{t("desktop.voice.settings.cloud_project", { project: d.cloudProject })}</p>
+      )}
+      <label className="field">
+        <span className="t-label">{t("desktop.voice.settings.language")}</span>
+        <select className="select" value={d.language} disabled={busy} onChange={(e) => void onSet("voice.language", e.target.value)}>
+          <option value="">{t("desktop.voice.settings.language_default")}</option>
+          {[...d.locales]
+            .map((code) => ({ code, name: localeName(code, language()) }))
+            .sort((a, b) => a.name.localeCompare(b.name, language()))
+            .map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name === l.code ? l.code : `${l.name} (${l.code})`}
+              </option>
+            ))}
+        </select>
+        <span className="t-body-sm muted">{t("desktop.voice.settings.language_detail")}</span>
+      </label>
+      <label className="field">
+        <span className="t-label">{t("desktop.voice.settings.text_model")}</span>
+        <select className="select" value={d.textModel} disabled={busy} onChange={(e) => void onSet("voice.text_model", e.target.value)}>
+          <option value="">{t("desktop.voice.settings.text_model_default", { model: d.textModelInUse || "…" })}</option>
+          {models.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <span className="t-body-sm muted">{t("desktop.voice.settings.text_model_detail")}</span>
+      </label>
+      <label className="field">
+        <span className="t-label">{t("desktop.voice.settings.hear_model")}</span>
+        <select className="select" value={heard?.id ?? "custom"} disabled={busy} onChange={(e) => void hear(e.target.value)}>
+          {!heard && <option value="custom">{t("desktop.voice.settings.hear.custom", { model: d.hearModel || "long", location: d.hearLocation || "global" })}</option>}
+          {hearChoices.map((c) => (
+            <option key={c.id} value={c.id}>
+              {hearLabels[c.id]}
+            </option>
+          ))}
+        </select>
+        <span className="t-body-sm muted">{t("desktop.voice.settings.hear_model_detail")}</span>
+      </label>
+    </>
   );
 }
 

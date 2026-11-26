@@ -54,6 +54,9 @@ type Options struct {
 	// NewVoiceModel builds the voice's model (spec_063_voice; nil:
 	// runtime.NewVoiceModel).
 	NewVoiceModel func(ctx context.Context, cfg *config.Config) (*runtime.VoiceModel, error)
+	// NewCloudVoice builds the cloud voice engine's Speech-to-Text and
+	// Text-to-Speech (spec_063_voice VOX-70; nil: runtime.NewCloudVoice).
+	NewCloudVoice func(ctx context.Context, cfg *config.Config) (*runtime.CloudVoice, error)
 	// AppendSystemPrompt is added to the agent's instructions for this run
 	// (--append-system-prompt).
 	AppendSystemPrompt string
@@ -213,6 +216,9 @@ type Workspace struct {
 	// newVoiceModel builds the voice's model (runtime.NewVoiceModel; tests
 	// set a fake's).
 	newVoiceModel func(ctx context.Context, cfg *config.Config) (*runtime.VoiceModel, error)
+	// newCloudVoice builds the cloud voice engine's Speech-to-Text and
+	// Text-to-Speech (runtime.NewCloudVoice; tests set fakes).
+	newCloudVoice func(ctx context.Context, cfg *config.Config) (*runtime.CloudVoice, error)
 	// turns are the sessions' turns' facts, for the voice (spec_063_voice
 	// VOX-17).
 	turns    turnWatch
@@ -246,6 +252,7 @@ func Open(ctx context.Context, cfg *config.Config, o Options) (*Workspace, error
 	w := &Workspace{cfg: cfg, locales: SetupLocale(cfg, o.Warn), warn: o.Warn}
 	w.reply = i18n.Current()
 	w.newVoiceModel = o.NewVoiceModel
+	w.newCloudVoice = o.NewCloudVoice
 	if w.newModel = o.NewModel; w.newModel == nil {
 		w.newModel = runtime.NewModel
 	}

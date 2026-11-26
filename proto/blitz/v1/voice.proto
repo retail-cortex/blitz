@@ -80,6 +80,37 @@ message DescribeVoiceResponse {
   int32 pause_ms = 15;
   int32 start_ms = 16;
   int32 buffer_ms = 17;
+  // How the voice hears and speaks, as set (VOX-70): "live", a Gemini
+  // Live model in its own voice; "cloud", Google Cloud's Speech-to-Text,
+  // a text model and Text-to-Speech, which speak a personality's locale,
+  // speed and pitch; or "auto" (the default): cloud when the personality
+  // tunes its voice and Google Cloud is set up, else live.
+  string engine = 18;
+  // The cloud engine's settings as set ("": their defaults): its text
+  // model, the language the person speaks, and Speech-to-Text's model
+  // and location.
+  string text_model = 19;
+  string language = 20;
+  string hear_model = 21;
+  string hear_location = 22;
+  // The locales the cloud engine's voices speak, for a personality's
+  // locale and for language.
+  repeated string locales = 23;
+  // Why the cloud engine can't be used ("" when it can, as far as was
+  // checked: its sign-in is tried only when the models are listed), and
+  // the Google Cloud project it would work in.
+  string cloud_not_set_up = 24;
+  string cloud_project = 25;
+  // How the workspace's personality tunes the voice (PER-41).
+  string personality_locale = 26;
+  double personality_speed = 27;
+  double personality_pitch = 28;
+  // The engine a conversation here would use, "live" or "cloud": engine,
+  // or what auto comes to for the workspace's personality (VOX-70a).
+  string engine_in_use = 29;
+  // The cloud engine's text model: text_model, else the workspace's
+  // small model.
+  string text_model_in_use = 30;
 }
 
 // Request message for VoiceService.Converse.
@@ -92,6 +123,13 @@ message ConverseRequest {
   // Says a short sample in this voice and ends (Settings › Voice's Play,
   // VOX-41): one short live call.
   string sample_voice = 4;
+  // With sample_voice and the cloud engine: the sample's locale, speed
+  // and pitch, as the personality editor has them (PER-41). With
+  // sample_tuned unset, the workspace's personality's.
+  bool sample_tuned = 5;
+  string sample_locale = 6;
+  double sample_speed = 7;
+  double sample_pitch = 8;
 }
 
 // Response message for VoiceService.Converse: one of its fields.
@@ -129,6 +167,8 @@ message VoiceStarted {
   string voice = 3;
   // "tap" or "hold".
   string listen = 4;
+  // "live" or "cloud" (VOX-70).
+  string engine = 5;
 }
 
 // VoiceText is a piece of a transcript.

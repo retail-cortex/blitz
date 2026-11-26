@@ -67,3 +67,11 @@ export const effortIcon = mdiBrain;
 /** The agency levels. */
 export const agencies = (): Option[] =>
   ["low", "medium", "high", "extreme"].map((value) => ({ value, label: t(`desktop.agency.${value}`), detail: t(`desktop.agency.${value}.detail`) }));
+
+/**
+ * options, with value added when it's set and isn't one of them: a value
+ * read from a file (an agent's agency_level a model guessed at, say),
+ * which a menu must show to have it put right. It's marked as not one.
+ */
+export const withUnknown = (options: Option[], value: string): Option[] =>
+  value && !options.some((o) => o.value === value) ? [...options, { value, label: t("desktop.option.not_one", { value }), detail: t("desktop.option.not_one.detail", { value }) }] : options;

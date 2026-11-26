@@ -250,11 +250,21 @@ func (s *Server) turn(w *workspace, dir string, t *pb.Turn) (api.Turn, error) {
 
 // RunTurn runs a turn and streams its events. Events are sent from one
 // goroutine at a time (the send lock), since the agent and approval
-// requests can produce them concurrently.
+// requests can produce them concurrently. A turn with a turn_id runs in
+// the service and outlives the stream (liveturn.go, SVC-20a).
 func (h sessionService) RunTurn(ctx context.Context, r req[pb.RunTurnRequest], stream *connect.ServerStream[pb.RunTurnResponse]) error {
 	w, err := h.s.workspace(ctx, r.Msg.Workspace)
 	if err != nil {
 		return err
+	}
+	if r.Msg.TurnId != "" {
+		lt, err := h.s.liveTurn(ctx, w, r.Msg)
+		if err != nil {
+			return err
+		}
+		return lt.watch(ctx, h.s.broker, r.Msg.AfterSeq, func(seq uint64, ev *pb.TurnEvent) error {
+			return stream.Send(&pb.RunTurnResponse{Event: ev, Seq: seq})
+		})
 	}
 	t := r.Msg.Turn
 	if t == nil {

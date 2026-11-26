@@ -98,8 +98,8 @@ func TestPersonalityService(t *testing.T) {
 		"a bad trial workspace": func() error {
 			return unary(c.workspaces.TryPersonality, &pb.TryPersonalityRequest{Workspace: "relative", Text: "x"})
 		},
-		"too long a trial": func() error {
-			return unary(c.workspaces.TryPersonality, &pb.TryPersonalityRequest{Workspace: dir, Text: string(make([]byte, 2001))})
+		"a trial with a secret in it": func() error {
+			return unary(c.workspaces.TryPersonality, &pb.TryPersonalityRequest{Workspace: dir, Text: "Be kind.\nAKIAIOSFODNN7EXAMPLE"})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

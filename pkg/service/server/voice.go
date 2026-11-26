@@ -15,6 +15,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -86,14 +87,38 @@ func (h voiceService) DescribeVoice(ctx context.Context, r req[pb.DescribeVoiceR
 		Enabled: v.Enabled, Model: v.Model, Voice: v.Voice, Listen: v.ListenMode(), Summaries: v.SummaryMode(),
 		IdleMinutes: int32(v.Idle().Minutes()), Voices: config.GeminiVoices,
 		Noise: v.NoiseMode(), PauseMs: int32(v.Pause()), StartMs: int32(v.Start()), BufferMs: int32(v.Buffer()),
+		Engine: v.EngineMode(), TextModel: v.TextModel, Language: v.Language, HearModel: v.HearModel, HearLocation: v.HearLocation,
+		Locales: config.VoiceLocales,
 	}
 	if dir != "" {
 		h.s.mu.Lock()
 		w := h.s.workspaces[dir]
 		h.s.mu.Unlock()
 		if w != nil {
-			out.PersonalityVoice = w.Personality().Voice
+			p := w.Personality()
+			out.PersonalityVoice, out.PersonalityLocale, out.PersonalitySpeed, out.PersonalityPitch = p.Voice, p.Locale, p.Speed, p.Pitch
 		}
+	}
+	// The cloud engine's own needs (VOX-74), its sign-in tried only when
+	// Settings asks for the models: that asks Google.
+	if project, err := runtime.CloudVoiceProject(ctx, cfg, r.Msg.ListModels && v.EngineMode() != config.VoiceEngineLive); err != nil {
+		out.CloudNotSetUp = err.Error()
+	} else {
+		out.CloudProject = project
+	}
+	tuning := config.VoiceTuning{Locale: out.PersonalityLocale, Speed: out.PersonalitySpeed, Pitch: out.PersonalityPitch}
+	out.EngineInUse = v.EngineFor(tuning, out.CloudNotSetUp == "")
+	out.TextModelInUse = cmp.Or(v.TextModel, cfg.Suggestions.Model, cfg.Permissions.Auto.Model)
+	if v.EngineMode() == config.VoiceEngineCloud {
+		// It needs no live model: what's missing is the cloud's.
+		out.NotSetUp = out.CloudNotSetUp
+		out.ModelInUse = out.TextModelInUse
+		return ok(out)
+	}
+	// Left to auto with the cloud speaking, voice works whatever the live
+	// model's state, which Settings still shows (its models, or none).
+	if out.EngineInUse == config.VoiceEngineCloud {
+		defer func() { out.NotSetUp = "" }()
 	}
 	backend, err := runtime.VoiceBackend(ctx, cfg)
 	if err != nil {
@@ -167,7 +192,14 @@ func (h voiceService) Converse(ctx context.Context, r req[pb.ConverseRequest], s
 	if r.Msg.SampleVoice != "" && !slices.Contains(config.GeminiVoices, r.Msg.SampleVoice) {
 		return invalid(fmt.Errorf("%q isn't one of Gemini's voices", r.Msg.SampleVoice))
 	}
-	v, err := w.StartVoice(ctx, engine.VoiceOptions{SessionID: r.Msg.SessionId, SummaryOnly: r.Msg.SummaryOnly, SampleVoice: r.Msg.SampleVoice, OnEvent: func(e engine.VoiceEvent) {
+	var tuned *config.VoiceTuning
+	if r.Msg.SampleVoice != "" && r.Msg.SampleTuned {
+		tuned = &config.VoiceTuning{Locale: r.Msg.SampleLocale, Speed: r.Msg.SampleSpeed, Pitch: r.Msg.SamplePitch}
+		if err := tuned.Check(); err != nil {
+			return invalid(err)
+		}
+	}
+	v, err := w.StartVoice(ctx, engine.VoiceOptions{SessionID: r.Msg.SessionId, SummaryOnly: r.Msg.SummaryOnly, SampleVoice: r.Msg.SampleVoice, SampleTuning: tuned, OnEvent: func(e engine.VoiceEvent) {
 		if m := voiceEventProto(e); m != nil {
 			push(m)
 		}
@@ -187,7 +219,7 @@ func (h voiceService) Converse(ctx context.Context, r req[pb.ConverseRequest], s
 		return nil
 	}
 	cfg := w.VoiceSettings()
-	if err := stream.Send(&pb.ConverseResponse{Started: &pb.VoiceStarted{Id: conv.id, Model: v.ModelID(), Voice: v.VoiceName(), Listen: cfg.ListenMode()}}); err != nil {
+	if err := stream.Send(&pb.ConverseResponse{Started: &pb.VoiceStarted{Id: conv.id, Model: v.ModelID(), Voice: v.VoiceName(), Listen: cfg.ListenMode(), Engine: v.Engine()}}); err != nil {
 		return nil
 	}
 	for {

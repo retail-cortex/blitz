@@ -17,8 +17,10 @@ package config
 import (
 	"errors"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -941,4 +943,91 @@ func TestVoiceHearingSettings(t *testing.T) {
 	assert.Zero(t, none.Pause())
 	assert.Zero(t, none.Start())
 	assert.Equal(t, MinVoiceBufferMs, none.Buffer(), "the default")
+}
+
+// The cloud voice engine's settings (spec_063_voice VOX-70): set to what
+// they take, refused otherwise, the person's alone; and a personality's
+// tuning (VOX-72): a locale the voices speak, a speed and a pitch within
+// their ranges, and the two together within Text-to-Speech's speaking
+// rate, which both are made with.
+func TestVoiceCloudSettings(t *testing.T) {
+	dir := t.TempDir()
+	assert.Equal(t, VoiceEngineAuto, VoiceConfig{}.EngineMode(), "auto unless set")
+	assert.Equal(t, VoiceEngineAuto, VoiceConfig{Engine: "other"}.EngineMode())
+	// Left to auto, the cloud speaks a tuned voice when it's set up, and
+	// a live model everything else (VOX-70a); set, the engine is as set.
+	tuned, plain := VoiceTuning{Locale: "en-GB", Speed: 0.9}, VoiceTuning{Speed: 1}
+	for _, tc := range []struct {
+		engine string
+		tuning VoiceTuning
+		ready  bool
+		want   string
+	}{
+		{"", tuned, true, VoiceEngineCloud},
+		{"auto", tuned, false, VoiceEngineLive},
+		{"", plain, true, VoiceEngineLive},
+		{"live", tuned, true, VoiceEngineLive},
+		{"cloud", plain, false, VoiceEngineCloud},
+	} {
+		assert.Equal(t, tc.want, VoiceConfig{Engine: tc.engine}.EngineFor(tc.tuning, tc.ready), "%+v", tc)
+	}
+	for key, value := range map[string]string{
+		"voice.engine": "cloud", "voice.text_model": "gemini/gemini-3.8-flash", "voice.language": "fr-CA",
+		"voice.hear_model": "chirp_3", "voice.hear_location": "us-central1",
+	} {
+		_, err := SetValue(dir, "", key, value)
+		require.NoError(t, err, key)
+	}
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+	v := cfg.Voice
+	assert.Equal(t, VoiceEngineCloud, v.EngineMode())
+	assert.Equal(t, "gemini/gemini-3.8-flash", v.TextModel)
+	assert.Equal(t, "chirp_3", v.HearModel)
+	assert.Equal(t, "us-central1", v.HearLocation)
+	assert.Equal(t, "fr-CA", v.HearIn("en-GB"), "[voice] language first")
+	assert.Equal(t, "en-GB", VoiceConfig{}.HearIn("en-GB"), "else the personality's locale")
+	assert.Equal(t, DefaultVoiceLanguage, VoiceConfig{Language: "xx-XX"}.HearIn("nope"))
+	for key, value := range map[string]string{
+		"voice.engine": "gemini", "voice.text_model": "flash", "voice.language": "en-ZZ",
+		"voice.hear_model": "Chirp 3", "voice.hear_location": "US Central",
+	} {
+		_, err := SetValue(dir, "", key, value)
+		assert.Error(t, err, key)
+	}
+	_, err = SetValue(dir, t.TempDir(), "voice.engine", "cloud")
+	assert.Error(t, err, "the person's own: no workspace changes it")
+
+	for _, tc := range []struct {
+		name   string
+		tuning VoiceTuning
+		rate   float64
+		bad    string
+	}{
+		{"its own", VoiceTuning{}, 1, ""},
+		{"slower, in a locale", VoiceTuning{Locale: "en-GB", Speed: 0.9}, 0.9, ""},
+		{"an octave's half lower: asked for faster", VoiceTuning{Speed: 1, Pitch: -6}, math.Sqrt2, ""},
+		{"higher and faster", VoiceTuning{Speed: 1.5, Pitch: 6}, 1.5 / math.Sqrt2, ""},
+		{"a locale the voices don't speak", VoiceTuning{Locale: "en-ZZ"}, 1, "isn't a locale"},
+		{"too slow", VoiceTuning{Speed: 0.2}, 0.2, "speed is from 0.5 to 2"},
+		{"too fast", VoiceTuning{Speed: 2.5}, 2.5, "speed is from 0.5 to 2"},
+		{"too high", VoiceTuning{Pitch: 7}, 0, "pitch is from -6 to 6"},
+		{"not a number", VoiceTuning{Pitch: math.NaN()}, 0, "pitch is from"},
+		{"each in range, together beyond the voice", VoiceTuning{Speed: 2, Pitch: -6}, 2 * math.Sqrt2, "beyond the voice"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.tuning.Check()
+			if tc.bad != "" {
+				assert.ErrorContains(t, err, tc.bad)
+				return
+			}
+			assert.NoError(t, err)
+			assert.InDelta(t, tc.rate, tc.tuning.SpeakingRate(), 1e-9)
+		})
+	}
+	assert.True(t, VoiceTuning{Speed: 1}.Plain())
+	assert.False(t, VoiceTuning{Locale: "en-GB"}.Plain())
+	assert.False(t, VoiceTuning{Pitch: 1}.Plain())
+	assert.Contains(t, VoiceLocales, "en-GB")
+	assert.True(t, slices.IsSorted(VoiceLocales))
 }

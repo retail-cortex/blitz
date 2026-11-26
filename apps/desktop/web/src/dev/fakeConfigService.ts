@@ -61,7 +61,7 @@ export function fakeConfigService(): ServiceImpl<typeof ConfigService> {
       if (!p) throw fakeInvalid("no personality");
       const why = personalityCheck(p);
       if (why) throw fakeInvalid(why, "INVALID_SETTING");
-      fakeOwnPersonalities.set(p.name, { name: p.name, description: p.description.trim(), voice: p.voice, source: "own", text: p.text.trim() });
+      fakeOwnPersonalities.set(p.name, { name: p.name, description: p.description.trim(), voice: p.voice, source: "own", text: p.text.trim(), locale: p.locale, speed: p.speed === 1 ? 0 : p.speed, pitch: p.pitch });
       return { change: { path: `~/.blitz/personalities/${p.name}.md`, problems: [] } };
     },
     deletePersonality: ({ name }) => {

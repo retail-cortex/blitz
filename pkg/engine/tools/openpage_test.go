@@ -116,7 +116,7 @@ func TestOpenPage(t *testing.T) {
 			r.page.open = tt.open
 			var window []string
 			if !tt.noWindow {
-				r.SetPageOpener(func(_ context.Context, u, where, _ string) error {
+				r.SetPageOpener(func(_ context.Context, u, where, _ string, _ bool) error {
 					assert.Equal(t, "https://github.com", u)
 					if tt.windowFail {
 						return errors.New("no desktop window")
@@ -130,7 +130,7 @@ func TestOpenPage(t *testing.T) {
 				ctx = Unattended(ctx, func(context.Context, api.ApprovalRequest) (api.Decision, error) { return api.DecisionDeny, nil })
 			}
 			for range 2 { // the same chat, twice
-				got, err := r.openPage(ctx, "https://github.com", "")
+				got, err := r.openPage(ctx, "https://github.com", "", false)
 				if tt.err != "" {
 					assert.ErrorContains(t, err, tt.err)
 					continue
@@ -149,7 +149,7 @@ func TestOpenPage(t *testing.T) {
 // won't open, or a system browser that won't start.
 func TestOpenPageTool(t *testing.T) {
 	r := &Registry{hooks: &Hooks{}}
-	r.SetPageOpener(func(context.Context, string, string, string) error { return nil })
+	r.SetPageOpener(func(context.Context, string, string, string, bool) error { return nil })
 	r.page.open = PageEmbedded
 	open := toolOf(t)(NewOpenPageTool(r))
 	out := runTool(t, open, map[string]any{"url": "github.com"})
@@ -179,7 +179,7 @@ func TestOpenPageAskRuleAndSessionGone(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			hooks, reqs := decisionHooks(tc.decision)
 			r := &Registry{hooks: hooks, rules: rulesOf(t, nil, []string{"web(ask.example)"}, nil)}
-			r.SetPageOpener(func(context.Context, string, string, string) error { return nil })
+			r.SetPageOpener(func(context.Context, string, string, string, bool) error { return nil })
 			r.page.open = PageEmbedded
 			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
 			if tc.wantErr != "" {
@@ -233,7 +233,7 @@ func TestOpenPageProfiles(t *testing.T) {
 			r.SetBrowserProfiles(func() BrowserProfiles { return BrowserProfiles{Current: work, All: []BrowserProfile{work, home}} })
 			r.page.open = tt.where
 			var got []string
-			r.SetPageOpener(func(_ context.Context, _, _, profile string) error { got = append(got, profile); return nil })
+			r.SetPageOpener(func(_ context.Context, _, _, profile string, _ bool) error { got = append(got, profile); return nil })
 			args := map[string]any{"url": "mail.example"}
 			if tt.profile != "" {
 				args["profile"] = tt.profile
@@ -305,7 +305,7 @@ func TestOpenPagePrivateHosts(t *testing.T) {
 			hooks, reqs := decisionHooks(api.DecisionDeny)
 			r := &Registry{hooks: hooks}
 			opened := 0
-			r.SetPageOpener(func(context.Context, string, string, string) error { opened++; return nil })
+			r.SetPageOpener(func(context.Context, string, string, string, bool) error { opened++; return nil })
 			r.page.open = PageEmbedded
 			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
 			if !tc.asked {
@@ -323,6 +323,36 @@ func TestOpenPagePrivateHosts(t *testing.T) {
 	}
 }
 
+// A page on this computer or its network that the person said to open
+// reaches the window as one (AB-10b: its web tab may load it without
+// browser.allow_local); a public page, and one only an ask rule put to
+// the person, don't.
+func TestOpenPageApprovedLocal(t *testing.T) {
+	for _, tc := range []struct {
+		url   string
+		local bool
+	}{
+		{"http://localhost:3000", true},
+		{"http://127.0.0.1:5173/app", true},
+		{"http://[::1]:8080/", true},
+		{"http://10.1.2.3", true},
+		{"https://router.lan", true},
+		{"https://example.com", false},
+		{"https://asked.example", false},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			hooks, _ := decisionHooks(api.DecisionOnce)
+			r := &Registry{hooks: hooks, rules: rulesOf(t, nil, []string{"web(asked.example)"}, nil)}
+			var got []bool
+			r.SetPageOpener(func(_ context.Context, _, _, _ string, local bool) error { got = append(got, local); return nil })
+			r.page.open = PageEmbedded
+			out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": tc.url})
+			assert.Empty(t, errOf(out))
+			assert.Equal(t, []bool{tc.local}, got)
+		})
+	}
+}
+
 // A page outside a profile's own sites isn't opened signed in with it
 // when the person says no (BP-08a); the page's reach is the browser's:
 // allow_local, the denied domains and the profile's own site names.
@@ -335,7 +365,7 @@ func TestOpenPageProfileSiteRefusedAndReach(t *testing.T) {
 	r.SetBrowserProfiles(func() BrowserProfiles { return BrowserProfiles{Current: work, All: []BrowserProfile{work}} })
 	r.page.open = PageEmbedded
 	opened := 0
-	r.SetPageOpener(func(context.Context, string, string, string) error { opened++; return nil })
+	r.SetPageOpener(func(context.Context, string, string, string, bool) error { opened++; return nil })
 
 	out := runTool(t, toolOf(t)(NewOpenPageTool(r)), map[string]any{"url": "https://attacker.example/csrf.html"})
 	assert.NotEmpty(t, errOf(out))

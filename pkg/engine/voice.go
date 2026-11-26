@@ -40,8 +40,10 @@ import (
 	"google.golang.org/genai"
 )
 
-// Voice (spec_063_voice): a live conversation with a Gemini Live model,
-// the voice agent, whose only tools hand work to the window: the window
+// Voice (spec_063_voice): a spoken conversation with the voice agent,
+// over a Gemini Live model or, with [voice] engine = "cloud", Google
+// Cloud's Speech-to-Text, a text model and Text-to-Speech
+// (voicecloud.go, VOX-70). The agent's only tools hand work to the window: the window
 // runs it as a typed message, so approvals, the sandbox and Changes apply
 // as they do to typing (VOX-11). What it says about finished work comes
 // from the turn's facts, collected here as the turn runs (VOX-17).
@@ -88,7 +90,44 @@ type VoiceOptions struct {
 	// SampleVoice says a short sample in that voice and ends (Settings ›
 	// Voice's Play, VOX-41).
 	SampleVoice string
+	// SampleTuning is how the sample's voice is tuned, with the cloud
+	// engine (the personality editor's Play, PER-41); nil: as the
+	// workspace's personality tunes it.
+	SampleTuning *config.VoiceTuning
 }
+
+// voiceLink is what carries a conversation to its model and back: a
+// Gemini Live session, or the cloud engine's pipeline. What comes back
+// reaches the Voice through heardPiece, saidPiece, turnDone and fail.
+type voiceLink interface {
+	// audio is the person's 16 kHz PCM.
+	audio(pcm []byte) error
+	// activity is the person starting or stopping speaking (hold to talk).
+	activity(start bool) error
+	// tell is a message for the voice to act on and answer aloud.
+	tell(text string) error
+	close()
+}
+
+// liveLink is a Gemini Live session.
+type liveLink struct{ s agent.LiveSession }
+
+func (l liveLink) audio(pcm []byte) error {
+	return l.s.Send(agent.LiveRequest{RealtimeInput: &genai.Blob{MIMEType: "audio/pcm;rate=16000", Data: pcm}})
+}
+
+func (l liveLink) activity(start bool) error {
+	if start {
+		return l.s.Send(agent.LiveRequest{RealtimeInput: &genai.ActivityStart{}})
+	}
+	return l.s.Send(agent.LiveRequest{RealtimeInput: &genai.ActivityEnd{}})
+}
+
+func (l liveLink) tell(text string) error {
+	return l.s.Send(agent.LiveRequest{Content: genai.NewContentFromText(text, genai.RoleUser)})
+}
+
+func (l liveLink) close() { _ = l.s.Close() }
 
 // Voice is a live conversation (one at a time per window, VOX-15).
 type Voice struct {
@@ -96,7 +135,8 @@ type Voice struct {
 	opts    VoiceOptions
 	cfg     config.VoiceConfig
 	model   *runtime.VoiceModel
-	live    agent.LiveSession
+	link    voiceLink
+	engine  string // config.VoiceEngineLive or VoiceEngineCloud
 	cancel  context.CancelFunc
 	done    chan struct{}
 	idleFor time.Duration // under mu
@@ -133,23 +173,52 @@ func (w *Workspace) StartVoice(ctx context.Context, opts VoiceOptions) (*Voice, 
 	if !cfg.Voice.Enabled {
 		return nil, ErrVoiceOff
 	}
-	newModel := w.newVoiceModel
-	if newModel == nil {
-		newModel = runtime.NewVoiceModel
-	}
-	m, err := newModel(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	v := &Voice{w: w, opts: opts, cfg: cfg.Voice, model: m, done: make(chan struct{}), idleFor: cfg.Voice.Idle(), active: time.Now()}
+	v := &Voice{w: w, opts: opts, cfg: cfg.Voice, engine: config.VoiceEngineLive, done: make(chan struct{}), idleFor: cfg.Voice.Idle(), active: time.Now()}
 	if v.opts.OnEvent == nil {
 		v.opts.OnEvent = func(VoiceEvent) {}
 	}
+	if opts.SampleVoice != "" {
+		opts.SummaryOnly = true // one thing said, then the end
+		v.opts.SummaryOnly = true
+	}
+	var cloud *runtime.CloudVoice
+	var m *runtime.VoiceModel
+	var err error
+	// The engine (VOX-70a): the one set; left to auto, the cloud's when
+	// the voice is tuned and Google Cloud is set up, which is found by
+	// trying it, and a live model otherwise.
+	if mode := cfg.Voice.EngineMode(); mode == config.VoiceEngineCloud || (mode == config.VoiceEngineAuto && !v.tuning().Plain()) {
+		m, cloud, err = w.cloudVoice(ctx, cfg)
+		switch {
+		case err == nil:
+			v.engine = config.VoiceEngineCloud
+		case mode == config.VoiceEngineAuto && errors.Is(err, runtime.ErrVoiceNotSetUp):
+			slog.InfoContext(ctx, "voice: the personality's tuning needs the Google Cloud engine, which isn't set up; speaking with a live model", "logger", "voice", "why", err)
+		default:
+			return nil, err
+		}
+	}
+	if cloud == nil {
+		newModel := w.newVoiceModel
+		if newModel == nil {
+			newModel = runtime.NewVoiceModel
+		}
+		if m, err = newModel(ctx, cfg); err != nil {
+			return nil, err
+		}
+	}
+	v.model = m
+	started := false
+	defer func() {
+		if !started && cloud != nil {
+			cloud.Close()
+		}
+	}()
 	tools, err := v.tools()
 	if err != nil {
 		return nil, err
 	}
-	instruction := voicePrompt + v.context() + framedPersonality(w.Personality()) + aboutPerson(cfg.Profile)
+	instruction := voicePrompt + v.written() + v.context() + framedPersonality(w.Personality()) + aboutPerson(cfg.Profile)
 	a, err := llmagent.New(llmagent.Config{
 		Name:                "voice",
 		Description:         "Blitz's voice",
@@ -170,21 +239,31 @@ func (w *Workspace) StartVoice(ctx context.Context, opts VoiceOptions) (*Voice, 
 		return nil, err
 	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	live, events, err := r.RunLive(runCtx, "person", "voice-"+opts.SessionID, runtime.VoiceLiveConfig(v.voiceName(), cfg.Voice))
-	if err != nil {
-		cancel()
-		return nil, err
+	v.cancel = cancel
+	var events func(func(*adksession.Event, error) bool)
+	if cloud != nil {
+		link, err := newCloudLink(runCtx, v, cloud, r)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		v.link = link
+	} else {
+		live, evs, err := r.RunLive(runCtx, "person", "voice-"+opts.SessionID, runtime.VoiceLiveConfig(v.voiceName(), cfg.Voice))
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		v.link, events = liveLink{live}, evs
 	}
-	v.live, v.cancel = live, cancel
-	if opts.SampleVoice != "" {
-		opts.SummaryOnly = true // one thing said, then the end
-		v.opts.SummaryOnly = true
-	}
+	started = true
 	if !opts.SummaryOnly {
 		v.unwatch = w.watchTurns(opts.SessionID, v.turnEnded)
 	}
-	slog.InfoContext(ctx, "voice conversation started", "logger", "voice", "session", opts.SessionID, "model", m.ID, "summary_only", opts.SummaryOnly)
-	go v.loop(runCtx, events)
+	slog.InfoContext(ctx, "voice conversation started", "logger", "voice", "session", opts.SessionID, "engine", v.engine, "model", m.ID, "summary_only", opts.SummaryOnly)
+	if events != nil {
+		go v.loop(runCtx, events)
+	}
 	if !opts.SummaryOnly {
 		go v.idleWatch(runCtx)
 	} else if err := v.tell(v.firstWords()); err != nil {
@@ -225,22 +304,22 @@ func (v *Voice) firstWords() string {
 // context is what the voice knows of where it is (VOX-10).
 func (v *Voice) context() string {
 	st := v.w.Settings()
-	return fmt.Sprintf("\n\n## Where you are\nThe workspace is %q. Its agent is %q, on %s. Reply in the language the person speaks.", filepath.Base(v.w.Dir()), st.Agent, st.Model.Name)
+	language := "Reply in the language the person speaks."
+	if v.engine == config.VoiceEngineCloud {
+		// A Text-to-Speech voice speaks one locale's language (VOX-71).
+		language = fmt.Sprintf("Always reply in the language of the locale %s, whatever language you're spoken to in: your voice speaks only that.", v.speaksIn())
+	}
+	return fmt.Sprintf("\n\n## Where you are\nThe workspace is %q. Its agent is %q, on %s. %s", filepath.Base(v.w.Dir()), st.Agent, st.Model.Name, language)
 }
 
 // Audio sends the person's 16 kHz PCM.
-func (v *Voice) Audio(pcm []byte) error {
-	return v.live.Send(agent.LiveRequest{RealtimeInput: &genai.Blob{MIMEType: "audio/pcm;rate=16000", Data: pcm}})
-}
+func (v *Voice) Audio(pcm []byte) error { return v.link.audio(pcm) }
 
 // Activity says the person started (true) or stopped speaking, with
 // listen = "hold" (VOX-07).
 func (v *Voice) Activity(start bool) error {
 	v.touch()
-	if start {
-		return v.live.Send(agent.LiveRequest{RealtimeInput: &genai.ActivityStart{}})
-	}
-	return v.live.Send(agent.LiveRequest{RealtimeInput: &genai.ActivityEnd{}})
+	return v.link.activity(start)
 }
 
 // Waiting is what the window shows waiting on the person; a new approval
@@ -280,8 +359,13 @@ func (v *Voice) Close() { v.end("closed") }
 // End ends it for a reason ("off": voice was turned off, VOX-02).
 func (v *Voice) End(why string) { v.end(why) }
 
-// ModelID is the live model it talks with.
+// ModelID is the model it talks with: the live model, or the cloud
+// engine's text model.
 func (v *Voice) ModelID() string { return v.model.ID }
+
+// Engine is how it hears and speaks: config.VoiceEngineLive or
+// VoiceEngineCloud.
+func (v *Voice) Engine() string { return v.engine }
 
 // VoiceName is the voice it speaks in.
 func (v *Voice) VoiceName() string { return v.voiceName() }
@@ -305,7 +389,7 @@ func (v *Voice) end(why string) {
 		unwatch()
 	}
 	v.flush()
-	_ = v.live.Close()
+	v.link.close()
 	v.cancel()
 	v.opts.OnEvent(VoiceEvent{Kind: "end", Text: why})
 	slog.Info("voice conversation ended", "logger", "voice", "session", v.opts.SessionID, "why", why)
@@ -346,9 +430,7 @@ func (v *Voice) loop(ctx context.Context, events func(func(*adksession.Event, er
 	for ev, err := range events {
 		if err != nil {
 			if ctx.Err() == nil {
-				slog.Warn("voice conversation failed", "logger", "voice", "error", err)
-				v.opts.OnEvent(VoiceEvent{Kind: "error", Text: v.errorText(err)})
-				v.end("error")
+				v.fail(err)
 			}
 			return
 		}
@@ -358,6 +440,13 @@ func (v *Voice) loop(ctx context.Context, events func(func(*adksession.Event, er
 		v.event(ev)
 	}
 	v.end(cmp.Or(v.goodbye(), "closed"))
+}
+
+// fail ends the conversation over err, saying why (VOX-24).
+func (v *Voice) fail(err error) {
+	slog.Warn("voice conversation failed", "logger", "voice", "engine", v.engine, "error", err)
+	v.opts.OnEvent(VoiceEvent{Kind: "error", Text: v.errorText(err)})
+	v.end("error")
 }
 
 func (v *Voice) goodbye() string {
@@ -374,23 +463,10 @@ func (v *Voice) event(ev *adksession.Event) {
 		return
 	}
 	if t := r.InputTranscription; t != nil && t.Text != "" {
-		v.touch()
-		v.mu.Lock()
-		v.heard.WriteString(t.Text)
-		v.mu.Unlock()
-		v.opts.OnEvent(VoiceEvent{Kind: "heard", Text: t.Text, Final: t.Finished})
+		v.heardPiece(t.Text, t.Finished)
 	}
 	if t := r.OutputTranscription; t != nil && t.Text != "" {
-		v.touch()
-		v.mu.Lock()
-		first := v.said.Len() == 0
-		v.said.WriteString(t.Text)
-		v.mu.Unlock()
-		if first {
-			v.closeHeard()
-			v.opts.OnEvent(VoiceEvent{Kind: "state", State: "speaking"})
-		}
-		v.opts.OnEvent(VoiceEvent{Kind: "said", Text: t.Text})
+		v.saidPiece(t.Text)
 	}
 	if r.Content != nil {
 		for _, p := range r.Content.Parts {
@@ -406,11 +482,42 @@ func (v *Voice) event(ev *adksession.Event) {
 		slog.Debug("voice usage", "logger", "voice", "model", v.model.ID, "input_tokens", r.UsageMetadata.PromptTokenCount, "output_tokens", r.UsageMetadata.CandidatesTokenCount)
 	}
 	if r.TurnComplete || r.Interrupted {
-		v.flush()
-		v.opts.OnEvent(VoiceEvent{Kind: "state", State: "listening"})
-		if why := v.goodbye(); why != "" || v.opts.SummaryOnly {
-			go v.end(cmp.Or(why, "summary"))
-		}
+		v.turnDone()
+	}
+}
+
+// heardPiece is the next of what the person says.
+func (v *Voice) heardPiece(text string, finished bool) {
+	v.touch()
+	v.mu.Lock()
+	v.heard.WriteString(text)
+	v.mu.Unlock()
+	v.opts.OnEvent(VoiceEvent{Kind: "heard", Text: text, Final: finished})
+}
+
+// saidPiece is the next of what the voice says: its first ends the
+// person's line.
+func (v *Voice) saidPiece(text string) {
+	v.touch()
+	v.mu.Lock()
+	first := v.said.Len() == 0
+	v.said.WriteString(text)
+	v.mu.Unlock()
+	if first {
+		v.closeHeard()
+		v.opts.OnEvent(VoiceEvent{Kind: "state", State: "speaking"})
+	}
+	v.opts.OnEvent(VoiceEvent{Kind: "said", Text: text})
+}
+
+// turnDone is the voice having said its piece, or been spoken over: what
+// was said is kept, and a goodbye or the one thing it was opened to say
+// ends the conversation.
+func (v *Voice) turnDone() {
+	v.flush()
+	v.opts.OnEvent(VoiceEvent{Kind: "state", State: "listening"})
+	if why := v.goodbye(); why != "" || v.opts.SummaryOnly {
+		go v.end(cmp.Or(why, "summary"))
 	}
 }
 
@@ -453,7 +560,7 @@ func (v *Voice) record(role, text string) {
 // tell sends Blitz's own message to the voice ([Blitz] …), which it says.
 func (v *Voice) tell(text string) error {
 	v.touch()
-	return v.live.Send(agent.LiveRequest{Content: genai.NewContentFromText(text, genai.RoleUser)})
+	return v.link.tell(text)
 }
 
 func (v *Voice) tellQuietly(text string) {
@@ -465,6 +572,11 @@ func (v *Voice) tellQuietly(text string) {
 // errorText is err as the window says it (VOX-24), with no secret in it.
 func (v *Voice) errorText(err error) string {
 	s := err.Error()
+	if v.engine == config.VoiceEngineCloud {
+		if why := runtime.CloudVoiceProblem(err, v.model.Project); why != "" {
+			return why
+		}
+	}
 	switch {
 	case strings.Contains(s, "API key not valid"), strings.Contains(s, "401"), strings.Contains(s, "403"):
 		return "Google refused the voice's sign-in: check Gemini in Settings › Providers."

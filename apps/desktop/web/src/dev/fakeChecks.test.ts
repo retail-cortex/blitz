@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { agentProblems, apiProblem, checkAnswer, configValueProblem, guardrailProblems, jobProblems, mcpProblem, providerProblem, ruleProblems, sessionSetting, setModelSetting, withKeepalives, type AgentFields, type JobFields } from "./fakeChecks";
+import { agentProblems, apiProblem, checkAnswer, configValueProblem, guardrailProblems, jobProblems, mcpProblem, personalityCheck, providerProblem, ruleProblems, sessionSetting, setModelSetting, tuningCheck, withKeepalives, type AgentFields, type JobFields } from "./fakeChecks";
 import type { Form } from "../a2ui/model";
 
 // The fake refuses what the service refuses: each case is one the Go
@@ -121,7 +121,36 @@ describe("configValueProblem (config.SetValue)", () => {
     ["a health cost", "health.max_cost_usd", "1", false],
     ["a provider that isn't one", "llm.provider", "acme", true],
     ["a sign-in a provider doesn't take", "llm.openai.auth", "oauth", true],
+    // The cloud voice engine's (spec_063_voice VOX-70).
+    ["a voice engine", "voice.engine", "cloud", false],
+    ["the engine left to Blitz", "voice.engine", "auto", false],
+    ["a voice engine that isn't one", "voice.engine", "gemini", true],
+    ["the language spoken", "voice.language", "fr-CA", false],
+    ["a language the voices don't speak", "voice.language", "en-ZZ", true],
+    ["the voice's text model", "voice.text_model", "gemini/gemini-3.8-flash", false],
+    ["a text model without its provider", "voice.text_model", "flash", true],
+    ["Speech-to-Text's model", "voice.hear_model", "chirp_3", false],
+    ["a model's name that isn't one", "voice.hear_model", "Chirp 3", true],
+    ["Speech-to-Text's location", "voice.hear_location", "us-central1", false],
   ])("%s", (_, key, value, bad) => expect(!!configValueProblem(key, value)).toBe(bad));
+});
+
+describe("personalityCheck (engine.CheckPersonality)", () => {
+  const p = { name: "coach", description: "", voice: "Puck", text: "Cheer." };
+  it.each([
+    ["as it comes", p, ""],
+    ["tuned", { ...p, locale: "en-GB", speed: 0.9, pitch: -1.5 }, ""],
+    ["a voice that isn't one", { ...p, voice: "Bob" }, `"Bob" isn't one of Gemini's voices`],
+    ["a locale the voices don't speak", { ...p, locale: "en-ZZ" }, `"en-ZZ" isn't a locale the voices speak (en-GB, fr-CA, …)`],
+    ["too fast", { ...p, speed: 3 }, "a voice's speed is from 0.5 to 2 (1 is its own), not 3"],
+    ["too low", { ...p, pitch: -9 }, "a voice's pitch is from -6 to 6 semitones (0 is its own), not -9"],
+    ["the two together", { ...p, speed: 2, pitch: -6 }, "speed 2 with pitch -6 is beyond the voice: lower one of them"],
+    ["no text", { ...p, text: " " }, "a personality needs its text: how it should sound"],
+  ])("%s", (_, got, want) => expect(personalityCheck(got)).toBe(want));
+  it("checks a tuning alone, as a sample's is", () => {
+    expect(tuningCheck({ locale: "", speed: 0, pitch: 0 })).toBe("");
+    expect(tuningCheck({ locale: "fr-CA", speed: 1.2, pitch: 3 })).toBe("");
+  });
 });
 
 describe("setModelSetting (ModelSettings.Set)", () => {

@@ -31,6 +31,7 @@ While the microphone is open, the bar above the chat box shows what's heard and 
 |---|---|
 | **Voice** | On or off. Off, there's no microphone, no shortcut, nothing sent to Google, and the microphone is never used. |
 | **Model** | The Gemini Live model. Blitz lists the live models your provider offers, checks which ones your key or Google Cloud project can actually use, and offers only those; the default is the newest of them. If none answers, it says why here. |
+| **Voice engine** | **Automatic** (Google Cloud when your personality sets a locale, speed or pitch and Google Cloud is set up, Gemini Live otherwise), **Gemini Live** (one model hears you and answers in its own voice: the quickest) or **Google Cloud** (Speech-to-Text hears you, a text model answers, and Text-to-Speech says it, in your personality's locale, at its speed and pitch). See [A voice of your own](#a-voice-of-your-own). |
 | **Voice** | One of Gemini's voices, with **Play** to hear a sample. A [personality](agents.md#personality) can bring its own voice. |
 | **Microphone** | Which microphone, with a level meter. This one is kept by the window, not the settings file. |
 | **Listening** | **Tap to talk** (click to start, click to stop; Gemini hears when you start and stop speaking) or **Hold to talk** (Blitz hears you only while you hold the microphone or ⌥⌘V: for noisy rooms). |
@@ -57,6 +58,30 @@ buffer_ms = 20        # 20-2000
 idle_minutes = 5
 ```
 
+## A voice of your own
+
+A [personality](agents.md#personality) can tune its voice, in Settings › Personality, when you edit one of your own (duplicate a built-in to start from it):
+
+- **Locale**: the language and accent it speaks, such as English (United Kingdom) or French (Canada).
+- **Speed**: a slider from 0.50× to 2.00×; 1.00× is the voice's own pace.
+- **Pitch**: a slider from −6 to +6 semitones. A semitone or two goes a long way.
+- **Play** says a short sample as it's tuned, before you save.
+
+These are spoken by the **Google Cloud** voice engine, in conversations, spoken summaries and samples alike. With **Voice engine** left on **Automatic** (Settings › Voice), Blitz uses it by itself for a personality that sets any of them, once Google Cloud is set up. Gemini Live speaks only in its own voice: with the engine set to Gemini Live, or Google Cloud not set up, they're kept but not heard.
+
+The Google Cloud engine needs Google Cloud's own sign-in, not a Gemini API key:
+
+1. Sign in on the machine running Blitz: `gcloud auth application-default login`.
+2. In that Google Cloud project, turn on the **Cloud Text-to-Speech API** and the **Cloud Speech-to-Text API**.
+3. If Blitz can't tell which project to use, set `[llm.gemini] project_id` or `GOOGLE_CLOUD_PROJECT`.
+
+Settings › Voice says what's missing, and which project speech is made in. There you also choose **The language you speak** (what Speech-to-Text listens for; your personality's locale unless you say otherwise) and the **Model** that writes what's said (your workspace's small model unless you name one).
+
+It answers a little more slowly than Gemini Live, since three services take their turn. Speaking over it stops it, as with Gemini Live.
+
+
 ## Privacy and cost
 
 While a conversation is open, your microphone's audio goes to Google's Gemini Live API through the provider you set up (your API key, or your Vertex AI project), and nowhere else. Blitz never saves audio; it keeps the words, as the conversation's spoken lines. Gemini charges for the audio as for any model, so voice isn't free. See [Privacy](privacy.md).
+
+With the **Google Cloud** voice engine, the audio goes to Google Cloud's Speech-to-Text in your own project instead, the words it hears go, as text, to the model you chose for voice (your workspace's small model unless you name one, of whichever provider that is), and what that model writes goes to Google Cloud's Text-to-Speech. Google Cloud charges for the minutes it listens (while the microphone is open with tap to talk, silence included; hold to talk sends only what you hold for) and the characters it speaks, and the model for its tokens.

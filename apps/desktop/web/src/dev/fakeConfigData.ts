@@ -151,7 +151,7 @@ export const fakeMCP: MCPServerConfig[] = [
 export const fakePolicy = { ...policyDefaults, allow: ["shell", "write", "web"], maxConcurrent: 3, runningMaxConcurrent: 2, path: "/home/me/.blitz/.env.toml" };
 
 /** Personality shape stored in the fake. */
-export type FakePersonality = { name: string; description: string; voice: string; source: string; text: string };
+export type FakePersonality = { name: string; description: string; voice: string; source: string; text: string; locale?: string; speed?: number; pitch?: number };
 
 const fakeBuiltinPersonalities: FakePersonality[] = [
   { name: "default", description: "Blitz's own: clear, capable, neutral", voice: "", source: "built-in", text: "" },

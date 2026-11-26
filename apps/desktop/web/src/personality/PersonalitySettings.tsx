@@ -20,10 +20,11 @@ import { config, workspaces } from "../api";
 import { message } from "../errors";
 import { configChanged } from "../events";
 import type { PersonProfile, Personality } from "../gen/blitz/v1/config_pb";
-import { t } from "../i18n";
+import { language, t } from "../i18n";
 import { useApp } from "../state";
 import { Button, Chip, Dialog, Icon, IconButton, useSnackbar } from "@blitz/webui";
 import { PersonalityEditor, type Draft } from "./PersonalityEditor";
+import { isPlain, plainTuning, speedOf, tuningSummary } from "./tuning";
 import { copyName, personalityDescription, personalityLabel, personalitySource } from "./personality";
 
 /** What Try it answered, and for which personality. */
@@ -81,7 +82,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
   const open = async (p: Personality, copy: boolean) => {
     try {
       const full = (await config.getPersonality({ name: p.name })).personality;
-      const draft: Draft = { name: copy ? copyName(p.name, list.map((x) => x.name)) : p.name, description: copy ? personalityDescription(p) : (full?.description ?? ""), voice: full?.voice ?? "", text: full?.text ?? "" };
+      const draft: Draft = { name: copy ? copyName(p.name, list.map((x) => x.name)) : p.name, description: copy ? personalityDescription(p) : (full?.description ?? ""), voice: full?.voice ?? "", text: full?.text ?? "", locale: full?.locale ?? "", speed: speedOf(full?.speed ?? 0), pitch: full?.pitch ?? 0 };
       setEditing({ draft, original: copy ? "" : p.name });
     } catch (e) {
       snack(message(e), { error: true });
@@ -114,6 +115,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
                 <span className="ellipsis">
                   {personalityLabel(p)}
                   {voiceOn && p.voice && <small className="muted"> · {t("desktop.personality.voice_named", { voice: p.voice })}</small>}
+                  {voiceOn && !isPlain(p) && <small className="muted"> · {tuningSummary(p, language())}</small>}
                 </span>
                 <small className="ellipsis">{personalityDescription(p)}</small>
               </span>
@@ -155,7 +157,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
         </section>
       )}
       <div className="row">
-        <Button variant="tonal" icon={mdiPlus} disabled={busy} onClick={() => setEditing({ draft: { name: "", description: "", voice: "", text: "" }, original: "" })}>
+        <Button variant="tonal" icon={mdiPlus} disabled={busy} onClick={() => setEditing({ draft: { name: "", description: "", voice: "", text: "", ...plainTuning }, original: "" })}>
           {t("desktop.personality.new")}
         </Button>
       </div>
@@ -168,7 +170,7 @@ export function PersonalitySettings({ voiceOn = false }: { voiceOn?: boolean }) 
           voiceOn={voiceOn}
           onClose={() => setEditing(null)}
           onSave={(d) =>
-            act(() => config.savePersonality({ personality: { name: d.name.trim(), description: d.description.trim(), voice: d.voice, text: d.text } }), t("desktop.personality.saved", { name: d.name.trim() })).then((ok) => {
+            act(() => config.savePersonality({ personality: { name: d.name.trim(), description: d.description.trim(), voice: d.voice, text: d.text, locale: d.locale, speed: speedOf(d.speed), pitch: d.pitch } }), t("desktop.personality.saved", { name: d.name.trim() })).then((ok) => {
               if (ok) setEditing(null);
               return ok;
             })

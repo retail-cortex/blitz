@@ -174,3 +174,24 @@ let ender: (() => void) | null = null;
 export const setEnder = (f: (() => void) | null) => void (ender = f);
 /** Ends the window's conversation, if one is open. */
 export const endConversation = () => ender?.();
+
+/**
+ * Speech-to-Text's models and where each runs, as Settings › Voice
+ * offers them (spec_063_voice VOX-73a): the ones tried against Google's
+ * service, the default first ("" and "": long, in global). The Chirp
+ * models hear well, but say nothing until the person has finished, so
+ * speaking over the voice waits for a whole sentence.
+ */
+export const hearChoices = [
+  { id: "default", model: "", location: "" },
+  { id: "telephony", model: "telephony", location: "global" },
+  { id: "chirp_3", model: "chirp_3", location: "us" },
+  { id: "chirp_2", model: "chirp_2", location: "us-central1" },
+] as const;
+
+/** The choice [voice] hear_model and hear_location are (long in global is the default's), or undefined for a pair set by hand. */
+export function hearChoice(model: string, location: string) {
+  const m = model === "long" ? "" : model;
+  const l = location === "global" && m === "" ? "" : location;
+  return hearChoices.find((c) => c.model === m && (c.location === l || (c.location === "global" && l === "")));
+}

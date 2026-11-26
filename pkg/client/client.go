@@ -18,12 +18,16 @@
 package client
 
 import (
+	"cmp"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/socket"
@@ -131,10 +135,55 @@ func (r *Remote) SetUI(approve api.Approver, ask api.UserPromptFunc) {
 // [images] settings, from GetSettings).
 func (r *Remote) ImagesEnabled() bool { return r.getSettings().ImagesEnabled }
 
+// How a turn's stream is taken up again when it drops (spec_021_service
+// SVC-20a): less long than the minute the service keeps a turn nobody
+// watches.
+var (
+	turnGiveUp   = 45 * time.Second
+	turnRetries  = []time.Duration{100 * time.Millisecond, 250 * time.Millisecond, 500 * time.Millisecond, time.Second}
+	turnRetryMax = 2 * time.Second
+	turnStopWait = 10 * time.Second
+)
+
+// newTurnID names a turn for the service: 128 random bits, in hex (a
+// variable so that tests know the name).
+var newTurnID = func() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
+// streamDropped reports whether a turn's stream failed as a connection
+// does (the network changed, the socket closed), rather than with the
+// service's own answer: every error the service sends has a reason
+// (SVC-30a), and one made here has none.
+func streamDropped(err error) bool {
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		return err != nil
+	}
+	for _, d := range ce.Details() {
+		if v, derr := d.Value(); derr == nil {
+			if _, ok := v.(*pb.ErrorInfo); ok {
+				return false
+			}
+		}
+	}
+	// Whatever its code: a stream cut mid-message is "incomplete
+	// envelope", an invalid argument by its code.
+	return true
+}
+
 // Run runs a turn in the service, answering its approval requests and
 // questions through the UI set with SetUI. OnFinished runs when the turn's
 // last event arrives, after the service has collected unread steer
 // messages; a message sent later waits for the agent's next turn.
+//
+// The turn has a name, so it outlives its stream (SVC-20a): when the
+// stream drops, Run asks for the turn again from the last event it
+// received, for up to turnGiveUp, and the turn carries on as if nothing
+// happened. Stopping is said, not left to the stream's end: when ctx
+// ends (Ctrl-C), the service is told to stop the turn.
 func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(api.Event)) (api.TurnResult, error) {
 	turn := &pb.Turn{
 		Text: t.Text, Prompt: t.Prompt, Plan: t.Plan, ReadOnly: t.ReadOnly, Aside: t.Aside, Accepted: t.Accepted,
@@ -148,17 +197,83 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 	}
 	turn.Context = contextMsgs(t.Context)
 	r.ranIn(sessionID)
-	stream, err := r.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: r.dir, SessionId: sessionID, Turn: turn}))
-	if err != nil {
-		return api.TurnResult{}, fromAPI(err)
-	}
-	defer stream.Close()
 	r.mu.Lock()
 	approve, ask := r.approve, r.ask
 	r.mu.Unlock()
 
+	id := newTurnID()
+	// stop tells the service to stop the turn, which the stream's end no
+	// longer does; ctx has ended, so it's asked on a context of its own.
+	stop := func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), turnStopWait)
+		defer cancel()
+		_, _ = r.sessions.StopTurn(sctx, connect.NewRequest(&pb.StopTurnRequest{Workspace: r.dir, TurnId: id}))
+	}
+	var last uint64 // the last event received, by its seq
+	var lost time.Time
+	tries := 0
+	for {
+		res, done, err := r.follow(ctx, sessionID, turn, id, &last, t, approve, ask, on, func() { lost, tries = time.Time{}, 0 })
+		if done {
+			return res, err
+		}
+		switch {
+		case ctx.Err() != nil:
+			stop()
+			return api.TurnResult{}, cmp.Or(fromAPI(err), ctx.Err())
+		case last == 0 || !streamDropped(err):
+			// The service's own answer; or a service that doesn't number
+			// its events (an older one, whose turn ended with the stream):
+			// asking again would run the prompt twice.
+			if err == nil {
+				err = errors.New(i18n.T("attached.turn_unfinished"))
+			}
+			return api.TurnResult{}, fromAPI(err)
+		}
+		if lost.IsZero() {
+			lost = time.Now()
+		}
+		if time.Since(lost) >= turnGiveUp {
+			stop() // no longer followed: so it doesn't run on unseen
+			return api.TurnResult{}, fromAPI(err)
+		}
+		wait := turnRetryMax
+		if tries < len(turnRetries) {
+			wait = turnRetries[tries]
+		}
+		tries++
+		select {
+		case <-ctx.Done():
+			stop()
+			return api.TurnResult{}, ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+}
+
+// follow reads the turn's stream once, from the event after *last: done
+// with the turn's result when its last event came; else why the stream
+// ended (nil when it ended without one), to be asked for again or not.
+// alive is called for each message, which shows the service is there.
+func (r *Remote) follow(ctx context.Context, sessionID string, turn *pb.Turn, id string, last *uint64, t api.Turn, approve api.Approver, ask api.UserPromptFunc, on func(api.Event), alive func()) (api.TurnResult, bool, error) {
+	stream, err := r.sessions.RunTurn(ctx, connect.NewRequest(&pb.RunTurnRequest{Workspace: r.dir, SessionId: sessionID, Turn: turn, TurnId: id, AfterSeq: *last}))
+	if err != nil {
+		return api.TurnResult{}, false, err
+	}
+	defer stream.Close()
 	for stream.Receive() {
-		ev := stream.Msg().Event
+		alive()
+		m := stream.Msg()
+		if m.Seq > 0 {
+			if m.Seq <= *last {
+				continue // sent again: already acted on
+			}
+			*last = m.Seq
+		}
+		ev := m.Event
+		if ev == nil {
+			continue
+		}
 		switch k := ev.Kind.(type) {
 		case *pb.TurnEvent_Accepted:
 			if t.OnAccepted != nil {
@@ -174,17 +289,14 @@ func (r *Remote) Run(ctx context.Context, sessionID string, t api.Turn, on func(
 			}
 			f := k.Finished
 			res := api.TurnResult{Output: f.Output, Before: usage(f.Before), After: usage(f.After), Leftover: f.Leftover}
-			return res, errorFromInfo(f.Error)
+			return res, true, errorFromInfo(f.Error)
 		default:
 			if e, ok := event(ev); ok {
 				on(e)
 			}
 		}
 	}
-	if err := stream.Err(); err != nil {
-		return api.TurnResult{}, fromAPI(err)
-	}
-	return api.TurnResult{}, errors.New(i18n.T("attached.turn_unfinished"))
+	return api.TurnResult{}, false, stream.Err()
 }
 
 func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *pb.ApprovalRequest) {
@@ -197,6 +309,9 @@ func (r *Remote) answerApproval(ctx context.Context, approve api.Approver, req *
 		}); err != nil {
 			d = api.DecisionDeny
 		}
+	}
+	if ctx.Err() != nil {
+		return // the turn is being stopped: there's nothing left to answer
 	}
 	if _, err := r.sessions.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{Workspace: r.dir, RequestId: req.RequestId, Decision: decisionMsg(d)})); err != nil {
 		r.failed("answering an approval", err)

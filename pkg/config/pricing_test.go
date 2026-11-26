@@ -51,3 +51,37 @@ func TestDefaultConfigUsesPricesInEffect(t *testing.T) {
 	got := DefaultConfig().Pricing["gemini-3.8-flash"]
 	assert.Equal(t, want, got, "DefaultConfig price %+v, want %+v", got, want)
 }
+
+// Gemini 4's prices (spec_015_models MDL-97a): each of its four models
+// is priced, a dated version by its model's price; Argon's and Carbon's
+// double on 2026-12-01, Neon's and Hydrogen's don't change.
+func TestGemini4Pricing(t *testing.T) {
+	nov30 := time.Date(2026, 11, 30, 23, 59, 59, 0, time.UTC)
+	dec1 := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	intro := ModelPrice{InputPerMTok: 2, OutputPerMTok: 10, CachedInputPerMTok: 0.10}
+	full := ModelPrice{InputPerMTok: 4, OutputPerMTok: 20, CachedInputPerMTok: 0.20}
+	neon := ModelPrice{InputPerMTok: 3, OutputPerMTok: 15, CachedInputPerMTok: 0.15}
+	hydrogen := ModelPrice{InputPerMTok: 1.50, OutputPerMTok: 7.50, CachedInputPerMTok: 0.075}
+	for _, tc := range []struct {
+		model         string
+		before, after ModelPrice
+	}{
+		{"gemini-4-argon", intro, full},
+		{"gemini-4-carbon", intro, full},
+		{"gemini-4-neon", neon, neon},
+		{"gemini-4-hydrogen", hydrogen, hydrogen},
+		{"gemini-4-carbon-001", intro, full}, // a dated version: its model's price
+		{"gemini-4-neon-preview-11-2026", neon, neon},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			got, ok := PriceFor(DefaultPricingAt(nov30), tc.model)
+			assert.True(t, ok, "priced")
+			assert.Equal(t, tc.before, got, "through 2026-11-30")
+			got, ok = PriceFor(DefaultPricingAt(dec1), tc.model)
+			assert.True(t, ok, "priced")
+			assert.Equal(t, tc.after, got, "from 2026-12-01")
+		})
+	}
+	_, ok := PriceFor(DefaultPricingAt(dec1), "gemini-4-xenon")
+	assert.False(t, ok, "a Gemini 4 model nobody priced has no price, not a sibling's")
+}

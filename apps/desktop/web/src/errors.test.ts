@@ -17,7 +17,7 @@
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
-import { isUnavailable, message, reason, reasonText } from "./errors";
+import { isStreamDrop, isUnavailable, message, reason, reasonText } from "./errors";
 import { ErrorInfoSchema } from "./gen/blitz/v1/turn_pb";
 
 const withReason = (code: Code, why: string, text = "x") => new ConnectError(text, code, undefined, [{ desc: ErrorInfoSchema, value: create(ErrorInfoSchema, { reason: why }) }]);
@@ -49,5 +49,21 @@ describe("an SVC-30 reason in words", () => {
   it("words each reason the page acts on", () => {
     for (const why of ["SANDBOX_UNAVAILABLE", "EVAL_RUN_NOT_FOUND", "CONNECTOR_GLOBAL", "RUN_IN_PROGRESS", "WORKSPACE_BUSY"]) expect(reasonText(why)).not.toBe(why);
     expect(reasonText("")).toBe("");
+  });
+});
+
+describe("isStreamDrop", () => {
+  it.each([
+    ["Chromium's network error", new ConnectError("network error", Code.Unknown), true],
+    ["the browser's own error", new TypeError("Failed to fetch"), true],
+    ["the page server without the service", new ConnectError("fetch failed", Code.Unavailable), true],
+    ["a stream cut off", new ConnectError("premature end of stream", Code.Aborted), true],
+    ["the service stopping", withReason(Code.Unavailable, "SHUTTING_DOWN"), false],
+    ["a turn the service forgot", withReason(Code.NotFound, "UNKNOWN_TURN"), false],
+    ["the service's own failure", withReason(Code.Internal, "INTERNAL"), false],
+    ["a message cut short", new ConnectError("protocol error: incomplete envelope", Code.InvalidArgument), true],
+    ["a request the service refused", withReason(Code.InvalidArgument, "INVALID_TURN"), false],
+  ])("%s", (_, e, want) => {
+    expect(isStreamDrop(e)).toBe(want);
   });
 });

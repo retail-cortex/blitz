@@ -63,7 +63,6 @@ func TestListPersonalities(t *testing.T) {
 			assert.NotEmpty(t, p.Description)
 			assert.Contains(t, config.GeminiVoices, p.Voice)
 			assert.NotEmpty(t, p.Text)
-			assert.LessOrEqual(t, len(p.Text), MaxPersonalityText)
 		})
 	}
 	p, err := GetPersonality(config.OrgLayer{}, " Pirate ")
@@ -81,16 +80,16 @@ func TestCheckPersonality(t *testing.T) {
 		change func(*api.Personality)
 		want   string
 	}{
-		"good":        {func(*api.Personality) {}, ""},
-		"bad name":    {func(p *api.Personality) { p.Name = "My Voice" }, "lower-case"},
-		"long name":   {func(p *api.Personality) { p.Name = strings.Repeat("a", 41) }, "lower-case"},
-		"default":     {func(p *api.Personality) { p.Name = "default" }, "Blitz's own"},
-		"no text":     {func(p *api.Personality) { p.Text = "  " }, "needs its text"},
-		"long text":   {func(p *api.Personality) { p.Text = strings.Repeat("é", MaxPersonalityText+1) }, "at most 2000"},
-		"bad voice":   {func(p *api.Personality) { p.Voice = "Bob" }, "Gemini's voices"},
-		"two lines":   {func(p *api.Personality) { p.Description = "a\nb" }, "one line"},
-		"secret":      {func(p *api.Personality) { p.Text = "Be kind.\nAKIAIOSFODNN7EXAMPLE" }, "line 2 looks like a secret"},
-		"exact limit": {func(p *api.Personality) { p.Text = strings.Repeat("é", MaxPersonalityText) }, ""},
+		"good":      {func(*api.Personality) {}, ""},
+		"bad name":  {func(p *api.Personality) { p.Name = "My Voice" }, "lower-case"},
+		"long name": {func(p *api.Personality) { p.Name = strings.Repeat("a", 41) }, "lower-case"},
+		"default":   {func(p *api.Personality) { p.Name = "default" }, "Blitz's own"},
+		"no text":   {func(p *api.Personality) { p.Text = "  " }, "needs its text"},
+		// As long as it needs to be: no model's API limits it (PER-01a).
+		"long text": {func(p *api.Personality) { p.Text = strings.Repeat("é", 50_000) }, ""},
+		"bad voice": {func(p *api.Personality) { p.Voice = "Bob" }, "Gemini's voices"},
+		"two lines": {func(p *api.Personality) { p.Description = "a\nb" }, "one line"},
+		"secret":    {func(p *api.Personality) { p.Text = "Be kind.\nAKIAIOSFODNN7EXAMPLE" }, "line 2 looks like a secret"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := good
@@ -216,7 +215,7 @@ func TestTryPersonality(t *testing.T) {
 	assert.Contains(t, system, "Be a patient mentor.")
 	assert.Equal(t, []string{TryQuestion}, llm.prompts)
 
-	_, err = w.TryPersonality(context.Background(), strings.Repeat("x", MaxPersonalityText+1))
+	_, err = w.TryPersonality(context.Background(), "Be kind.\nAKIAIOSFODNN7EXAMPLE")
 	var invalid *api.InvalidSettingError
 	assert.ErrorAs(t, err, &invalid)
 
@@ -272,4 +271,46 @@ func TestAboutPerson(t *testing.T) {
 	sys = system()
 	assert.NotContains(t, sys, "Ryan")
 	assert.Contains(t, sys, "gender-neutral words")
+}
+
+// A personality's voice is tuned (PER-41): its locale, speed and pitch
+// are kept in its file's frontmatter (not what's its own: speed 1, pitch
+// 0), read back, and refused when the voices can't speak them; a file
+// whose tuning they can't speak still loads, without it.
+func TestPersonalityTuning(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	p := api.Personality{Name: "nagatha", Voice: "Aoede", Locale: "en-GB", Speed: 0.9, Pitch: -1.5, Text: "Poised."}
+	require.NoError(t, SavePersonality(p))
+	got, err := GetPersonality(config.OrgLayer{}, "nagatha")
+	require.NoError(t, err)
+	p.Source = PersonalityOwn
+	assert.Equal(t, p, got)
+	assert.Equal(t, config.VoiceTuning{Locale: "en-GB", Speed: 0.9, Pitch: -1.5}, personalityTuning(got))
+	data, err := os.ReadFile(filepath.Join(PersonalitiesDir(), "nagatha.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "---\nlocale: en-GB\npitch: -1.5\nspeed: 0.9\nvoice: Aoede\n---\nPoised.\n", string(data))
+	for _, listed := range ListPersonalities(config.OrgLayer{}) {
+		if listed.Name == "nagatha" {
+			assert.Equal(t, "en-GB", listed.Locale, "in the list too")
+		}
+	}
+
+	require.NoError(t, SavePersonality(api.Personality{Name: "plain", Speed: 1, Text: "As it is."}))
+	data, err = os.ReadFile(filepath.Join(PersonalitiesDir(), "plain.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "As it is.\n", string(data), "its own speed and pitch aren't written")
+
+	for name, bad := range map[string]api.Personality{
+		"a locale":         {Name: "x", Text: "t", Locale: "en-ZZ"},
+		"a speed":          {Name: "x", Text: "t", Speed: 3},
+		"a pitch":          {Name: "x", Text: "t", Pitch: -9},
+		"the two together": {Name: "x", Text: "t", Speed: 2, Pitch: -6},
+	} {
+		assert.Error(t, CheckPersonality(bad), name)
+	}
+
+	writePersonality(t, filepath.Join(PersonalitiesDir(), "odd.md"), "---\nvoice: Kore\nlocale: en-ZZ\nspeed: 9\n---\nStill here.\n")
+	odd, err := GetPersonality(config.OrgLayer{}, "odd")
+	require.NoError(t, err)
+	assert.Equal(t, api.Personality{Name: "odd", Voice: "Kore", Source: PersonalityOwn, Text: "Still here."}, odd)
 }

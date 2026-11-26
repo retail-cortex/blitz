@@ -17,6 +17,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,6 +31,7 @@ import (
 	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/genai"
 )
@@ -255,4 +257,119 @@ func TestVoiceDescribeAndReasons(t *testing.T) {
 	} {
 		assert.Equal(t, want, reasonOf(voiceError(fmt.Errorf("wrapped: %w", err))))
 	}
+}
+
+// The cloud engine through the service (spec_063_voice VOX-70, VOX-74,
+// spec_064_personality PER-41): described with its settings, the locales
+// its voices speak and what it's missing (Google Cloud's sign-in, not
+// Gemini's); a personality's tuning saved, listed and described; a
+// sample said in the tuning the editor has, refused when the voices
+// can't speak it; and a conversation started says which engine it's on.
+func TestVoiceCloudEngine(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/nonexistent")
+	t.Chdir(t.TempDir())
+	var spoke []config.VoiceTuning
+	s := New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = t.TempDir()
+		if _, err := engine.GetPersonality(config.OrgLayer{}, "nagatha"); err == nil {
+			cfg.UI.Personality = "nagatha" // the person's default, once it's saved
+		}
+		return engine.Open(ctx, cfg, engine.Options{
+			Model: runtime.NewMockLLM("gemini-3.8-flash"),
+			NewModel: func(context.Context, *config.Config, string) (model.LLM, error) {
+				return runtime.NewMockLLM("voice-text", genai.NewContentFromText("Hi.", genai.RoleModel)), nil
+			},
+			NewCloudVoice: func(context.Context, *config.Config) (*runtime.CloudVoice, error) {
+				return runtime.NewCloudVoiceWith(func(_ context.Context, _ string, tn config.VoiceTuning) (runtime.SpeechStream, error) {
+					spoke = append(spoke, tn)
+					return &oneSpeech{audio: make(chan []byte, 4)}, nil
+				}, nil), nil
+			},
+		})
+	})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	voice, cfg := pb.NewVoiceServiceClient(http.DefaultClient, srv.URL), pb.NewConfigServiceClient(http.DefaultClient, srv.URL)
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	d, err := voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "auto", d.Msg.Engine, "unless set")
+	assert.Equal(t, "live", d.Msg.EngineInUse, "nothing tuned, and no Google Cloud")
+	assert.Contains(t, d.Msg.Locales, "en-GB")
+	assert.Contains(t, d.Msg.CloudNotSetUp, "Google Cloud credentials", "said even on the live engine, for Settings")
+
+	for key, value := range map[string]string{"voice.enabled": "true", "voice.engine": "cloud", "voice.language": "fr-CA", "voice.hear_model": "chirp_3", "voice.text_model": "gemini/gemini-3.8-flash"} {
+		_, err := cfg.SetConfigValue(ctx, connect.NewRequest(&pb.SetConfigValueRequest{Key: key, Value: value}))
+		require.NoError(t, err, key)
+	}
+	_, err = cfg.SavePersonality(ctx, connect.NewRequest(&pb.SavePersonalityRequest{Personality: &pb.Personality{Name: "nagatha", Text: "Poised.", Voice: "Aoede", Locale: "en-GB", Speed: 0.9, Pitch: -2}}))
+	require.NoError(t, err)
+	got, err := cfg.GetPersonality(ctx, connect.NewRequest(&pb.GetPersonalityRequest{Name: "nagatha"}))
+	require.NoError(t, err)
+	assert.Equal(t, "en-GB", got.Msg.Personality.Locale)
+	assert.InDelta(t, 0.9, got.Msg.Personality.Speed, 1e-9)
+	assert.InDelta(t, -2, got.Msg.Personality.Pitch, 1e-9)
+	_, err = cfg.SavePersonality(ctx, connect.NewRequest(&pb.SavePersonalityRequest{Personality: &pb.Personality{Name: "fast", Text: "t", Speed: 5}}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	d, err = voice.DescribeVoice(ctx, connect.NewRequest(&pb.DescribeVoiceRequest{Workspace: dir, ListModels: true}))
+	require.NoError(t, err)
+	assert.Equal(t, "cloud", d.Msg.Engine)
+	assert.Equal(t, "cloud", d.Msg.EngineInUse)
+	assert.Equal(t, "fr-CA", d.Msg.Language)
+	assert.Equal(t, "chirp_3", d.Msg.HearModel)
+	assert.Equal(t, "gemini/gemini-3.8-flash", d.Msg.ModelInUse, "its text model")
+	assert.Equal(t, "gemini/gemini-3.8-flash", d.Msg.TextModelInUse)
+	assert.Equal(t, d.Msg.CloudNotSetUp, d.Msg.NotSetUp, "what's missing is the cloud's, not a live model")
+	assert.NotEmpty(t, d.Msg.NotSetUp)
+
+	err = streamErr(voice.Converse(ctx, connect.NewRequest(&pb.ConverseRequest{Workspace: dir, SampleVoice: "Puck", SampleTuned: true, SampleSpeed: 9})))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "a tuning the voices can't speak")
+	for _, tc := range []struct {
+		name string
+		req  *pb.ConverseRequest
+		want config.VoiceTuning
+	}{
+		{"as the editor has it", &pb.ConverseRequest{Workspace: dir, SampleVoice: "Puck", SampleTuned: true, SampleLocale: "de-DE", SampleSpeed: 1.2, SamplePitch: 3}, config.VoiceTuning{Locale: "de-DE", Speed: 1.2, Pitch: 3}},
+		{"as the workspace's personality tunes it", &pb.ConverseRequest{Workspace: dir, SampleVoice: "Puck"}, config.VoiceTuning{Locale: "en-GB", Speed: 0.9, Pitch: -2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spoke = nil
+			sample, err := voice.Converse(ctx, connect.NewRequest(tc.req))
+			require.NoError(t, err)
+			require.True(t, sample.Receive(), "%v", sample.Err())
+			assert.Equal(t, "cloud", sample.Msg().Started.Engine)
+			assert.Equal(t, "voice-text", sample.Msg().Started.Model)
+			ended := ""
+			for sample.Receive() {
+				ended += sample.Msg().Ended
+			}
+			assert.Equal(t, "summary", ended)
+			require.Len(t, spoke, 1)
+			assert.Equal(t, tc.want, spoke[0])
+		})
+	}
+}
+
+// oneSpeech is a stream of speech that says each thing as two bytes.
+type oneSpeech struct{ audio chan []byte }
+
+func (o *oneSpeech) Say(string) error { o.audio <- []byte{1, 2}; return nil }
+func (o *oneSpeech) Finish() error    { close(o.audio); return nil }
+func (o *oneSpeech) Close()           {}
+func (o *oneSpeech) Recv() ([]byte, error) {
+	a, ok := <-o.audio
+	if !ok {
+		return nil, io.EOF
+	}
+	return a, nil
 }

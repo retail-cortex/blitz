@@ -62,6 +62,7 @@ type Server struct {
 	sched     *scheduler  // nil: workers aren't run
 	broker    *broker
 	runs      runs           // background runs
+	turns     liveTurns      // turns with an ID, which outlive their streams
 	evals     evalRuns       // eval runs going on
 	models    modelLists     // providers' models, for ListModels
 	act       activity       // requests served, for IdleFor
@@ -143,6 +144,7 @@ func (s *Server) Close() error {
 	s.ent.stopCatalog()
 	s.ent.mu.Unlock()
 	s.stopRuns()
+	s.stopTurns()
 	s.stopEvals()
 	s.stopUpkeep()
 	s.mu.Lock()

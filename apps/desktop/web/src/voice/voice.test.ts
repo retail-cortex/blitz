@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { fakeVoice, fakeVoiceSettings, setFakeVoice } from "../dev/fakeVoice";
-import { actionWords, buttonState, currentConversation, extend, fromPCM16, level, nothingWaiting, sameWaiting, setConversation, toPCM16k, waitingOf, type Conversation } from "./voice";
+import { actionWords, buttonState, currentConversation, extend, fromPCM16, hearChoice, hearChoices, level, nothingWaiting, sameWaiting, setConversation, toPCM16k, waitingOf, type Conversation } from "./voice";
 
 const conv: Conversation = { dir: "/w", sessionId: "s", id: "v1", phase: "open", state: "listening", muted: false, holding: false, listen: "tap", model: "m", voice: "Kore", heard: "", said: "", error: "" };
 
@@ -80,8 +80,29 @@ describe("voice", () => {
 // once on, the first audio is heard, handed over as a message and said; an
 // approval waiting is read out and allowed once; one conversation a
 // workspace; off ends it at once; voice is the person's setting.
+describe("how Blitz hears (VOX-73a)", () => {
+  it("offers the Speech-to-Text models tried, the default first, each with where it runs", () => {
+    expect(hearChoices.map((c) => `${c.model || "long"}@${c.location || "global"}`)).toEqual(["long@global", "telephony@global", "chirp_3@us", "chirp_2@us-central1"]);
+  });
+  it.each([
+    ["", "", "default"],
+    ["long", "global", "default"],
+    ["long", "", "default"],
+    ["telephony", "global", "telephony"],
+    ["telephony", "", "telephony"],
+    ["chirp_3", "us", "chirp_3"],
+    ["chirp_2", "us-central1", "chirp_2"],
+  ])("reads %s in %s as %s", (model, location, want) => {
+    expect(hearChoice(model, location)?.id).toBe(want);
+  });
+  it("leaves a pair set by hand as it is", () => {
+    expect(hearChoice("chirp_3", "eu")).toBeUndefined();
+    expect(hearChoice("short", "global")).toBeUndefined();
+  });
+});
+
 describe("the fake voice", () => {
-  const svc = fakeVoice(() => "Sadaltager");
+  const svc = fakeVoice(() => ({ voice: "Sadaltager", locale: "en-GB", speed: 0.9, pitch: -2 }));
   const signal = new AbortController().signal;
   const take = async (it: AsyncGenerator<Record<string, unknown>>, until: (m: Record<string, unknown>) => boolean) => {
     const got: Record<string, unknown>[] = [];
@@ -97,7 +118,7 @@ describe("the fake voice", () => {
     await expect(svc.converse({ workspace: "/w", sessionId: "s", summaryOnly: false, sampleVoice: "" }, { signal }).next()).rejects.toThrow("voice is off");
     expect(() => setFakeVoice("/w", "voice.enabled", "true")).toThrow("the person's own setting");
     setFakeVoice("", "voice.enabled", "true");
-    expect(svc.describeVoice({ workspace: "/w", listModels: true })).toMatchObject({ enabled: true, personalityVoice: "Sadaltager", backend: "gemini" });
+    expect(svc.describeVoice({ workspace: "/w", listModels: true })).toMatchObject({ enabled: true, personalityVoice: "Sadaltager", backend: "gemini", engine: "auto", engineInUse: "cloud", personalityLocale: "en-GB", personalitySpeed: 0.9, personalityPitch: -2 });
 
     const it = svc.converse({ workspace: "/w", sessionId: "s", summaryOnly: false, sampleVoice: "" }, { signal });
     const first = (await it.next()).value as { started: { id: string; voice: string } };
@@ -126,6 +147,40 @@ describe("the fake voice", () => {
     expect((got[0] as { started: { voice: string } }).started.voice).toBe("Puck");
     expect(got.some((m) => m.audio)).toBe(true);
     expect(got.at(-1)).toEqual({ ended: "summary" });
+    setFakeVoice("", "voice.enabled", "false");
+  });
+
+  it("speaks with the cloud engine when that's set (VOX-70), in the tuning a sample names (PER-41)", async () => {
+    setFakeVoice("", "voice.enabled", "true");
+    for (const [key, value] of [
+      ["voice.engine", "cloud"],
+      ["voice.language", "fr-CA"],
+      ["voice.text_model", "gemini/gemini-3.8-flash"],
+      ["voice.hear_model", "chirp_3"],
+      ["voice.hear_location", "us"],
+    ])
+      setFakeVoice("", key, value);
+    const d = svc.describeVoice({ workspace: "/w", listModels: false });
+    expect(d).toMatchObject({ engine: "cloud", language: "fr-CA", textModel: "gemini/gemini-3.8-flash", hearModel: "chirp_3", hearLocation: "us", modelInUse: "gemini/gemini-3.8-flash", cloudNotSetUp: "", cloudProject: "demo-project" });
+    expect(d.locales).toContain("en-GB");
+    const sample = { workspace: "/w", sessionId: "", summaryOnly: false, sampleVoice: "Aoede", sampleTuned: true, sampleLocale: "en-GB", sampleSpeed: 0.9, samplePitch: -2 };
+    const got = await take(svc.converse(sample, { signal }), (m) => !!m.ended);
+    expect(got[0]).toMatchObject({ started: { voice: "Aoede", engine: "cloud", model: "gemini-3.8-flash" } });
+    expect(got.at(-1)).toEqual({ ended: "summary" });
+    await expect(svc.converse({ ...sample, sampleSpeed: 9 }, { signal }).next()).rejects.toThrow("a voice's speed is from 0.5 to 2");
+    await expect(svc.converse({ ...sample, sampleVoice: "Bob" }, { signal }).next()).rejects.toThrow("isn't one of Gemini's voices");
+    for (const key of ["voice.engine", "voice.language", "voice.text_model", "voice.hear_model", "voice.hear_location"]) setFakeVoice("", key, "");
+    expect(svc.describeVoice({ workspace: "/w", listModels: false })).toMatchObject({ engine: "auto", language: "" });
+    // Left to automatic (VOX-70a): the cloud for a tuned voice, Gemini Live for one that isn't; set to live, live.
+    const plain = fakeVoice(() => ({ voice: "Kore", locale: "", speed: 0, pitch: 0 }));
+    expect(plain.describeVoice({ workspace: "/w", listModels: false }).engineInUse).toBe("live");
+    const untuned = await take(plain.converse({ workspace: "/w", sessionId: "", summaryOnly: false, sampleVoice: "Kore" }, { signal }), (m) => !!m.ended);
+    expect(untuned[0]).toMatchObject({ started: { engine: "live" } });
+    const tuned = await take(plain.converse({ ...sample, sampleVoice: "Kore" }, { signal }), (m) => !!m.ended);
+    expect(tuned[0]).toMatchObject({ started: { engine: "cloud" } });
+    setFakeVoice("", "voice.engine", "live");
+    expect(svc.describeVoice({ workspace: "/w", listModels: false }).engineInUse).toBe("live");
+    setFakeVoice("", "voice.engine", "");
     setFakeVoice("", "voice.enabled", "false");
   });
 });

@@ -16,7 +16,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -186,6 +188,25 @@ type VoiceConfig struct {
 	// smoothing choppy audio on an uneven connection, 20 to 2000 ms (0:
 	// the default, 20).
 	BufferMs int `toml:"buffer_ms"`
+	// Engine is how the voice hears and speaks (VOX-70): "live", a Gemini
+	// Live model in its own voice; "cloud", Google Cloud's
+	// Speech-to-Text, a text model and Text-to-Speech's Chirp 3: HD
+	// voices, which speak in a personality's locale, at its speed and
+	// pitch; or "auto" (the default), cloud when the personality tunes
+	// its voice and Google Cloud is set up, else live (VOX-70a).
+	Engine string `toml:"engine"`
+	// TextModel is the cloud engine's model, which reads what was heard
+	// and writes what's said, as "provider/model"; empty is the
+	// workspace's small model ([suggestions] model).
+	TextModel string `toml:"text_model"`
+	// Language is the language the person speaks, for the cloud engine's
+	// Speech-to-Text (a VoiceLocales tag); empty is the personality's
+	// locale, else DefaultVoiceLanguage.
+	Language string `toml:"language"`
+	// HearModel and HearLocation are Speech-to-Text's model and where it
+	// runs; empty: DefaultVoiceHearModel, in DefaultVoiceHearLocation.
+	HearModel    string `toml:"hear_model"`
+	HearLocation string `toml:"hear_location"`
 }
 
 // The voice's defaults and choices.
@@ -200,6 +221,19 @@ const (
 	VoiceSummaryOff    = "off"
 	VoiceNoiseNormal   = "normal"
 	VoiceNoiseNoisy    = "noisy"
+	VoiceEngineAuto    = "auto"
+	VoiceEngineLive    = "live"
+	VoiceEngineCloud   = "cloud"
+	// The cloud engine's defaults (VOX-70).
+	DefaultVoiceLanguage     = "en-US"
+	DefaultVoiceHearModel    = "long"
+	DefaultVoiceHearLocation = "global"
+	// A personality's speed (1: the voice's own) and pitch (semitones,
+	// 0: the voice's own), and how far Text-to-Speech's speaking rate
+	// goes, which both are made with (VOX-72).
+	MinVoiceSpeed, MaxVoiceSpeed     = 0.5, 2.0
+	MinVoicePitch, MaxVoicePitch     = -6.0, 6.0
+	MinSpeakingRate, MaxSpeakingRate = 0.25, 2.0
 	// The ranges of pause_ms, start_ms and buffer_ms (VOX-08).
 	MinVoicePauseMs, MaxVoicePauseMs   = 200, 5000
 	MinVoiceStartMs, MaxVoiceStartMs   = 20, 2000
@@ -212,7 +246,101 @@ var (
 	VoiceListens   = []string{VoiceListenTap, VoiceListenHold}
 	VoiceSummaries = []string{VoiceSummaryVoice, VoiceSummaryAlways, VoiceSummaryOff}
 	VoiceNoises    = []string{VoiceNoiseNormal, VoiceNoiseNoisy}
+	VoiceEngines   = []string{VoiceEngineAuto, VoiceEngineLive, VoiceEngineCloud}
 )
+
+// VoiceLocales are the locales Text-to-Speech's Chirp 3: HD voices speak
+// (BCP-47, as its voice names take them), which a personality may name
+// (VOX-71).
+var VoiceLocales = []string{
+	"ar-XA", "bg-BG", "bn-IN", "cmn-CN", "cs-CZ", "da-DK", "de-DE", "el-GR", "en-AU", "en-GB", "en-IN", "en-US",
+	"es-ES", "es-US", "et-EE", "fi-FI", "fr-CA", "fr-FR", "gu-IN", "he-IL", "hi-IN", "hr-HR", "hu-HU", "id-ID",
+	"it-IT", "ja-JP", "kn-IN", "ko-KR", "lt-LT", "lv-LV", "ml-IN", "mr-IN", "nb-NO", "nl-BE", "nl-NL", "pa-IN",
+	"pl-PL", "pt-BR", "ro-RO", "ru-RU", "sk-SK", "sl-SI", "sr-RS", "sv-SE", "sw-KE", "ta-IN", "te-IN", "th-TH",
+	"tr-TR", "uk-UA", "ur-IN", "vi-VN", "yue-HK",
+}
+
+// VoiceTuning is how a personality's voice is tuned: its locale ("": the
+// engine's own), its speed (1: the voice's own) and its pitch in
+// semitones (0: the voice's own).
+type VoiceTuning struct {
+	Locale string
+	Speed  float64
+	Pitch  float64
+}
+
+// PitchFactor is the pitch as a ratio of frequencies: 2^(semitones/12).
+func (t VoiceTuning) PitchFactor() float64 { return math.Pow(2, t.Pitch/12) }
+
+// SpeedOrOwn is the speed, 1 when it's unset.
+func (t VoiceTuning) SpeedOrOwn() float64 {
+	if t.Speed <= 0 {
+		return 1
+	}
+	return t.Speed
+}
+
+// SpeakingRate is the rate Text-to-Speech is asked for (VOX-72): Chirp
+// 3: HD takes a speaking rate and no pitch, so the pitch is made by
+// playing the audio faster or slower (PitchFactor), and the speech is
+// asked for that much slower or faster, to come out at the speed.
+func (t VoiceTuning) SpeakingRate() float64 { return t.SpeedOrOwn() / t.PitchFactor() }
+
+// Check is why the tuning can't be spoken, or nil: a locale Chirp 3: HD
+// has, a speed and pitch within their ranges, and the two together
+// within what Text-to-Speech's speaking rate can do.
+func (t VoiceTuning) Check() error {
+	switch {
+	case t.Locale != "" && !slices.Contains(VoiceLocales, t.Locale):
+		return fmt.Errorf("%q isn't a locale the voices speak (en-GB, fr-CA, …)", t.Locale)
+	case t.Speed != 0 && (t.Speed < MinVoiceSpeed || t.Speed > MaxVoiceSpeed || math.IsNaN(t.Speed)):
+		return fmt.Errorf("a voice's speed is from %g to %g (1 is its own), not %g", MinVoiceSpeed, MaxVoiceSpeed, t.Speed)
+	case t.Pitch < MinVoicePitch || t.Pitch > MaxVoicePitch || math.IsNaN(t.Pitch):
+		return fmt.Errorf("a voice's pitch is from %g to %g semitones (0 is its own), not %g", MinVoicePitch, MaxVoicePitch, t.Pitch)
+	}
+	if r := t.SpeakingRate(); r < MinSpeakingRate-1e-9 || r > MaxSpeakingRate+1e-9 {
+		return fmt.Errorf("speed %g with pitch %g is beyond the voice: lower one of them", t.SpeedOrOwn(), t.Pitch)
+	}
+	return nil
+}
+
+// Plain reports whether the tuning changes nothing.
+func (t VoiceTuning) Plain() bool {
+	return t.Locale == "" && (t.Speed == 0 || t.Speed == 1) && t.Pitch == 0
+}
+
+// EngineMode is engine as set, auto when it's unset or unknown.
+func (v VoiceConfig) EngineMode() string {
+	if v.Engine == VoiceEngineCloud || v.Engine == VoiceEngineLive {
+		return v.Engine
+	}
+	return VoiceEngineAuto
+}
+
+// EngineFor is the engine a voice tuned by t is spoken with (VOX-70a):
+// the one set; left to auto, cloud when the tuning changes something a
+// live model can't speak and Google Cloud is set up (cloudReady), else
+// live.
+func (v VoiceConfig) EngineFor(t VoiceTuning, cloudReady bool) string {
+	switch mode := v.EngineMode(); {
+	case mode != VoiceEngineAuto:
+		return mode
+	case !t.Plain() && cloudReady:
+		return VoiceEngineCloud
+	}
+	return VoiceEngineLive
+}
+
+// HearIn is the language the person speaks, for the cloud engine: [voice]
+// language, else the personality's locale, else DefaultVoiceLanguage.
+func (v VoiceConfig) HearIn(personality string) string {
+	for _, l := range []string{v.Language, personality} {
+		if slices.Contains(VoiceLocales, l) {
+			return l
+		}
+	}
+	return DefaultVoiceLanguage
+}
 
 // GeminiVoices are Gemini's prebuilt voices, by the names its speech
 // configuration takes.
@@ -857,8 +985,15 @@ var DefaultPricing = map[string]ModelPrice{
 	// Gemini 4 Argon, the default model since 2026-10-13, at its price
 	// through 2026-11-30 (PriceChanges has the price from 2026-12-01).
 	"gemini-4-argon": {InputPerMTok: 2.00, OutputPerMTok: 10.00, CachedInputPerMTok: 0.10},
-	"gemini-2.5-pro": {InputPerMTok: 1.25, OutputPerMTok: 10.00, CachedInputPerMTok: 0.31},
-	"gpt-4o":         {InputPerMTok: 2.50, OutputPerMTok: 10.00, CachedInputPerMTok: 1.25},
+	// The rest of Gemini 4 (the owner's figures, 2026-11-26), output
+	// including thinking tokens: Carbon, for deep reasoning, at Argon's
+	// prices and with its change on 2026-12-01 (PriceChanges); Neon, for
+	// capability at speed; Hydrogen, for speed and everyday work.
+	"gemini-4-carbon":   {InputPerMTok: 2.00, OutputPerMTok: 10.00, CachedInputPerMTok: 0.10},
+	"gemini-4-neon":     {InputPerMTok: 3.00, OutputPerMTok: 15.00, CachedInputPerMTok: 0.15},
+	"gemini-4-hydrogen": {InputPerMTok: 1.50, OutputPerMTok: 7.50, CachedInputPerMTok: 0.075},
+	"gemini-2.5-pro":    {InputPerMTok: 1.25, OutputPerMTok: 10.00, CachedInputPerMTok: 0.31},
+	"gpt-4o":            {InputPerMTok: 2.50, OutputPerMTok: 10.00, CachedInputPerMTok: 1.25},
 	// Claude list prices; cache reads bill at 10% of input, 5-minute cache
 	// writes at 125%.
 	"claude-opus-5":    {InputPerMTok: 5.00, OutputPerMTok: 25.00, CachedInputPerMTok: 0.50, CacheWritePerMTok: 6.25},
@@ -893,6 +1028,9 @@ var PriceChanges = []PriceChange{
 		Price: ModelPrice{InputPerMTok: 1.50, OutputPerMTok: 7.50, CachedInputPerMTok: 0.15}},
 	// Gemini 4 Argon's price doubles on 2026-12-01.
 	{Model: "gemini-4-argon", From: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+		Price: ModelPrice{InputPerMTok: 4.00, OutputPerMTok: 20.00, CachedInputPerMTok: 0.20}},
+	// So does Gemini 4 Carbon's, the same day.
+	{Model: "gemini-4-carbon", From: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
 		Price: ModelPrice{InputPerMTok: 4.00, OutputPerMTok: 20.00, CachedInputPerMTok: 0.20}},
 }
 

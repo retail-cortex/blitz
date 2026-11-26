@@ -16,7 +16,9 @@
 
 import { Code, ConnectError } from "@connectrpc/connect";
 import { ErrorInfoSchema } from "../gen/blitz/v1/turn_pb";
+import { voiceLocales } from "../personality/tuning";
 import { geminiVoices } from "../personality/voices";
+import { tuningCheck } from "./fakeChecks";
 
 // The fake VoiceService (spec_063_voice), for ?fake and the page's tests:
 // voice's settings as the service keeps them, and a scripted conversation.
@@ -25,7 +27,7 @@ import { geminiVoices } from "../personality/voices";
 // spoken yes; the end, the sample and the refusals are the service's.
 
 /** [voice] as the fake keeps it. */
-export const fakeVoiceSettings = { enabled: false, model: "", voice: "", listen: "tap", summaries: "voice", idle: 5 };
+export const fakeVoiceSettings = { enabled: false, model: "", voice: "", listen: "tap", summaries: "voice", idle: 5, engine: "auto", textModel: "", language: "", hearModel: "", hearLocation: "" };
 
 /** Applies one of Settings › Personality › Voice's settings, as config.SetValue does; true when key was voice's. */
 export function setFakeVoice(workspace: string, key: string, value: string): boolean {
@@ -38,6 +40,11 @@ export function setFakeVoice(workspace: string, key: string, value: string): boo
   if (key === "voice.listen") s.listen = value || "tap";
   if (key === "voice.summaries") s.summaries = value || "voice";
   if (key === "voice.idle_minutes") s.idle = Number(value) || 5;
+  if (key === "voice.engine") s.engine = value || "auto";
+  if (key === "voice.text_model") s.textModel = value;
+  if (key === "voice.language") s.language = value;
+  if (key === "voice.hear_model") s.hearModel = value;
+  if (key === "voice.hear_location") s.hearLocation = value;
   if (!s.enabled) for (const c of open.values()) c.end("off");
   return true;
 }
@@ -56,9 +63,26 @@ let next = 1;
 const pcm = (ms: number) => new Uint8Array(Math.round((24000 * ms) / 1000) * 2); // silence, 24 kHz
 
 /** The service's handlers, scripted. */
-export function fakeVoice(personalityVoice: (workspace: string) => string) {
+export function fakeVoice(personality: (workspace: string) => { voice: string; locale: string; speed: number; pitch: number }) {
+  const personalityVoice = (workspace: string) => personality(workspace).voice;
+  // The cloud engine's text model: [voice] text_model, else the workspace's small model.
+  const textModel = () => fakeVoiceSettings.textModel || "gemini/gemini-3.8-flash-lite";
+  // The engine a voice tuned so is spoken with (config.VoiceConfig.EngineFor; the fake's Google Cloud is set up).
+  const engineFor = (tn: { locale: string; speed: number; pitch: number }) =>
+    fakeVoiceSettings.engine === "auto" ? (tn.locale || (tn.speed !== 0 && tn.speed !== 1) || tn.pitch !== 0 ? "cloud" : "live") : fakeVoiceSettings.engine;
   return {
     describeVoice: ({ workspace, listModels }: { workspace: string; listModels: boolean }) => ({
+      engine: fakeVoiceSettings.engine,
+      textModel: fakeVoiceSettings.textModel,
+      language: fakeVoiceSettings.language,
+      hearModel: fakeVoiceSettings.hearModel,
+      hearLocation: fakeVoiceSettings.hearLocation,
+      locales: [...voiceLocales],
+      cloudNotSetUp: "",
+      cloudProject: "demo-project",
+      personalityLocale: personality(workspace).locale,
+      personalitySpeed: personality(workspace).speed,
+      personalityPitch: personality(workspace).pitch,
       enabled: fakeVoiceSettings.enabled,
       model: fakeVoiceSettings.model,
       voice: fakeVoiceSettings.voice,
@@ -66,14 +90,24 @@ export function fakeVoice(personalityVoice: (workspace: string) => string) {
       summaries: fakeVoiceSettings.summaries,
       idleMinutes: fakeVoiceSettings.idle,
       notSetUp: "",
-      modelInUse: fakeVoiceSettings.model || (listModels ? "gemini/gemini-2.5-flash-native-audio-preview-09-2025" : ""),
+      engineInUse: engineFor(personality(workspace)),
+      textModelInUse: textModel(),
+      modelInUse: fakeVoiceSettings.engine === "cloud" ? textModel() : fakeVoiceSettings.model || (listModels ? "gemini/gemini-2.5-flash-native-audio-preview-09-2025" : ""),
       backend: "gemini",
       voices: [...geminiVoices],
       models: listModels ? ["gemini-2.5-flash-native-audio-preview-09-2025", "gemini-live-2.5-flash-preview"] : [],
       personalityVoice: personalityVoice(workspace),
       orgOff: false,
     }),
-    async *converse({ workspace, sampleVoice }: { workspace: string; sessionId: string; summaryOnly: boolean; sampleVoice: string }, ctx: { signal: AbortSignal }) {
+    async *converse(
+      { workspace, sampleVoice, sampleTuned, sampleLocale, sampleSpeed, samplePitch }: { workspace: string; sessionId: string; summaryOnly: boolean; sampleVoice: string; sampleTuned?: boolean; sampleLocale?: string; sampleSpeed?: number; samplePitch?: number },
+      ctx: { signal: AbortSignal },
+    ) {
+      if (sampleVoice && !(geminiVoices as readonly string[]).includes(sampleVoice)) throw new ConnectError(`${JSON.stringify(sampleVoice)} isn't one of Gemini's voices`, Code.InvalidArgument);
+      if (sampleVoice && sampleTuned) {
+        const why = tuningCheck({ locale: sampleLocale ?? "", speed: sampleSpeed ?? 0, pitch: samplePitch ?? 0 });
+        if (why) throw new ConnectError(why, Code.InvalidArgument);
+      }
       if (!fakeVoiceSettings.enabled) throw refused("VOICE_OFF", "voice is off: turn it on in Settings › Personality › Voice");
       if (!sampleVoice && [...open.values()].some((c) => c.dir === workspace && !c.ended)) throw refused("VOICE_BUSY", "a voice conversation is already open in this workspace");
       const voice = sampleVoice || fakeVoiceSettings.voice || personalityVoice(workspace) || "Kore";
@@ -96,7 +130,8 @@ export function fakeVoice(personalityVoice: (workspace: string) => string) {
         },
       };
       if (!sampleVoice) open.set(c.id, c);
-      yield { started: { id: c.id, model: "gemini-2.5-flash-native-audio-preview-09-2025", voice, listen: fakeVoiceSettings.listen } };
+      const cloud = engineFor(sampleVoice && sampleTuned ? { locale: sampleLocale ?? "", speed: sampleSpeed ?? 0, pitch: samplePitch ?? 0 } : personality(workspace)) === "cloud";
+      yield { started: { id: c.id, model: cloud ? textModel().replace(/^[^/]+\//, "") : "gemini-2.5-flash-native-audio-preview-09-2025", voice, listen: fakeVoiceSettings.listen, engine: cloud ? "cloud" : "live" } };
       if (sampleVoice) {
         c.push({ state: "speaking" });
         c.push({ said: { text: "Hi, I'm Blitz. Tell me what you'd like done.", final: false } });
