@@ -17,10 +17,13 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"github.com/retail-cortex/blitz/pkg/engine/agents/builtin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -169,17 +172,49 @@ func TestListFiles(t *testing.T) {
 	writeAgent(t, dir, "evil.md", "blitz", "Evil")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "broken.md"), []byte("no frontmatter"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not an agent"), 0o644))
+	// As a model wrote one during setup: a level that isn't one.
+	guessed := "---\nname: reviewer\ndescription: Reviews changes\ntools: [read_file]\nagency_level: autonomous\n---\nReview carefully.\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "reviewer.md"), []byte(guessed), 0o644))
 
 	files, err := ListFiles(dir, func(n string) bool { return n == "blitz" })
 	require.NoError(t, err)
 	got := map[string]string{}
 	for _, f := range files {
 		got[filepath.Base(f.Path)] = f.Problem
+		switch filepath.Base(f.Path) {
+		case "broken.md":
+			assert.Nil(t, f.Spec, "nothing to read in it")
+		case "reviewer.md":
+			// Read, so the editor can show it and have the level put right.
+			require.NotNil(t, f.Spec)
+			assert.Equal(t, "reviewer", f.Spec.Name)
+			assert.Equal(t, "autonomous", f.Spec.AgencyLevel)
+			assert.Equal(t, "Review carefully.", strings.TrimSpace(f.Spec.SystemPrompt))
+			assert.Equal(t, f.Path, f.Spec.Path)
+		}
 	}
 	assert.Equal(t, map[string]string{
 		"good.md": "", "nested.md": "", "evil.md": `agent name "blitz" is reserved by a built-in agent`,
-		"broken.md": "markdown spec missing starting frontmatter delimiter '---'",
+		"broken.md":   "markdown spec missing starting frontmatter delimiter '---'",
+		"reviewer.md": `agency_level: "autonomous" (one of low, medium, high, extreme)`,
 	}, got)
+	// It's never loaded, and saved with a level that is one, it is.
+	_, err = ParseMarkdownSpec([]byte(guessed))
+	assert.Error(t, err)
+	reg, err := NewRegistry()
+	require.NoError(t, err)
+	_ = reg.LoadExternalAgents(dir)
+	_, loaded := reg.Get("reviewer")
+	assert.False(t, loaded, "an agent with a value it can't have isn't loaded")
+	fixed := *files[slices.IndexFunc(files, func(f File) bool { return filepath.Base(f.Path) == "reviewer.md" })].Spec
+	fixed.AgencyLevel = "high"
+	_, problems, err := Save(dir, &fixed, "reviewer", noBuiltins)
+	require.NoError(t, err)
+	assert.Empty(t, problems)
+	saved, err := os.ReadFile(filepath.Join(dir, "reviewer.md"))
+	require.NoError(t, err)
+	_, err = ParseMarkdownSpec(saved)
+	assert.NoError(t, err, "put right, it loads")
 
 	none, err := ListFiles(filepath.Join(dir, "missing"), noBuiltins)
 	require.NoError(t, err)
@@ -224,4 +259,30 @@ func TestRefresh(t *testing.T) {
 	assert.True(t, ok, "built-ins stay")
 	assert.True(t, reg.IsBuiltin("blitz"))
 	assert.False(t, reg.IsBuiltin("two"))
+}
+
+// A built-in agent that has a model write agent files (setup, the
+// harness's update, the agent creator) names the levels agency_level
+// takes: left to guess, a model wrote "autonomous", and the agent it
+// made didn't load.
+func TestPromptsThatWriteAgentsNameTheLevels(t *testing.T) {
+	entries, err := builtin.FS.ReadDir(".")
+	require.NoError(t, err)
+	telling := 0
+	for _, e := range entries {
+		data, err := builtin.FS.ReadFile(e.Name())
+		require.NoError(t, err)
+		spec, err := ParseMarkdownSpec(data)
+		require.NoError(t, err, e.Name())
+		at := strings.Index(spec.SystemPrompt, "`agency_level`")
+		if at < 0 {
+			continue
+		}
+		telling++
+		after := spec.SystemPrompt[at:min(at+160, len(spec.SystemPrompt))]
+		for _, level := range AgencyLevels {
+			assert.Contains(t, after, level, "%s tells a model to write agency_level without saying it may be %s", e.Name(), level)
+		}
+	}
+	assert.GreaterOrEqual(t, telling, 3, "setup, the harness's update and the agent creator")
 }

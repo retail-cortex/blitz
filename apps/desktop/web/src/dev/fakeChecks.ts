@@ -19,6 +19,7 @@
 // the service turns down looks fine in ?fake. Each is a port of the Go
 // it names, with the Go's words; where a port can only come close (a
 // schedule, which the service reads with its own parser), it says so.
+import { voiceLocales } from "../personality/tuning";
 import { geminiVoices } from "../personality/voices";
 import { formProblems, resolve, setPath, type Component, type Form } from "../a2ui/model";
 import { parseDuration } from "../workerForm";
@@ -334,6 +335,11 @@ const typed: Record<string, string> = {
   "voice.listen": "listen",
   "voice.summaries": "summaries",
   "voice.idle_minutes": "idle",
+  "voice.engine": "voiceengine",
+  "voice.text_model": "modelref",
+  "voice.language": "voicelocale",
+  "voice.hear_model": "hearname",
+  "voice.hear_location": "hearname",
 };
 
 
@@ -352,6 +358,16 @@ export function configValueProblem(key: string, value: string): string {
   switch (kind) {
     case "voicemodel":
       return value.startsWith("gemini/") && value.length > 7 ? "" : `${key} is a Gemini Live model, as gemini/<model>, not ${JSON.stringify(value)}`;
+    case "voiceengine":
+      return ["auto", "live", "cloud"].includes(value) ? "" : `${key} is auto or live or cloud, not ${JSON.stringify(value)}`;
+    case "voicelocale":
+      return (voiceLocales as readonly string[]).includes(value) ? "" : `${key} is a locale Google's voices speak, like en-GB or fr-CA, not ${JSON.stringify(value)}`;
+    case "hearname":
+      return /^[a-z][a-z0-9_-]{0,39}$/.test(value) ? "" : `${key} is a Speech-to-Text model or location's name (long, chirp_3, global, us-central1), not ${JSON.stringify(value)}`;
+    case "modelref": {
+      const [provider, ...rest] = value.split("/");
+      return provider && rest.join("/") && !/[ \t\n]/.test(value) ? "" : `${key} is a model, as provider/model, not ${JSON.stringify(value)}`;
+    }
     case "voice":
       return (geminiVoices as readonly string[]).includes(value) ? "" : `${key} is one of Gemini's voices (${geminiVoices.join(", ")}), not ${JSON.stringify(value)}`;
     case "listen":
@@ -556,13 +572,26 @@ export async function* withKeepalives<T>(src: AsyncIterable<T>, signal?: AbortSi
   }
 }
 
+/** Why a voice's tuning can't be spoken (config.VoiceTuning.Check), in the service's words, or "". */
+export function tuningCheck(tn: { locale: string; speed: number; pitch: number }): string {
+  const g = (n: number) => String(Number(n.toPrecision(12)));
+  if (tn.locale && !(voiceLocales as readonly string[]).includes(tn.locale)) return `${JSON.stringify(tn.locale)} isn't a locale the voices speak (en-GB, fr-CA, …)`;
+  if (tn.speed !== 0 && !(tn.speed >= 0.5 && tn.speed <= 2)) return `a voice's speed is from 0.5 to 2 (1 is its own), not ${g(tn.speed)}`;
+  if (!(tn.pitch >= -6 && tn.pitch <= 6)) return `a voice's pitch is from -6 to 6 semitones (0 is its own), not ${g(tn.pitch)}`;
+  const speed = tn.speed > 0 ? tn.speed : 1;
+  const rate = speed / 2 ** (tn.pitch / 12);
+  if (rate < 0.25 - 1e-9 || rate > 2 + 1e-9) return `speed ${g(speed)} with pitch ${g(tn.pitch)} is beyond the voice: lower one of them`;
+  return "";
+}
+
 /** Why the service refuses a personality (engine.CheckPersonality, secrets aside), or "". */
-export function personalityCheck(p: { name: string; description: string; voice: string; text: string }): string {
+export function personalityCheck(p: { name: string; description: string; voice: string; text: string; locale?: string; speed?: number; pitch?: number }): string {
   if (!(p.name.length <= 40 && /^[a-z0-9][a-z0-9-]*$/.test(p.name))) return `a personality's name is lower-case letters, digits and -, at most 40 characters, not ${JSON.stringify(p.name)}`;
   if (p.name === "default") return '"default" is Blitz\'s own: pick another name';
   if (!p.text.trim()) return "a personality needs its text: how it should sound";
-  if ([...p.text].length > 2000) return `a personality's text is at most 2000 characters; this one is ${[...p.text].length}`;
   if (p.voice && !(geminiVoices as readonly string[]).includes(p.voice)) return `${JSON.stringify(p.voice)} isn't one of Gemini's voices`;
+  const tuning = tuningCheck({ locale: p.locale ?? "", speed: p.speed ?? 0, pitch: p.pitch ?? 0 });
+  if (tuning) return tuning;
   if (/[\n\r]/.test(p.description)) return "a personality's description is one line";
   return "";
 }

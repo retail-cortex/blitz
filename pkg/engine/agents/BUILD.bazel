@@ -58,6 +58,7 @@ go_test(
     embed = [":agents"],
     deps = [
         "//pkg/api",
+        "//pkg/engine/agents/builtin",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

@@ -19,7 +19,8 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
 
 ## 2. What a personality is
 
-- **PER-01** **A short description of character.** A personality is a name, a one-line description, its text (Markdown, at most 2,000 characters: how to sound, what to emphasise, what to avoid) and, optionally, a voice for spec_063 (one of Gemini's prebuilt voices).
+- **PER-01** **A short description of character.** A personality is a name, a one-line description, its text (Markdown, as long as it needs to be, PER-01a: how to sound, what to emphasise, what to avoid) and, optionally, a voice for spec_063 (one of Gemini's prebuilt voices).
+- **PER-01a** *2026-11-26 (the owner: "the personality editor currently limits the personality to 2000 characters, it shouldn't unless this is an API limitation").* **No length limit.** It isn't one: a personality is part of the agent's instructions (PER-03) and of the voice's (PER-40), which the models take at any length their context holds, so the 2,000-character limit, the editor's refusal and the service's (`CheckPersonality`) are gone, and the editor shows the count alone. A long personality is sent with every turn, and costs its tokens each time.
 - **PER-02** **The root agent only.** A personality is added to the instructions of the session's root agent (the one the person talks to: `blitz` by default, or whichever agent the session runs, spec_024's agent menu) and of the voice agent (spec_063 VOX-10). It isn't given to:
   - the agents the root hands work to (the coder and other sub-agents, handoffs, workers);
   - workflows, jobs and their agents, which run unattended;
@@ -64,20 +65,22 @@ Blitz answers in one voice today: capable, neutral, a little formal. That suits 
   4. **Edit** and **Delete** on the person's own. Deleting one a workspace uses asks first and says which.
 - **PER-31** **The editor**, in Settings' drawer:
   - the name, the description;
-  - the text, in Studio's Markdown field (`MarkdownField.tsx`), with the 2,000-character count;
+  - the text, in Studio's Markdown field (`MarkdownField.tsx`), with its character count;
   - the voice, a menu of Gemini's voices with **Play**, shown when voice is on (spec_063);
+  - the voice's locale, speed and pitch, with **Play** (PER-41), shown when voice is on;
   - **Try it** (PER-30), on the text as it stands, before saving;
-  - **Save**, refused with the reason for a bad name, a name taken by another of the person's, too long a text, or a secret (PER-04). Unsaved changes ask before the drawer closes, as Studio's forms do.
+  - **Save**, refused with the reason for a bad name, a name taken by another of the person's, or a secret (PER-04). Unsaved changes ask before the drawer closes, as Studio's forms do.
 - **PER-32** **A workspace's Behaviour card** (spec_024 DSK-60) has **Personality** beside **Output style**: a menu of them, with *Your default (Friendly)* first. It sets the workspace's (PER-21).
 - **PER-33** **At a glance.** The status bar's agent button shows the personality beside the agent when it isn't `default` ("blitz · Mentor"), and its menu lists the personalities under **Personality** to switch, as `/personality` does.
 
 ## 6. The voice
 
 - **PER-40** **One character, written and spoken.** The voice agent (spec_063 VOX-10) gets the same personality as the root agent, so it sounds the way the conversation reads. Its voice is the personality's (PER-01) when it has one, else `[voice] voice`; Settings › Voice's voice menu shows *From the personality (Achird)* first when one is set, and choosing another there sets `[voice] voice` for personalities without one.
+- **PER-41** *2026-11-26 (issue #134, the owner: "they need to add pitch, speed, and locale for better control", "it should be sliders. The entire sound module is based on user defined personalities").* **A personality tunes its voice**: a **locale** (the language and accent it speaks: one of Text-to-Speech's Chirp 3: HD locales, `en-GB`, `fr-CA`…; none: the language the person speaks), a **speed** (0.5 to 2; 1 is the voice's own) and a **pitch** (−6 to 6 semitones; 0 is its own). They're its file's frontmatter (`locale`, `speed`, `pitch`, beside `voice`; a speed of 1 and a pitch of 0 aren't written), saved only when the voices can speak them (`config.VoiceTuning.Check`: a known locale, each within its range, and the two together within Text-to-Speech's speaking rate, spec_063 VOX-72); a file whose tuning they can't speak still loads, without it. They're spoken by the cloud voice engine (spec_063 VOX-70), everywhere the voice speaks: a conversation, a spoken summary, a sample; and the engine is the cloud's by itself for a personality that tunes its voice, when Google Cloud is set up (`[voice] engine = "auto"`, the default: VOX-70a). A Gemini Live model speaks in its own voice, so with the engine set to live, or Google Cloud not set up, they're kept and not heard, and the editor says which. In the editor (PER-31), with voice on: **Locale**, a menu of the locales by name in the page's language; **Speed** and **Pitch**, sliders showing their value (`0.90×`, `−2 semitones`); **Play**, a short sample in the voice as it's tuned there, saved or not (`ConverseRequest.sample_tuned`; with Google Cloud set up and the engine not set to live); and **The voice's own**, which puts all three back. A personality's row shows its tuning beside its voice. The page checks what the service checks as the sliders move (`personality/tuning.ts`), and the fake refuses what the service refuses.
 
 ## 7. The API
 
-- **PER-50** On `ConfigService`, since they're the person's files: `ListPersonalities(workspace)` answers each one's name, description, source, voice and whether it's the workspace's and the person's default; `GetPersonality(name)` adds its text; `SavePersonality(name, description, voice, text)` and `DeletePersonality(name)` write the person's own (PER-11), with `INVALID_ARGUMENT` and the reason for PER-04/PER-31's refusals, and `READ_ONLY` for a built-in or the organization's; and on `WorkspaceService`, `TryPersonality(workspace, text)` answers PER-30's sample and its question. The workspace's choice is `SetSetting(key: "personality")`, as `style` is; the default is `SetConfigValue("ui.personality")`.
+- **PER-50** On `ConfigService`, since they're the person's files: `ListPersonalities(workspace)` answers each one's name, description, source, voice and whether it's the workspace's and the person's default; `GetPersonality(name)` adds its text; `SavePersonality(name, description, voice, text; locale, speed, pitch: PER-41)` and `DeletePersonality(name)` write the person's own (PER-11), with `INVALID_ARGUMENT` and the reason for PER-04/PER-31's refusals, and `READ_ONLY` for a built-in or the organization's; and on `WorkspaceService`, `TryPersonality(workspace, text)` answers PER-30's sample and its question. The workspace's choice is `SetSetting(key: "personality")`, as `style` is; the default is `SetConfigValue("ui.personality")`.
 
 ## 8. Testing
 

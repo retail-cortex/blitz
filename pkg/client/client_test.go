@@ -17,6 +17,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/png"
 	"net/http"
@@ -27,12 +28,14 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
 	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/retail-cortex/blitz/pkg/engine"
 	"github.com/retail-cortex/blitz/pkg/engine/runtime"
 	"github.com/retail-cortex/blitz/pkg/service/servicetest"
+	pb "github.com/retail-cortex/blitz/proto/blitz/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -368,4 +371,109 @@ func TestListModels(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0, "%+v", list.Providers)
 	require.NotEmpty(t, list.Providers[i].Models)
 	assert.Equal(t, "gpt-5", list.Providers[i].Models[0].ID)
+}
+
+// A turn goes on when its stream drops (spec_021_service SVC-20a, issue
+// #128): the client asks for it again from the last event it had, and
+// the turn ends as if nothing had happened, each thing told once.
+func TestRemoteTurnSurvivesADroppedStream(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MODENV_PREFIX", "")
+	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
+	s := servicetest.New(func(ctx context.Context, dir string) (*engine.Workspace, error) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.WorkspaceDir = dir
+		cfg.Session.StorageDir = t.TempDir()
+		cfg.Blitz.AutoApprove, cfg.Blitz.PermissionMode = false, "default"
+		return engine.Open(ctx, cfg, engine.Options{Model: runtime.NewMockLLM("gemini-3.8-flash", create, text("all done"))})
+	})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { srv.Close(); s.Close() })
+	dir := t.TempDir()
+	r, err := AttachHTTP(context.Background(), http.DefaultClient, srv.URL, dir, func(string) {})
+	require.NoError(t, err)
+	approvals := 0
+	r.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
+		approvals++
+		srv.CloseClientConnections() // the network changed under the turn's stream
+		return api.DecisionOnce, nil
+	}, nil)
+	sess, err := r.NewSession()
+	require.NoError(t, err)
+	accepted, finished := 0, 0
+	var calls []string
+	res, err := r.Run(context.Background(), sess.ID, api.Turn{Text: "make a file", OnAccepted: func() { accepted++ }, OnFinished: func() { finished++ }}, func(e api.Event) {
+		if e.ToolCall != nil && !e.ToolCall.Partial {
+			calls = append(calls, e.ToolCall.Name)
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "all done", res.Output)
+	assert.Equal(t, 1, approvals, "asked once, though the stream was read twice")
+	assert.Equal(t, 1, accepted)
+	assert.Equal(t, 1, finished)
+	assert.Equal(t, []string{"create_file"}, calls, "each event once")
+	assert.FileExists(t, filepath.Join(dir, "made.txt"))
+}
+
+// Stopping is said (SVC-20a): when the caller's context ends, the
+// service is told to stop the turn, which the stream's end no longer
+// does, and it has stopped by the time Run returns.
+func TestRemoteStopsItsTurn(t *testing.T) {
+	old := newTurnID
+	newTurnID = func() string { return "the-turn" }
+	t.Cleanup(func() { newTurnID = old })
+	create := call("create_file", map[string]any{"path": "made.txt", "content": "hi\n"})
+	r := attach(t, func(c *config.Config) { c.Blitz.AutoApprove, c.Blitz.PermissionMode = false, "default" }, create, text("all done"))
+	ctx, cancel := context.WithCancel(context.Background())
+	r.SetUI(func(context.Context, api.ApprovalRequest) (api.Decision, error) {
+		cancel() // Ctrl-C, while the turn waits on the person
+		return api.DecisionDeny, context.Canceled
+	}, nil)
+	sess, err := r.NewSession()
+	require.NoError(t, err)
+	_, err = r.Run(ctx, sess.ID, api.Turn{Text: "make a file"}, func(api.Event) {})
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// The turn has ended in the service: its events, kept, end with it.
+	stream, err := r.sessions.RunTurn(context.Background(), connect.NewRequest(&pb.RunTurnRequest{Workspace: r.dir, SessionId: sess.ID, TurnId: "the-turn"}))
+	require.NoError(t, err)
+	var last *pb.TurnFinished
+	for stream.Receive() {
+		last = stream.Msg().Event.GetFinished()
+	}
+	require.NoError(t, stream.Err())
+	require.NotNil(t, last, "stopped, not left running")
+	assert.NotNil(t, last.Error)
+	assert.NoFileExists(t, filepath.Join(r.dir, "made.txt"))
+}
+
+// A stream that fails as a connection does is asked for again; the
+// service's own answer isn't.
+func TestStreamDropped(t *testing.T) {
+	withReason := func(code connect.Code, reason string) error {
+		e := connect.NewError(code, errors.New("x"))
+		d, err := connect.NewErrorDetail(&pb.ErrorInfo{Reason: reason})
+		require.NoError(t, err)
+		e.AddDetail(d)
+		return e
+	}
+	for name, tc := range map[string]struct {
+		err  error
+		want bool
+	}{
+		"the connection closed":          {connect.NewError(connect.CodeUnavailable, errors.New("unexpected EOF")), true},
+		"cut off":                        {connect.NewError(connect.CodeUnknown, errors.New("stream error")), true},
+		"not a Connect error":            {errors.New("read: connection reset by peer"), true},
+		"no error":                       {nil, false},
+		"the service stopping":           {withReason(connect.CodeUnavailable, "SHUTTING_DOWN"), false},
+		"a turn the service forgot":      {withReason(connect.CodeNotFound, "UNKNOWN_TURN"), false},
+		"a message cut short":            {connect.NewError(connect.CodeInvalidArgument, errors.New("protocol error: incomplete envelope: unexpected EOF")), true},
+		"a request the service won't do": {withReason(connect.CodeInvalidArgument, "INVALID_TURN"), false},
+	} {
+		t.Run(name, func(t *testing.T) { assert.Equal(t, tc.want, streamDropped(tc.err)) })
+	}
+	a, b := newTurnID(), newTurnID()
+	assert.Regexp(t, `^[0-9a-f]{32}$`, a, "a name the service takes")
+	assert.NotEqual(t, a, b)
 }

@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
@@ -46,9 +45,6 @@ var builtinPersonalities embed.FS
 
 // DefaultPersonality adds nothing.
 const DefaultPersonality = "default"
-
-// MaxPersonalityText is how long a personality's text may be (PER-01).
-const MaxPersonalityText = 2000
 
 // The personalities' sources.
 const (
@@ -121,13 +117,21 @@ func parsePersonality(name string, data []byte) api.Personality {
 	if rest, ok := bytes.CutPrefix(data, []byte("---\n")); ok {
 		if head, body, ok := bytes.Cut(rest, []byte("\n---\n")); ok {
 			var fm struct {
-				Description string `yaml:"description"`
-				Voice       string `yaml:"voice"`
+				Description string  `yaml:"description"`
+				Voice       string  `yaml:"voice"`
+				Locale      string  `yaml:"locale"`
+				Speed       float64 `yaml:"speed"`
+				Pitch       float64 `yaml:"pitch"`
 			}
 			if yaml.Unmarshal(head, &fm) == nil {
 				p.Description = fm.Description
 				if slices.Contains(config.GeminiVoices, fm.Voice) {
 					p.Voice = fm.Voice
+				}
+				// A tuning the voices can't speak is left out, as a voice
+				// that isn't one is: the file still loads (PER-41).
+				if t := (config.VoiceTuning{Locale: fm.Locale, Speed: fm.Speed, Pitch: fm.Pitch}); t.Check() == nil {
+					p.Locale, p.Speed, p.Pitch = t.Locale, t.Speed, t.Pitch
 				}
 			}
 			text = body
@@ -200,10 +204,10 @@ func CheckPersonality(p api.Personality) error {
 		return fmt.Errorf("%q is Blitz's own: pick another name", DefaultPersonality)
 	case strings.TrimSpace(p.Text) == "":
 		return errors.New("a personality needs its text: how it should sound")
-	case utf8.RuneCountInString(p.Text) > MaxPersonalityText:
-		return fmt.Errorf("a personality's text is at most %d characters; this one is %d", MaxPersonalityText, utf8.RuneCountInString(p.Text))
 	case p.Voice != "" && !slices.Contains(config.GeminiVoices, p.Voice):
 		return fmt.Errorf("%q isn't one of Gemini's voices", p.Voice)
+	case personalityTuning(p).Check() != nil:
+		return personalityTuning(p).Check()
 	case strings.ContainsAny(p.Description, "\n\r"):
 		return errors.New("a personality's description is one line")
 	}
@@ -214,6 +218,11 @@ func CheckPersonality(p api.Personality) error {
 	return nil
 }
 
+// personalityTuning is how p's voice is tuned (PER-41).
+func personalityTuning(p api.Personality) config.VoiceTuning {
+	return config.VoiceTuning{Locale: p.Locale, Speed: p.Speed, Pitch: p.Pitch}
+}
+
 // SavePersonality writes p as one of the person's own
 // (~/.blitz/personalities/<name>.md), replacing one of its name.
 func SavePersonality(p api.Personality) error {
@@ -222,12 +231,21 @@ func SavePersonality(p api.Personality) error {
 	if err := CheckPersonality(p); err != nil {
 		return &api.InvalidSettingError{Err: err}
 	}
-	fm := map[string]string{}
+	fm := map[string]any{}
 	if d := strings.TrimSpace(p.Description); d != "" {
 		fm["description"] = d
 	}
 	if p.Voice != "" {
 		fm["voice"] = p.Voice
+	}
+	if p.Locale != "" {
+		fm["locale"] = p.Locale
+	}
+	if p.Speed != 0 && p.Speed != 1 {
+		fm["speed"] = p.Speed
+	}
+	if p.Pitch != 0 {
+		fm["pitch"] = p.Pitch
 	}
 	var b bytes.Buffer
 	if len(fm) > 0 {

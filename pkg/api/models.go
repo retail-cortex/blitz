@@ -200,6 +200,13 @@ type Personality struct {
 	// Voice is the Gemini voice it speaks with in spec_063's voice
 	// conversations ("": the [voice] setting's).
 	Voice string
+	// Locale, Speed and Pitch tune that voice with [voice] engine =
+	// "cloud" (spec_064_personality PER-41): the locale it speaks (a
+	// BCP-47 tag Chirp 3: HD has; "": the voice's own), its speed (1 or 0:
+	// its own) and its pitch in semitones (0: its own).
+	Locale string
+	Speed  float64
+	Pitch  float64
 	// Source is "built-in", "organization" or "own" (the person's file).
 	Source string
 	// Text is how it should sound; empty in lists.

@@ -34,7 +34,9 @@ import (
 // File is one agent file in a folder.
 type File struct {
 	Path string
-	// Spec is what it defines; nil when it doesn't parse.
+	// Spec is what it defines; nil when it can't be read. One that reads
+	// but has a value an agent can't have (Problem says which) is here
+	// for the editor to put right, and isn't loaded.
 	Spec *AgentSpec
 	// Problem is why it doesn't load ("" when it does).
 	Problem string
@@ -65,7 +67,7 @@ func ListFiles(dir string, builtin func(string) bool) ([]File, error) {
 		f := File{Path: path}
 		data, err := os.ReadFile(path)
 		if err == nil {
-			f.Spec, err = ParseMarkdownSpec(data)
+			f.Spec, err = ReadMarkdownSpec(data)
 		}
 		switch {
 		case err != nil:

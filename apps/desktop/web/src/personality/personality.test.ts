@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { agentWithPersonality, copyName, maxPersonalityText, personalityDescription, personalityLabel, personalityProblem, personalitySource, validPersonalityName } from "./personality";
+import { agentWithPersonality, copyName, personalityDescription, personalityLabel, personalityProblem, personalitySource, validPersonalityName } from "./personality";
 import { geminiVoices } from "./voices";
 import { personalityCheck } from "../dev/fakeChecks";
 
@@ -43,8 +43,13 @@ describe("personalities", () => {
     { d: { name: "coach", description: "", text: "Cheer." }, own: ["coach"], editing: "coach", want: "" },
     { d: { name: "coach", description: "a\nb", text: "Cheer." }, own: [], editing: "", want: "one line" },
     { d: { name: "coach", description: "", text: "  " }, own: [], editing: "", want: "how it should sound" },
-    { d: { name: "coach", description: "", text: "é".repeat(maxPersonalityText + 1) }, own: [], editing: "", want: "At most 2000" },
-    { d: { name: "coach", description: "", text: "é".repeat(maxPersonalityText) }, own: [], editing: "", want: "" },
+    // As long as it needs to be (PER-01a).
+    { d: { name: "coach", description: "", text: "é".repeat(50_000) }, own: [], editing: "", want: "" },
+    // Its voice's tuning (PER-41): what the voices can speak.
+    { d: { name: "coach", description: "", text: "Cheer.", locale: "en-GB", speed: 0.9, pitch: -2 }, own: [], editing: "", want: "" },
+    { d: { name: "coach", description: "", text: "Cheer.", locale: "en-ZZ" }, own: [], editing: "", want: "isn't a locale the voices speak" },
+    { d: { name: "coach", description: "", text: "Cheer.", speed: 3 }, own: [], editing: "", want: "Speed is from 0.5 to 2." },
+    { d: { name: "coach", description: "", text: "Cheer.", speed: 2, pitch: -6 }, own: [], editing: "", want: "together are beyond the voice" },
   ])("checks $d.name with $own (editing $editing)", ({ d, own, editing, want }) => {
     const got = personalityProblem(d, own, editing);
     if (want) expect(got).toContain(want);

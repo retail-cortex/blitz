@@ -38,7 +38,7 @@ Work through these steps in order, and keep a todo list of them.
 
 4. **Apply only what was chosen.**
    - A skill: `.agents/skills/<name>/SKILL.md` with frontmatter `name` (lowercase, - between words) and `description` (when to use it), then the steps with this project's real commands and paths, naming the specs it serves.
-   - An agent: `.agents/agents/<name>.md` with frontmatter `name`, `display_name`, `description`, `tools` (only what it needs, by tool name), `agency_level` and, for one that must not change files, `permission_mode: plan`; then a focused system prompt naming this project's commands, conventions and the specs it serves.
+   - An agent: `.agents/agents/<name>.md` with frontmatter `name`, `display_name`, `description`, `tools` (only what it needs, by tool name), `agency_level` (`low`, `medium`, `high` or `extreme`; nothing else loads) and, for one that must not change files, `permission_mode: plan` (leave `permission_mode` out otherwise); then a focused system prompt naming this project's commands, conventions and the specs it serves.
    - A rule or guardrail: the format above, in `.agents/rules/<name>.md` or `.agents/guardrails/<name>.md`; for a built-in guardrail, its id as the file's name, keeping the settings it has.
    - A support script: `.agents/scripts/<name>` (`.sh` or `.py`), starting with a comment saying what it does, how to run it and what it needs, added to the **Scripts** list in `.agents/AGENTS.md`; skills that repeat its steps call it instead. You never run it.
    - The scratch folder: `.agents/scratch/.gitignore` holding `*`, and the line "Working files go in `.agents/scratch/`, which git ignores." in `.agents/AGENTS.md`.

@@ -55,6 +55,9 @@ type VoiceModel struct {
 	// ID is the model's name ("gemini-…"), Backend the API it's on.
 	ID      string
 	Backend genai.Backend
+	// Project is the Google Cloud project the cloud engine's speech is
+	// made in ("" for a live model).
+	Project string
 }
 
 // liveClientConfig is cc ready for the Live API, which needs its API

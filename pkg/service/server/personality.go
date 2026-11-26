@@ -31,7 +31,7 @@ import (
 // ConfigService's, with the open workspace's choice marked.
 
 func personalityProto(p api.Personality) *pb.Personality {
-	return &pb.Personality{Name: p.Name, Description: p.Description, Voice: p.Voice, Source: p.Source, Text: p.Text}
+	return &pb.Personality{Name: p.Name, Description: p.Description, Voice: p.Voice, Source: p.Source, Text: p.Text, Locale: p.Locale, Speed: p.Speed, Pitch: p.Pitch}
 }
 
 func (h configService) ListPersonalities(ctx context.Context, r req[pb.ListPersonalitiesRequest]) (*connect.Response[pb.ListPersonalitiesResponse], error) {
@@ -83,7 +83,7 @@ func (h configService) SavePersonality(ctx context.Context, r req[pb.SavePersona
 	if m == nil {
 		return nil, invalid(errors.New("no personality"))
 	}
-	if err := engine.SavePersonality(api.Personality{Name: m.Name, Description: m.Description, Voice: m.Voice, Text: m.Text}); err != nil {
+	if err := engine.SavePersonality(api.Personality{Name: m.Name, Description: m.Description, Voice: m.Voice, Text: m.Text, Locale: m.Locale, Speed: m.Speed, Pitch: m.Pitch}); err != nil {
 		return nil, toAPI(err)
 	}
 	return ok(&pb.SavePersonalityResponse{Change: h.changed(ctx, "", filepath.Join(engine.PersonalitiesDir(), m.Name+".md"))})

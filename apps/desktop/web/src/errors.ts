@@ -60,3 +60,18 @@ export function isUnavailable(e: unknown): boolean {
   const why = reason(e);
   return why === "" || why === "SHUTTING_DOWN";
 }
+
+/**
+ * Whether a stream's error is its connection dropping rather than the
+ * service's answer (spec_024_desktop DSK-21b): the browser's own error
+ * (Chromium's "network error" when a network interface changes), or a
+ * Connect error made here, with no reason from the service. The service
+ * saying it's stopping isn't one.
+ */
+export function isStreamDrop(e: unknown): boolean {
+  if (!(e instanceof ConnectError)) return true;
+  // Whatever its code: a stream cut mid-message is a "protocol error", an
+  // invalid argument by its code. Every error the service sends has a
+  // reason (spec_021_service SVC-30a).
+  return reason(e) === "";
+}

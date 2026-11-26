@@ -85,7 +85,11 @@ func (f *fakeWindow) serve(ctx context.Context) {
 			}
 		case "page", "external":
 			f.mu.Lock()
-			f.pages = append(f.pages, strings.TrimSpace(c.Kind+" "+c.URL+" "+c.Profile))
+			local := ""
+			if c.AllowLocal {
+				local = " local"
+			}
+			f.pages = append(f.pages, strings.TrimSpace(c.Kind+" "+c.URL+" "+c.Profile)+local)
 			f.mu.Unlock()
 		}
 		return nil
@@ -97,7 +101,7 @@ func (f *fakeWindow) serve(ctx context.Context) {
 func TestOpenPageInTheWindow(t *testing.T) {
 	w := openTest(t)
 	ctx := context.Background()
-	assert.ErrorIs(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded, ""), ErrNoBrowserWindow)
+	assert.ErrorIs(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded, "", false), ErrNoBrowserWindow)
 
 	win := &fakeWindow{t: t, w: w}
 	wctx, stop := context.WithCancel(ctx)
@@ -108,14 +112,17 @@ func TestOpenPageInTheWindow(t *testing.T) {
 		defer w.browsers.mu.Unlock()
 		return len(w.browsers.windows) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.NoError(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded, "work"))
-	require.NoError(t, w.openPage(ctx, "https://example.com", tools.PageSystem, ""))
+	require.NoError(t, w.openPage(ctx, "https://github.com", tools.PageEmbedded, "work", false))
+	require.NoError(t, w.openPage(ctx, "https://example.com", tools.PageSystem, "", false))
+	// A page on this computer the person said to open: its tab may reach
+	// it, without browser.allow_local (AB-10b).
+	require.NoError(t, w.openPage(ctx, "http://localhost:3000", tools.PageEmbedded, "", true))
 	require.Eventually(t, func() bool {
 		win.mu.Lock()
 		defer win.mu.Unlock()
-		return len(win.pages) == 2
+		return len(win.pages) == 3
 	}, 2*time.Second, 5*time.Millisecond)
-	assert.Equal(t, []string{"page https://github.com work", "external https://example.com"}, win.pages, "a web tab signed in with the profile (BP-08)")
+	assert.Equal(t, []string{"page https://github.com work", "external https://example.com", "page http://localhost:3000 local"}, win.pages, "a web tab signed in with the profile (BP-08)")
 	stop()
 	<-done
 
@@ -125,7 +132,7 @@ func TestOpenPageInTheWindow(t *testing.T) {
 	w.browsers.mu.Unlock()
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
-	assert.ErrorIs(t, w.openPage(cctx, "https://github.com", tools.PageEmbedded, ""), context.Canceled)
+	assert.ErrorIs(t, w.openPage(cctx, "https://github.com", tools.PageEmbedded, "", false), context.Canceled)
 }
 
 // The agent's browser in the app (AB-01): with a window watching, the

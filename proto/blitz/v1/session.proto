@@ -81,7 +81,16 @@ service SessionService {
   // TurnFinished. Cancelling the call interrupts the turn. While it runs,
   // answer approval requests and questions with Approve and Answer, and
   // send steer messages with Steer.
+  //
+  // With a turn_id the turn outlives the call: a stream that drops (the
+  // network changed under it) leaves it running, and the same request
+  // sent again, with after_seq the last seq received, takes its events up
+  // from there (UNKNOWN_TURN once the service has forgotten it). StopTurn
+  // stops it; left with no stream for a minute, it's stopped.
   rpc RunTurn(RunTurnRequest) returns (stream RunTurnResponse);
+  // Stops a turn started with a turn_id, and waits for it to end
+  // (UNKNOWN_TURN). One that has already ended is no error.
+  rpc StopTurn(StopTurnRequest) returns (StopTurnResponse);
   // Queues a message for the agent while a turn runs; it reads it with its
   // next tool result. Fails with PROMPT_BLOCKED if a hook refuses it.
   rpc Steer(SteerRequest) returns (SteerResponse);
@@ -353,12 +362,33 @@ message RunTurnRequest {
   string workspace = 1;
   string session_id = 2;
   Turn turn = 3;
+  // The caller's name for this turn (letters, digits, - and _, up to 64;
+  // a UUID): the turn then outlives the call, and a request with the same
+  // turn_id joins it rather than starting another. Empty: the turn ends
+  // with the call.
+  string turn_id = 4;
+  // With a turn_id: the seq of the last event received, to be sent those
+  // after it (0: from the first kept). A turn the service doesn't know is
+  // started only when this is 0.
+  uint64 after_seq = 5;
 }
 
 // Response message for SessionService.RunTurn.
 message RunTurnResponse {
   TurnEvent event = 1;
+  // The event's place in a turn started with a turn_id, from 1 (0
+  // without one): what after_seq names.
+  uint64 seq = 2;
 }
+
+// Request message for SessionService.StopTurn.
+message StopTurnRequest {
+  string workspace = 1;
+  string turn_id = 2;
+}
+
+// Response message for SessionService.StopTurn.
+message StopTurnResponse {}
 
 // Request message for SessionService.Steer.
 message SteerRequest {

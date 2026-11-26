@@ -194,8 +194,10 @@ func (w *Workspace) openAgentBrowser(ctx context.Context, o tools.AgentBrowserOp
 
 // openPage has the newest window show u for the user (tools.PageOpener,
 // AB-10): in a web tab, signed in with browser profile ("": none, BP-08),
-// or the system's browser.
-func (w *Workspace) openPage(ctx context.Context, u, where, profile string) error {
+// or the system's browser. local: a page on this computer or its network
+// that the person said to open (AB-10a), so its tab may reach such
+// addresses whatever browser.allow_local says (AB-10b).
+func (w *Workspace) openPage(ctx context.Context, u, where, profile string, local bool) error {
 	h := &w.browsers
 	h.mu.Lock()
 	if len(h.windows) == 0 {
@@ -210,6 +212,7 @@ func (w *Workspace) openPage(ctx context.Context, u, where, profile string) erro
 	} else {
 		// The tab's reach, held by the window's network filter (BP-08a).
 		cmd.AllowLocal, cmd.DenyDomains, cmd.PrivateSites = w.tools.PageReach(profile)
+		cmd.AllowLocal = cmd.AllowLocal || local
 	}
 	select {
 	case win.send <- cmd:

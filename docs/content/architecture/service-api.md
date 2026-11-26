@@ -11,11 +11,16 @@ The API is defined in `proto/blitz/v1` (package `blitz.v1`) and served with [Con
 
 | Proto | Service | RPCs |
 |---|---|---|
-| `session.proto`, `turn.proto` | `SessionService` | 16 |
-| `workspace.proto` | `WorkspaceService` | 39 |
-| `file.proto` | `FileService` | 8 |
-| `config.proto` | `ConfigService` | 7 |
-| `worker.proto` | `WorkerService` | 7 |
+| `session.proto`, `turn.proto` | `SessionService` | 32 |
+| `workspace.proto` | `WorkspaceService` | 175 |
+| `config.proto` | `ConfigService` | 97 |
+| `file.proto` | `FileService` | 20 |
+| `worker.proto` | `WorkerService` | 19 |
+| `language.proto` | `LanguageService` | 12 |
+| `terminal.proto` | `TerminalService` | 6 |
+| `voice.proto` | `VoiceService` | 3 |
+
+(As of 2026-11-26; the API reference below is generated and always current.)
 
 The [API reference](api/_index.md) has every message, enum and RPC, with class diagrams, generated from the protos.
 
@@ -40,6 +45,8 @@ Every request names its workspace by absolute path. The server resolves symlinks
 | `approval_request`, `question` | The agent is waiting on the client |
 | `tasks` | The agent's task list changed |
 | `finished` | Always last: the output, usage, leftover steer messages, or the error |
+
+Cancelling the call stops the turn, unless the request gave it a `turn_id`. Such a turn runs in the service and its events are numbered (`seq`): when the stream drops (on Linux, Chromium ends every connection when a network interface comes or goes, a container's too), the client sends the same request again with `after_seq`, the last number it received, and carries on from there. `StopTurn` stops the turn, and a turn left with no stream for a minute is stopped, so a client that died doesn't leave one running. The desktop page and the terminal's client run their turns this way.
 
 ## Approvals across processes
 

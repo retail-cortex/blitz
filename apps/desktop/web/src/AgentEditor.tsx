@@ -24,7 +24,7 @@ import { t, tn } from "./i18n";
 import { ModelInput, useModelCatalog } from "./ModelInput";
 import { AgentScope, type AgentFile, type EvalFile } from "./gen/blitz/v1/workspace_pb";
 import { addTools, advancedCount, agentFromForm, agentPath, deleteTarget, emptyAgentForm, newAgentForm, fileName, formFromAgent, invalidFields, sameForm, toolChoices, validAgentName, type AgentField, type AgentForm } from "./agentForm";
-import { agencies, efforts, modes } from "./options";
+import { agencies, efforts, modes, withUnknown } from "./options";
 import { DraftButton } from "./studio/Draft";
 import { MarkdownField } from "./studio/MarkdownField";
 import { evalsForAgent, runInBackground } from "./studio/evalCoverage";
@@ -470,11 +470,11 @@ export function AgentEditor({
                     />
                   )}
                 </Field>
-                <Field label={t("desktop.rs.agency")} supporting={agencies().find((a) => a.value === (form.agencyLevel || "high"))?.detail}>
+                <Field label={t("desktop.rs.agency")} supporting={withUnknown(agencies(), form.agencyLevel).find((a) => a.value === (form.agencyLevel || "high"))?.detail}>
                   {(id) => (
                     <select id={id} className="select" value={form.agencyLevel} onChange={(e) => set("agencyLevel", e.target.value)}>
                       <option value="">{t("desktop.agents.agency_default")}</option>
-                      {agencies().map((a) => (
+                      {withUnknown(agencies(), form.agencyLevel).map((a) => (
                         <option key={a.value} value={a.value}>
                           {a.label}
                         </option>
@@ -484,11 +484,11 @@ export function AgentEditor({
                 </Field>
               </div>
               <div className="pair">
-                <Field label={t("desktop.rs.mode")} supporting={form.permissionMode ? modes().find((m) => m.value === form.permissionMode)?.detail : t("desktop.agents.mode_hint")}>
+                <Field label={t("desktop.rs.mode")} supporting={form.permissionMode ? withUnknown(modes(), form.permissionMode).find((m) => m.value === form.permissionMode)?.detail : t("desktop.agents.mode_hint")}>
                   {(id) => (
                     <select id={id} className="select" value={form.permissionMode} onChange={(e) => set("permissionMode", e.target.value)}>
                       <option value="">{t("desktop.agents.mode_default")}</option>
-                      {modes().map((m) => (
+                      {withUnknown(modes(), form.permissionMode).map((m) => (
                         <option key={m.value} value={m.value}>
                           {m.label}
                         </option>

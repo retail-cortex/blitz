@@ -589,6 +589,12 @@ var typedValues = map[string]string{
 	"voice.pause_ms":     "pausems",
 	"voice.start_ms":     "startms",
 	"voice.buffer_ms":    "bufferms",
+	// The cloud engine (VOX-70).
+	"voice.engine":        "voiceengine",
+	"voice.text_model":    "modelref",
+	"voice.language":      "voicelocale",
+	"voice.hear_model":    "hearname",
+	"voice.hear_location": "hearname",
 }
 
 // WorkerPermissionKinds are the permission kinds a worker may be given
@@ -598,6 +604,9 @@ var WorkerPermissionKinds = []string{"shell", "write", "delete", "web", "mcp"}
 
 // SearchSourceNames are the sources workspace search knows.
 var SearchSourceNames = []string{"files", "documents", "chats", "notes"}
+
+// hearNames are Speech-to-Text's models' and locations' names.
+var hearNames = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,39}$`)
 
 // typedValue is value as TOML for a key of kind, and as the file then
 // reads back, or why it isn't one.
@@ -652,6 +661,26 @@ func typedValue(kind, key, value string) (string, any, error) {
 	case "voicemodel":
 		if !strings.HasPrefix(value, "gemini/") || len(value) == len("gemini/") {
 			return "", nil, fmt.Errorf("%s is a Gemini Live model, as gemini/<model>, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "modelref":
+		if p, m, ok := strings.Cut(value, "/"); !ok || p == "" || m == "" || strings.ContainsAny(value, " \t\n") {
+			return "", nil, fmt.Errorf("%s is a model, as provider/model, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "voiceengine":
+		if !slices.Contains(VoiceEngines, value) {
+			return "", nil, fmt.Errorf("%s is %s, not %q", key, strings.Join(VoiceEngines, " or "), value)
+		}
+		return strconv.Quote(value), value, nil
+	case "voicelocale":
+		if !slices.Contains(VoiceLocales, value) {
+			return "", nil, fmt.Errorf("%s is a locale Google's voices speak, like en-GB or fr-CA, not %q", key, value)
+		}
+		return strconv.Quote(value), value, nil
+	case "hearname":
+		if !hearNames.MatchString(value) {
+			return "", nil, fmt.Errorf("%s is a Speech-to-Text model or location's name (long, chirp_3, global, us-central1), not %q", key, value)
 		}
 		return strconv.Quote(value), value, nil
 	case "voice":

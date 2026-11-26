@@ -25,6 +25,7 @@ import type { Task, Usage } from "../gen/blitz/v1/turn_pb";
 import { t } from "../i18n";
 import type { NotifyKind } from "../notify";
 import { applyEvent, assignPromptIndices, tasksOf, type Entry } from "../turns";
+import { newTurnId, resumableTurn } from "../turnStream";
 import { addWait, type Pending } from "../waits";
 
 /** Executes conversation turns and watches background runs. */
@@ -70,6 +71,8 @@ export function useConversationRun({
 }) {
   const abort = useRef<AbortController | null>(null);
   const following = useRef("");
+  // The running turn's ID (DSK-21b): what StopTurn names.
+  const turnId = useRef("");
   const late = useRef<string[]>([]);
   const latestRunning = useRef(false);
   const finished = useRef<Promise<void>>(Promise.resolve());
@@ -99,30 +102,40 @@ export function useConversationRun({
       const ctl = new AbortController();
       abort.current = ctl;
       following.current = opts.follow ?? "";
+      // The turn has a name, so the service keeps it when the stream
+      // drops, and the page asks for it again (DSK-21b).
+      const id = opts.follow ? "" : newTurnId();
+      turnId.current = id;
       let done!: () => void;
       finished.current = new Promise((r) => (done = r));
       let leftover: string[] = [];
       try {
         const stream = opts.follow
           ? sessions.watchBackground({ id: opts.follow, follow: true }, { signal: ctl.signal })
-          : sessions.runTurn(
-              {
-                workspace: dir,
-                sessionId: session.id,
-                turn: {
-                  text,
-                  accepted: !!opts.accepted,
-                  plan: !!opts.plan,
-                  imageIds: readyIds(images),
-                  aside: !!opts.aside,
-                  readOnly: opts.readOnly ?? "",
-                  prompt: opts.prompt ?? "",
-                  fetchGrants: opts.fetchGrants ?? [],
-                  command: !!opts.command,
-                  context,
-                },
-              },
-              { signal: ctl.signal },
+          : resumableTurn(
+              (afterSeq, signal) =>
+                sessions.runTurn(
+                  {
+                    workspace: dir,
+                    sessionId: session.id,
+                    turnId: id,
+                    afterSeq,
+                    turn: {
+                      text,
+                      accepted: !!opts.accepted,
+                      plan: !!opts.plan,
+                      imageIds: readyIds(images),
+                      aside: !!opts.aside,
+                      readOnly: opts.readOnly ?? "",
+                      prompt: opts.prompt ?? "",
+                      fetchGrants: opts.fetchGrants ?? [],
+                      command: !!opts.command,
+                      context,
+                    },
+                  },
+                  { signal },
+                ),
+              ctl.signal,
             );
         for await (const res of stream) {
           const ev = res.event;
@@ -148,13 +161,17 @@ export function useConversationRun({
           }
         }
       } catch (e) {
-        if (!ctl.signal.aborted) fail(e);
-        else setEntries((e) => [...e, { kind: "notice", text: t("desktop.stopped"), tone: "info" }]);
+        if (!ctl.signal.aborted) {
+          fail(e);
+          // The page has stopped following the turn: so it doesn't run on unseen.
+          if (id) void sessions.stopTurn({ workspace: dir, turnId: id }).catch(() => undefined);
+        } else setEntries((e) => [...e, { kind: "notice", text: t("desktop.stopped"), tone: "info" }]);
       } finally {
         setRunning(false);
         setWaits([]);
         abort.current = null;
         following.current = "";
+        if (turnId.current === id) turnId.current = "";
         done();
         if (opts.follow) refreshRuns();
       }
@@ -175,9 +192,16 @@ export function useConversationRun({
 
   const stop = useCallback(async () => {
     if (following.current) await sessions.stopBackground({ id: following.current }).catch(() => abort.current?.abort());
-    else abort.current?.abort();
+    else {
+      // The page stops following first (the chat says stopped, not
+      // failed), then has the service stop the turn and waits for it:
+      // the stream ending no longer stops it (DSK-21b).
+      const id = turnId.current;
+      abort.current?.abort();
+      if (id) await sessions.stopTurn({ workspace: dir, turnId: id }).catch(() => undefined);
+    }
     await finished.current;
-  }, []);
+  }, [dir]);
 
   useEffect(() => {
     registerStop(dir, stop);

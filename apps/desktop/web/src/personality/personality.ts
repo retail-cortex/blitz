@@ -15,6 +15,7 @@
  */
 
 import { t } from "../i18n";
+import { tuningProblem } from "./tuning";
 
 // Personalities in the page (spec_064_personality): how the root agent
 // sounds. The service checks what's saved (engine.CheckPersonality); the
@@ -22,13 +23,10 @@ import { t } from "../i18n";
 // pressed.
 
 /** A personality as the page has it (the proto's fields it uses). */
-export type PersonalityLike = { name: string; description: string; voice: string; source: string; text?: string };
+export type PersonalityLike = { name: string; description: string; voice: string; source: string; text?: string; locale?: string; speed?: number; pitch?: number };
 
 /** The built-ins, in the order the service lists them (default first). */
 export const builtinPersonalities = ["default", "calm", "cheerful", "direct", "friendly", "mentor", "reviewer"] as const;
-
-/** How long a personality's text may be (engine.MaxPersonalityText). */
-export const maxPersonalityText = 2000;
 
 /** Whether name can name a personality (config.ValidPersonalityName). */
 export const validPersonalityName = (name: string) => name.length <= 40 && /^[a-z0-9][a-z0-9-]*$/.test(name);
@@ -47,9 +45,10 @@ export const personalitySource = (p: PersonalityLike) => t(`desktop.personality.
 /**
  * Why the editor's personality can't be saved, or "": the service's
  * checks (CheckPersonality), a name another of the person's has (unless
- * it's the one being edited), and secrets left to the service.
+ * it's the one being edited), a tuning its voice can't speak (PER-41),
+ * and secrets left to the service.
  */
-export function personalityProblem(p: { name: string; description: string; text: string }, own: readonly string[], editing: string): string {
+export function personalityProblem(p: { name: string; description: string; text: string; locale?: string; speed?: number; pitch?: number }, own: readonly string[], editing: string, locales?: readonly string[]): string {
   const name = p.name.trim();
   if (!name) return t("desktop.personality.problem.no_name");
   if (!validPersonalityName(name)) return t("desktop.personality.problem.bad_name");
@@ -57,8 +56,7 @@ export function personalityProblem(p: { name: string; description: string; text:
   if (name !== editing && own.includes(name)) return t("desktop.personality.problem.taken", { name });
   if (/[\n\r]/.test(p.description)) return t("desktop.personality.problem.description");
   if (!p.text.trim()) return t("desktop.personality.problem.no_text");
-  if ([...p.text].length > maxPersonalityText) return t("desktop.personality.problem.long", { max: maxPersonalityText });
-  return "";
+  return tuningProblem({ locale: p.locale ?? "", speed: p.speed ?? 1, pitch: p.pitch ?? 0 }, locales);
 }
 
 /** A name for a copy of name, not one of taken: name-2, name-3… */

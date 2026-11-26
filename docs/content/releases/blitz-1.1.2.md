@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.1.2
-weight: 6
+weight: 7
 ---
 
 Blitz 1.1.1 for Linux on ARM. Everything in [1.1.1](blitz-1.1.1.md), with the agents browsing signed in with your browser profiles and settings that take effect when you close Settings, now on ARM Linux machines too: the desktop app's `.deb`, the Arch Linux package and the tarball.

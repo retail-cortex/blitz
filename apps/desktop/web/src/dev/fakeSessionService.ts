@@ -97,8 +97,17 @@ export function fakeSessionService(): ServiceImpl<typeof SessionService> {
     },
     runTurn: (req) => {
       (globalThis as { __lastTurn?: unknown }).__lastTurn = req.turn; // for checks
-      return runTurn(req.workspace, req.turn?.text ?? "", !!req.turn?.plan);
+      const events = runTurn(req.workspace, req.turn?.text ?? "", !!req.turn?.plan);
+      if (!req.turnId) return events;
+      // A turn with an ID has its events numbered (SVC-20a); the fake's
+      // streams don't drop, so none is asked for again.
+      return (async function* () {
+        let seq = 0n;
+        for await (const e of events) yield { ...e, seq: ++seq };
+      })();
     },
+    // The fake's turn ends with its stream, which the page ends first.
+    stopTurn: () => ({}),
     steer: ({ workspace, text }) => {
       active(state(workspace)).messages.push(msg("user", text, "steer"));
       return {};

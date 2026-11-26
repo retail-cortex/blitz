@@ -544,6 +544,14 @@ message Personality {
   bool person_default = 6;
   // Whether it's the workspace's, when the request named one.
   bool workspace_choice = 7;
+  // How its voice is tuned with [voice] engine = "cloud"
+  // (spec_064_personality PER-41): the locale it speaks (BCP-47, one of
+  // DescribeVoiceResponse.locales; "": the voice's own), its speed (1, or
+  // 0 for unset: its own; 0.5 to 2) and its pitch in semitones (0: its
+  // own; -6 to 6).
+  string locale = 8;
+  double speed = 9;
+  double pitch = 10;
 }
 
 // Request message for ConfigService.ListPersonalities.

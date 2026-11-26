@@ -48,8 +48,10 @@ const (
 // PageOpener has the desktop window open url for the user, in a web tab
 // (PageEmbedded) or the system's browser (PageSystem), a web tab signed
 // in with browser profile ("": the app's own pages' session, BP-08); an
-// error when no window is watching the workspace.
-type PageOpener func(ctx context.Context, url, where, profile string) error
+// error when no window is watching the workspace. local says the page is
+// on this computer or its network and the person said to open it
+// (AB-10a): its web tab may then reach such addresses (AB-10b).
+type PageOpener func(ctx context.Context, url, where, profile string, local bool) error
 
 // openSystemBrowser opens u in the system's browser on this machine
 // (replaced in tests).
@@ -106,14 +108,15 @@ func NewOpenPageTool(r *Registry) (tool.Tool, error) {
 			if err != nil {
 				return OpenPageOutput{Error: err.Error()}, nil
 			}
-			if err := r.askRulePage(ctx, u); err != nil {
+			local, err := r.askRulePage(ctx, u)
+			if err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
 			profile, err := r.pageProfile(ctx, in.Profile, u)
 			if err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
-			where, err := r.openPage(ctx, u, profile)
+			where, err := r.openPage(ctx, u, profile, local)
 			if err != nil {
 				return OpenPageOutput{URL: u, Error: err.Error()}, nil
 			}
@@ -161,26 +164,30 @@ func (r *Registry) pageURL(raw string) (string, error) {
 // host, or when the host is (or resolves to) a private, loopback or
 // link-local address (AB-10a): a public page needs no approval (AB-10),
 // but a page on this computer or its network opens with the person's own
-// browser and sign-ins, where a page the agent read could send it.
-func (r *Registry) askRulePage(ctx context.Context, u string) error {
+// browser and sign-ins, where a page the agent read could send it. It
+// reports whether the page is such a one the person said to open (local).
+func (r *Registry) askRulePage(ctx context.Context, u string) (local bool, err error) {
 	parsed, err := url.Parse(u)
 	if err != nil {
-		return err
+		return false, err
 	}
 	host := strings.ToLower(parsed.Hostname())
 	effect, _ := r.rules.Decide(RuleWeb, []string{host})
 	private := privateHost(ctx, host)
 	if effect != EffectAsk && !private {
-		return nil
+		return false, nil
 	}
 	detail := "open " + u + " in a browser"
 	if private {
 		detail += " (an address on this computer or its network)"
 	}
-	return r.hooks.Approve(ctx, api.ApprovalRequest{
+	if err := r.hooks.Approve(ctx, api.ApprovalRequest{
 		Tool: "open_page", Kind: api.ActionNetwork, Detail: detail,
 		Targets: []string{host}, MustAsk: true,
-	})
+	}); err != nil {
+		return false, err
+	}
+	return private, nil
 }
 
 // pageLookup resolves a page's host (a variable for tests).
@@ -258,8 +265,9 @@ func (r *Registry) SessionGone(session string) {
 // openPage shows u where browser.open says, or for "ask" where the chat
 // answers (asked once; the embedded browser if no one answers). No
 // desktop window: the system's browser on this machine. A run no one
-// watches (a job's) opens nothing.
-func (r *Registry) openPage(ctx context.Context, u, profile string) (string, error) {
+// watches (a job's) opens nothing. local: a page on this computer or its
+// network that the person said to open (askRulePage).
+func (r *Registry) openPage(ctx context.Context, u, profile string, local bool) (string, error) {
 	if isUnattended(ctx) {
 		return "", errors.New("nobody is watching this run to see the page")
 	}
@@ -275,7 +283,7 @@ func (r *Registry) openPage(ctx context.Context, u, profile string) (string, err
 		if err := r.askProfileSite(ctx, u, profile); err != nil {
 			return "", err
 		}
-		err := opener(ctx, u, where, profile)
+		err := opener(ctx, u, where, profile, local)
 		switch {
 		case err == nil:
 			return where, nil
