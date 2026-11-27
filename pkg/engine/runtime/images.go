@@ -76,15 +76,21 @@ func withImages(llm model.LLM, media *mediaSource) model.LLM {
 func (m *imageModel) Name() string { return m.inner.Name() }
 
 func (m *imageModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
-	if req != nil && images.HasRefs(req.Contents) {
-		up := m.media.uploader()
-		contents, err := images.Expand(ctx, req.Contents, m.media.storeOf(), mediaPolicy(acceptedFor(m.inner, up != nil)), up)
-		if err != nil {
-			return func(yield func(*model.LLMResponse, error) bool) { yield(nil, err) }
+	if req != nil && len(req.Contents) > 0 {
+		pruned := pruneRequestContents(req.Contents)
+		if images.HasRefs(pruned) {
+			up := m.media.uploader()
+			expanded, err := images.Expand(ctx, pruned, m.media.storeOf(), mediaPolicy(acceptedFor(m.inner, up != nil)), up)
+			if err != nil {
+				return func(yield func(*model.LLMResponse, error) bool) { yield(nil, err) }
+			}
+			pruned = expanded
 		}
-		cp := *req
-		cp.Contents = contents
-		req = &cp
+		if &pruned[0] != &req.Contents[0] {
+			cp := *req
+			cp.Contents = pruned
+			req = &cp
+		}
 	}
 	return func(yield func(*model.LLMResponse, error) bool) {
 		for resp, err := range m.inner.GenerateContent(ctx, req, stream) {

@@ -111,3 +111,34 @@ func TestPlanGateRefusesWrites(t *testing.T) {
 	assert.Nil(t, planRefusal(&runState{}, true, "blitz", map[string]any{"command": "open file"}))
 	assert.Contains(t, planRefusal(&runState{}, true, "blitz", map[string]any{"command": "connector save"})["error"], "blitz connector save is disabled")
 }
+
+// Implements: ENG-30a, MCP-23.
+func TestPlanAndAllowedToolsFilterRequestDeclarations(t *testing.T) {
+	f := newEngineWith(t, fixtureOpts{}, textContent("plan done"), textContent("allowed done"))
+	_, err := functionResponses(t, f.eng, "s-plan", PlanPrompt("plan it"), WithPlanOnly())
+	require.NoError(t, err)
+	require.NotEmpty(t, f.llm.Requests)
+
+	var planNames []string
+	for _, tl := range f.llm.Requests[0].Config.Tools {
+		for _, d := range tl.FunctionDeclarations {
+			planNames = append(planNames, d.Name)
+		}
+	}
+	assert.Contains(t, planNames, "read_file")
+	assert.Contains(t, planNames, "blitz")
+	assert.NotContains(t, planNames, "create_file", "write tools must be omitted from plan-only request schemas")
+	assert.NotContains(t, planNames, "replace_in_file", "write tools must be omitted from plan-only request schemas")
+	assert.NotContains(t, planNames, "run_shell_command", "exec tools must be omitted from plan-only request schemas")
+
+	_, err = functionResponses(t, f.eng, "s-allowed", "just grep", WithAllowedTools([]string{"grep"}))
+	require.NoError(t, err)
+	var allowedNames []string
+	for _, tl := range f.llm.Requests[1].Config.Tools {
+		for _, d := range tl.FunctionDeclarations {
+			allowedNames = append(allowedNames, d.Name)
+		}
+	}
+	assert.Contains(t, allowedNames, "grep")
+	assert.NotContains(t, allowedNames, "read_file", "tools outside WithAllowedTools must be omitted from request schemas")
+}

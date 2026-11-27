@@ -41,6 +41,7 @@ import (
 	"github.com/retail-cortex/blitz/pkg/i18n"
 	"github.com/retail-cortex/blitz/pkg/modelfacts"
 	"github.com/retail-cortex/blitz/pkg/observability"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/adk/v2/agent"
@@ -530,10 +531,10 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 	sessionID := fmt.Sprintf("subagent-%s-%d", agentName, e.subagentSeq.Add(1))
 	hooks := e.toolReg.ScriptHooks()
 	hooks.Async(ctx, "subagent_start", agentName, tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Prompt: prompt})
-	var out strings.Builder
+	var lastReply string
 	defer func() {
 		e.scoped.forget(sessionID) // its session ends here: what it was handed goes with it
-		ev := tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Output: out.String()}
+		ev := tools.HookEvent{SessionID: e.sessionOf(ctx), Subagent: agentName, Output: lastReply}
 		if err != nil {
 			ev.Error = err.Error()
 		}
@@ -547,12 +548,40 @@ func (e *Engine) InvokeSubagent(ctx context.Context, agentName, prompt string) (
 			if ev.Author != agentName || ev.Partial || ev.Content == nil {
 				return nil
 			}
+			var turnText strings.Builder
 			for _, part := range ev.Content.Parts {
 				if part.Text != "" && !part.Thought {
-					out.WriteString(part.Text)
+					turnText.WriteString(part.Text)
 				}
+			}
+			if s := turnText.String(); s != "" {
+				lastReply = s // keep only the latest non-empty model reply (Implements: ENG-70c, AG-31b)
 			}
 			return nil
 		})
-	return out.String(), err
+	return distillSubagentReply(lastReply, e.sessionOf(ctx)), err
+}
+
+// maxSubagentReplyChars caps the final text a sub-agent returns to its caller
+// (ENG-70c, AG-31b).
+const maxSubagentReplyChars = 8000
+
+// distillSubagentReply caps a sub-agent's final reply at maxSubagentReplyChars,
+// keeping the head and tail when longer (Implements: ENG-70c, AG-31b).
+func distillSubagentReply(s, sessionID string) string {
+	if len(s) <= maxSubagentReplyChars {
+		return s
+	}
+	half := maxSubagentReplyChars / 2
+	head := textutil.TruncateUTF8(s, half)
+	tail := s[len(s)-half:]
+	for len(tail) > 0 && (tail[0]&0xC0) == 0x80 {
+		tail = tail[1:]
+	}
+	logName := "<session>.subagents.jsonl"
+	if sessionID != "" {
+		logName = sessionID + ".subagents.jsonl"
+	}
+	return fmt.Sprintf("%s\n\n... [sub-agent reply truncated (%d chars omitted; full events in %s)] ...\n\n%s",
+		head, len(s)-len(head)-len(tail), logName, tail)
 }

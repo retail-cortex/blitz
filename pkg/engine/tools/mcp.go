@@ -850,7 +850,67 @@ func (p *managedTool) Run(ctx agent.Context, args any) (map[string]any, error) {
 		// The server answered with a tool error: it is healthy.
 		p.m.recordSuccess(ctx, p.srv)
 	}
-	return res, err
+	return capMCPResult(res), err
+}
+
+// mcpOutputLimit caps an MCP tool's text result at 100 KiB, keeping the head
+// and tail when longer (Implements: MCP-23).
+const mcpOutputLimit = 100 * 1024
+
+func capMCPResult(res map[string]any) map[string]any {
+	if len(res) == 0 {
+		return res
+	}
+	capped, _ := capMCPValue(res, mcpOutputLimit).(map[string]any)
+	return capped
+}
+
+func capMCPValue(v any, limit int) any {
+	switch x := v.(type) {
+	case string:
+		if len(x) <= limit {
+			return x
+		}
+		buf := newHeadTailBuffer(limit)
+		_, _ = buf.Write([]byte(x))
+		return buf.String()
+	case map[string]any:
+		var out map[string]any
+		for k, val := range x {
+			c := capMCPValue(val, limit)
+			if !reflect.DeepEqual(c, val) {
+				if out == nil {
+					out = make(map[string]any, len(x))
+					for k2, v2 := range x {
+						out[k2] = v2
+					}
+				}
+				out[k] = c
+			}
+		}
+		if out != nil {
+			return out
+		}
+		return x
+	case []any:
+		var out []any
+		for i, val := range x {
+			c := capMCPValue(val, limit)
+			if !reflect.DeepEqual(c, val) {
+				if out == nil {
+					out = make([]any, len(x))
+					copy(out, x)
+				}
+				out[i] = c
+			}
+		}
+		if out != nil {
+			return out
+		}
+		return x
+	default:
+		return v
+	}
 }
 
 // transportFailure reports whether a tool call failed to reach the server

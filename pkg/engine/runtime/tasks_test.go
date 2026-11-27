@@ -28,6 +28,7 @@ import (
 
 	"github.com/retail-cortex/blitz/pkg/api"
 	"github.com/retail-cortex/blitz/pkg/config"
+	"github.com/retail-cortex/blitz/pkg/config/configtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/adk/v2/model"
@@ -392,7 +393,7 @@ func TestTaskKeepsItsStartersRestrictions(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			f := newEngineWith(t, fixtureOpts{opts: []Option{WithAgentModel("worker", NewMockLLM("sub", create, textContent("ok")))}})
+			f := newEngineWith(t, fixtureOpts{cfg: configtest.RunTools, opts: []Option{WithAgentModel("worker", NewMockLLM("sub", create, textContent("ok")))}})
 			t.Cleanup(f.eng.StopTasks)
 			agentFile(t, f.eng, t.TempDir(), "worker", "")
 			st := &runState{sessionID: "s"}

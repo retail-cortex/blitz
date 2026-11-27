@@ -38,8 +38,17 @@ import (
 )
 
 // repeatWarnAt is how many times the same call may fail the same way in a
-// run before the agent is told to stop repeating it.
-const repeatWarnAt = 3
+// run before the agent is told to stop repeating it; repeatRefuseAt is
+// when the call is refused outright before running (Implements: HE-07, HE-07a).
+const (
+	repeatWarnAt   = 3
+	repeatRefuseAt = 4
+)
+
+type callFailure struct {
+	count int
+	why   string
+}
 
 // repeatedFailure counts a failed call in ctx's run and returns how often
 // this tool, with these arguments, failed with this error in it (0 outside
@@ -50,8 +59,42 @@ func repeatedFailure(ctx context.Context, tool string, args map[string]any, why 
 		return 0
 	}
 	b, _ := json.Marshal(args) // map keys sorted: the same arguments, the same key
-	n, _ := st.failures.LoadOrStore(tool+"\x00"+string(b)+"\x00"+why, new(atomic.Int32))
-	return int(n.(*atomic.Int32).Add(1))
+	callKey := tool + "\x00" + string(b)
+	n, _ := st.failures.LoadOrStore(callKey+"\x00"+why, new(atomic.Int32))
+	count := int(n.(*atomic.Int32).Add(1))
+	st.failures.Store(callKey, callFailure{count: count, why: why})
+	return count
+}
+
+// clearFailures resets the run's repeated-failure breaker after a tool call
+// that may have changed workspace state, so a previously failing call (such
+// as reading a file that was just created) may run again (HE-07a).
+func clearFailures(ctx context.Context) {
+	if st := stateFrom(ctx); st != nil {
+		st.failures.Clear()
+	}
+}
+
+// repeatedRefusal checks whether this exact call has already failed at least
+// repeatWarnAt times with the same error in ctx's run, and refuses it on the
+// repeatRefuseAt-th attempt before running the tool (Implements: HE-07a).
+func repeatedRefusal(ctx context.Context, tool string, args map[string]any) map[string]any {
+	st := stateFrom(ctx)
+	if st == nil {
+		return nil
+	}
+	b, _ := json.Marshal(args)
+	v, ok := st.failures.Load(tool + "\x00" + string(b))
+	if !ok {
+		return nil
+	}
+	cf, ok := v.(callFailure)
+	if !ok || cf.count < repeatWarnAt {
+		return nil
+	}
+	return map[string]any{
+		"error": fmt.Sprintf("refused: this exact call has already failed %d times in this turn with the same error (%s). Change the arguments, try another approach, or ask the user.", cf.count, cf.why),
+	}
 }
 
 // beforeModel enforces the per-run model-call budget (a sub-agent's own
@@ -67,6 +110,8 @@ func (e *Engine) beforeModel(ctx agent.Context, req *model.LLMRequest) (*model.L
 		}
 	}
 	if req != nil {
+		filterRequestTools(stateFrom(ctx), req)
+		req.Contents = pruneRequestContents(req.Contents)
 		if e.toolReg != nil {
 			e.toolReg.Workspace().Reads().Shown(ctx, req.Contents)
 		}
@@ -252,6 +297,9 @@ func (e *Engine) beforeTool(ctx agent.Context, t tool.Tool, args map[string]any)
 	if r := allowedRefusal(stateFrom(ctx), t.Name()); r != nil {
 		return r, nil
 	}
+	if r := repeatedRefusal(ctx, t.Name(), args); r != nil {
+		return r, nil
+	}
 	if rule := e.toolReg.Rules().ToolDenied(t.Name(), args); rule != nil {
 		log.LogContext(ctx, audit.Entry{Kind: audit.KindDenial, Tool: t.Name(), Decision: "rule-deny " + rule.String()})
 		return map[string]any{"error": fmt.Sprintf("denied by the permission rule deny %s", rule)}, nil
@@ -362,6 +410,8 @@ func (e *Engine) afterTool(ctx agent.Context, t tool.Tool, args, result map[stri
 	}
 	if entry.Decision != "ok" {
 		entry.Args = args
+	} else if !PlanAllows(t.Name()) {
+		clearFailures(ctx) // a successful state-changing call resets the churn breaker (HE-07a)
 	}
 	e.toolReg.Hooks().Audit().LogContext(ctx, entry)
 	out := result

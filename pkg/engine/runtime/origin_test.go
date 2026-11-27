@@ -257,3 +257,73 @@ func TestWireNames(t *testing.T) {
 	require.NotEmpty(t, got)
 	assert.Equal(t, "github.search", got[len(got)-1].Content.Parts[0].FunctionCall.Name)
 }
+
+// Implements: CA-28a, WEB-36a.
+func TestPruneRequestContents(t *testing.T) {
+	bigShell := strings.Repeat("S", 2000) + strings.Repeat("M", 2000) + strings.Repeat("E", 2000)
+	history := []*genai.Content{
+		// Turn 1 (5 user turns behind the latest)
+		genai.NewContentFromText("turn 1", genai.RoleUser),
+		{Role: genai.RoleModel, Parts: []*genai.Part{
+			{FunctionCall: &genai.FunctionCall{ID: "c1", Name: "read_file", Args: map[string]any{"path": "a.go"}}},
+			{FunctionCall: &genai.FunctionCall{ID: "c2", Name: "run_shell_command"}},
+			{FunctionCall: &genai.FunctionCall{ID: "c3", Name: "browser"}},
+		}},
+		{Role: genai.RoleUser, Parts: []*genai.Part{
+			{FunctionResponse: &genai.FunctionResponse{ID: "c1", Name: "read_file", Response: map[string]any{
+				"path": "a.go", "content": "old file content", "total_lines": 10, "digest": "d1", "lines": "1-10",
+			}}},
+			{FunctionResponse: &genai.FunctionResponse{ID: "c2", Name: "run_shell_command", Response: map[string]any{
+				"exit_code": 0, "output": bigShell,
+			}}},
+			{FunctionResponse: &genai.FunctionResponse{ID: "c3", Name: "browser", Response: map[string]any{
+				"url": "https://example.com", "image_uri": "blitz-image:abc123", "note": "The screenshot follows this result.",
+			}}},
+		}},
+		// Turn 2: edits a.go and patches b.go
+		genai.NewContentFromText("turn 2", genai.RoleUser),
+		{Role: genai.RoleModel, Parts: []*genai.Part{
+			{FunctionCall: &genai.FunctionCall{ID: "c4", Name: "replace_in_file"}},
+			{FunctionCall: &genai.FunctionCall{ID: "c5", Name: "apply_patch"}},
+		}},
+		{Role: genai.RoleUser, Parts: []*genai.Part{
+			{FunctionResponse: &genai.FunctionResponse{ID: "c4", Name: "replace_in_file", Response: map[string]any{
+				"path": "./a.go", "success": true,
+			}}},
+			{FunctionResponse: &genai.FunctionResponse{ID: "c5", Name: "apply_patch", Response: map[string]any{
+				"success": true, "files": []any{map[string]any{"path": "b.go", "moved_to": "c.go"}},
+			}}},
+		}},
+		// Turns 3, 4, 5, 6 (to push Turn 1 past 4 user turns)
+		genai.NewContentFromText("turn 3", genai.RoleUser),
+		genai.NewContentFromText("turn 4", genai.RoleUser),
+		genai.NewContentFromText("turn 5", genai.RoleUser),
+		genai.NewContentFromText("turn 6", genai.RoleUser),
+	}
+
+	pruned := pruneRequestContents(history)
+	require.Len(t, pruned, len(history))
+
+	// Original history must be untouched (CA-01).
+	origResps := history[2].Parts
+	assert.Equal(t, "old file content", origResps[0].FunctionResponse.Response["content"])
+	assert.Equal(t, bigShell, origResps[1].FunctionResponse.Response["output"])
+	assert.Equal(t, "blitz-image:abc123", origResps[2].FunctionResponse.Response["image_uri"])
+
+	// Pruned copy has stubbed read_file, pruned shell output, and omitted browser screenshot.
+	pResps := pruned[2].Parts
+	readResp := pResps[0].FunctionResponse.Response
+	assert.Nil(t, readResp["content"], "stale read_file content must be omitted")
+	assert.Nil(t, readResp["digest"], "stale read_file digest must be omitted so ReadLog allows re-reading")
+	assert.Contains(t, readResp["status"], "superseded by a later edit")
+
+	shellResp := pResps[1].FunctionResponse.Response
+	assert.Contains(t, shellResp["status"], "output pruned from earlier turn")
+	shellOut, _ := shellResp["output"].(string)
+	assert.Contains(t, shellOut, "… [pruned] …")
+	assert.Less(t, len(shellOut), len(bigShell))
+
+	browserResp := pResps[2].FunctionResponse.Response
+	assert.Nil(t, browserResp["image_uri"], "aged browser screenshot must drop image_uri")
+	assert.Contains(t, browserResp["note"], "[earlier browser screenshot omitted]")
+}

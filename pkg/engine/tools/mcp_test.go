@@ -330,3 +330,34 @@ func TestMCPContextWrappers(t *testing.T) {
 	assert.ErrorIs(t, ro.Err(), context.Canceled)
 	assert.ErrorIs(t, tw.Err(), context.Canceled)
 }
+
+// Implements: MCP-23.
+func TestMCPOutputTruncation(t *testing.T) {
+	m := NewMCPManagerFromToolsets([]MCPToolset{{
+		Config:  config.MCPServerConfig{Name: "big"},
+		Toolset: inMemoryMCP(t, "dump"),
+	}}, nil)
+	tl, err := m.Toolsets()[0].Tools(createTestToolContext())
+	require.NoError(t, err)
+	pt := tl[0].(*managedTool)
+
+	huge := strings.Repeat("H", 60*1024) + strings.Repeat("M", 40*1024) + strings.Repeat("T", 60*1024)
+	res, err := pt.Run(createTestToolContext(), map[string]any{"text": huge})
+	require.NoError(t, err)
+	got := fmt.Sprint(res)
+	assert.Contains(t, got, "output truncated:")
+	assert.Contains(t, got, "bytes in the middle were discarded")
+	assert.Less(t, len(got), len(huge))
+
+	// Also test nested map and slice truncation directly via capMCPResult.
+	nested := map[string]any{
+		"list": []any{huge},
+		"sub":  map[string]any{"body": huge},
+		"num":  42,
+	}
+	capped := capMCPResult(nested)
+	assert.Contains(t, fmt.Sprint(capped["list"]), "output truncated:")
+	assert.Contains(t, fmt.Sprint(capped["sub"]), "output truncated:")
+	assert.Equal(t, 42, capped["num"])
+	assert.Nil(t, capMCPResult(nil))
+}

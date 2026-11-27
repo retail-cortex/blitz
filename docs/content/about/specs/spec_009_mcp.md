@@ -37,6 +37,7 @@ Model Context Protocol servers extend agents with external tools, over stdio (a 
 - **MCP-21** Ownership (tool → server) is recorded for approvals; prefixed tools call the server under the original name.
 - **MCP-21a** *2026-11-05 (scan N26-engine-tools-1#25).* A tool its server no longer serves (the settings changed while a turn held it; the approval gate no longer knows its name) doesn't run: "no longer served by …; the next turn lists its tools again".
 - **MCP-22** In plan and read-only modes every MCP tool is refused (the resource tools excepted, MCP-35) ([spec_016_engine](spec_016_engine.md) ENG-30).
+- **MCP-23** **Output truncation and schema bounding:** an MCP tool's text result is capped at 100 KiB (`mcpOutputLimit`, head and tail kept via `newHeadTailBuffer` with a truncation notice) before it enters the conversation, so an unbounded database or API dump from an MCP server cannot blow out the model's context window; and in plan-only or read-only runs ([spec_016_engine](spec_016_engine.md) ENG-30a), MCP tool declarations are omitted from the model's tool schema.
 
 ## 5. Calls
 

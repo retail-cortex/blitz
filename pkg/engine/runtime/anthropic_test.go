@@ -295,6 +295,63 @@ func TestAnthropicRequestShape(t *testing.T) {
 	assert.Nil(t, f.requests[2]["fallbacks"], "fallbacks should be omitted when off")
 }
 
+// Implements: MDL-21a, CA-28.
+func TestAnthropicRollingCacheBreakpoint(t *testing.T) {
+	f, opts := newFake(t, jsonReply(message("end_turn", `{"type":"text","text":"done"}`)))
+	m := mustAnthropicModel(t, config.AnthropicConfig{APIKey: "sk-ant-test"}, "claude-opus-5", opts...)
+	req := &model.LLMRequest{
+		Model: "claude-opus-5",
+		Contents: []*genai.Content{
+			userText("first question"),
+			{Role: genai.RoleModel, Parts: []*genai.Part{
+				{FunctionCall: &genai.FunctionCall{ID: "toolu_1", Name: "list_files", Args: map[string]any{"directory": "."}}},
+				{Text: "ignore thinking", Thought: true, ThoughtSignature: []byte("sig-1")},
+			}},
+			{Role: genai.RoleUser, Parts: []*genai.Part{
+				{FunctionResponse: &genai.FunctionResponse{ID: "toolu_1", Name: "list_files", Response: map[string]any{"files": []any{"a.go"}}}},
+			}},
+		},
+		Config: &genai.GenerateContentConfig{
+			SystemInstruction: genai.NewContentFromText("You are helpful.", genai.RoleUser),
+		},
+	}
+	_, err := collectResponses(t, m, req, false)
+	require.NoError(t, err)
+	msgs, ok := f.requests[0]["messages"].([]any)
+	require.True(t, ok)
+	require.Len(t, msgs, 3)
+
+	// The second-to-last message (assistant turn with tool_use + thinking)
+	// gets cache_control on its last cacheable block (tool_use, skipping thinking).
+	m1, _ := json.Marshal(msgs[1])
+	assert.Contains(t, string(m1), `"cache_control":{"type":"ephemeral"}`, "second-to-last turn should carry cache_control: %s", m1)
+	m0, _ := json.Marshal(msgs[0])
+	assert.NotContains(t, string(m0), `"cache_control"`, "first turn should not carry cache_control: %s", m0)
+	m2, _ := json.Marshal(msgs[2])
+	assert.NotContains(t, string(m2), `"cache_control"`, "last turn should not carry cache_control: %s", m2)
+
+	// Also verify tool_result, text, image, and document blocks in cacheLastStableTurn.
+	for _, tc := range []struct {
+		name  string
+		block anthropic.BetaContentBlockParamUnion
+	}{
+		{"text", anthropic.NewBetaTextBlock("hello")},
+		{"tool_result", anthropic.NewBetaToolResultBlock("id", "ok", false)},
+		{"image", anthropic.NewBetaImageBlock(anthropic.BetaBase64ImageSourceParam{Data: "AA==", MediaType: anthropic.BetaBase64ImageSourceMediaTypeImagePNG})},
+		{"document", anthropic.NewBetaDocumentBlock(anthropic.BetaBase64PDFSourceParam{Data: "AA=="})},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pair := []anthropic.BetaMessageParam{
+				{Role: anthropic.BetaMessageParamRoleUser, Content: []anthropic.BetaContentBlockParamUnion{tc.block}},
+				{Role: anthropic.BetaMessageParamRoleAssistant, Content: []anthropic.BetaContentBlockParamUnion{anthropic.NewBetaTextBlock("next")}},
+			}
+			cacheLastStableTurn(pair)
+			raw, _ := json.Marshal(pair[0])
+			assert.Contains(t, string(raw), `"cache_control":{"type":"ephemeral"}`)
+		})
+	}
+}
+
 func mustAnthropicModel(t *testing.T, cfg config.AnthropicConfig, name string, opts ...option.RequestOption) *anthropicModel {
 	t.Helper()
 	m, err := newAnthropicModel(context.Background(), cfg, name, opts...)
