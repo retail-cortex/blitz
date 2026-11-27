@@ -377,6 +377,7 @@ func (m *anthropicModel) buildParams(req *model.LLMRequest, effort string) (anth
 		if err != nil {
 			return p, err
 		}
+		cacheLastTool(tools)
 		p.Tools = tools
 		for _, kind := range builtinKinds(cfg) {
 			switch kind {
@@ -511,6 +512,27 @@ func convertContents(contents []*genai.Content) ([]anthropic.BetaMessageParam, e
 		return nil, errors.New("anthropic: conversation must start with a user message")
 	}
 	return out, nil
+}
+
+// cacheLastTool places an ephemeral cache_control breakpoint on the last
+// tool declaration so the tool prefix is cached independently of the system
+// prompt and conversation history (Implements: MDL-21a, CA-28).
+func cacheLastTool(tools []anthropic.BetaToolUnionParam) {
+	if len(tools) == 0 {
+		return
+	}
+	cc := anthropic.NewBetaCacheControlEphemeralParam()
+	t := &tools[len(tools)-1]
+	switch {
+	case t.OfTool != nil:
+		t.OfTool.CacheControl = cc
+	case t.OfWebSearchTool20250305 != nil:
+		t.OfWebSearchTool20250305.CacheControl = cc
+	case t.OfWebFetchTool20250910 != nil:
+		t.OfWebFetchTool20250910.CacheControl = cc
+	case t.OfCodeExecutionTool20250825 != nil:
+		t.OfCodeExecutionTool20250825.CacheControl = cc
+	}
 }
 
 // cacheLastStableTurn places an ephemeral cache_control breakpoint on the

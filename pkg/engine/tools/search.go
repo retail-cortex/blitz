@@ -52,10 +52,12 @@ type SearchWorkspaceInput struct {
 }
 
 // SearchWorkspaceHit is one item found: where (path:line for files), what
-// section of it (a PDF's page), and the lines around the match.
+// section of it (a PDF's page), a recommended read_file line window
+// (Implements: SRCH-41a), and the lines around the match.
 type SearchWorkspaceHit struct {
 	Source  string   `json:"source"`
 	Where   string   `json:"where"`
+	Lines   string   `json:"lines,omitempty"`
 	Title   string   `json:"title,omitempty"`
 	Section string   `json:"section,omitempty"`
 	Snippet string   `json:"snippet"`
@@ -70,10 +72,10 @@ type SearchWorkspaceOutput struct {
 }
 
 // NewSearchWorkspaceTool is search_workspace: ranked full-text search of
-// the workspace's index, one passage per item.
+// the workspace's index, one passage per item (Implements: SRCH-41a).
 func NewSearchWorkspaceTool(r *Registry) (tool.Tool, error) {
 	return functiontool.New(
-		functiontool.Config{Name: "search_workspace", Description: "Search the whole workspace by words, ranked by relevance: its files, the text of its PDFs and notebooks, its past chats and its notes. Returns the best passage of each item with where it is. Use it to find where something is handled or discussed; use grep for every exact match of a pattern."},
+		functiontool.Config{Name: "search_workspace", Description: "Search the whole workspace by words or meaning, ranked by relevance: its files, the text of its PDFs and notebooks, its past chats and its notes. Returns the best passage of each item with where it is (path:line) and a lines range (start-end) for targeted read_file calls. Use it first to locate where a concept, feature or symbol is handled before reading large files; use grep for every exact match of a pattern."},
 		func(ctx agent.Context, in SearchWorkspaceInput) (SearchWorkspaceOutput, error) {
 			search := r.getSearcher()
 			if search == nil {
@@ -86,10 +88,12 @@ func NewSearchWorkspaceTool(r *Registry) (tool.Tool, error) {
 			out := SearchWorkspaceOutput{Hits: make([]SearchWorkspaceHit, 0, len(res.Hits))}
 			for _, h := range res.Hits {
 				where := h.Ref
+				var lines string
 				if h.Source != api.SearchChats && h.Line > 0 {
 					where = fmt.Sprintf("%s:%d", h.Ref, h.Line)
+					lines = fmt.Sprintf("%d-%d", max(h.Line-25, 1), h.Line+35)
 				}
-				out.Hits = append(out.Hits, SearchWorkspaceHit{Source: h.Source, Where: where, Title: h.Title, Section: h.Section, Snippet: h.Snippet, Summary: h.Summary, Tags: h.Tags})
+				out.Hits = append(out.Hits, SearchWorkspaceHit{Source: h.Source, Where: where, Lines: lines, Title: h.Title, Section: h.Section, Snippet: h.Snippet, Summary: h.Summary, Tags: h.Tags})
 			}
 			return out, nil
 		})

@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.1.0
-weight: 9
+weight: 11
 ---
 
 Know where everything lives. Settings is now everything every workspace shares, and each workspace's Studio is everything that's its own, its settings included. Both lay out your agents, skills, connectors and secrets the same way, under **Resources**, so once you've found something in one, you know where it is in the other. Your own agents can finally be proven with evals too, and each agent shows its evals right on its row.

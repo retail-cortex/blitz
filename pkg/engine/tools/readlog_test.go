@@ -370,3 +370,38 @@ func TestReadFileSuggestsPaths(t *testing.T) {
 		})
 	}
 }
+
+// Implements: FS-83, FS-83b.
+func TestReadFileLineCappedReadLog(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	var big strings.Builder
+	for i := 1; i <= 600; i++ {
+		fmt.Fprintf(&big, "line %d\n", i)
+	}
+	writeFile(t, filepath.Join(dir, "big.txt"), big.String())
+	rt := toolOf(t)(NewReadFileTool(ws))
+	a := newReader(t, ws, rt, "s/big", "coder")
+
+	// First unranged read returns lines 1-500 with digest and truncated=true.
+	first := a.read(map[string]any{"path": "big.txt"})
+	assert.Equal(t, true, first["truncated"])
+	assert.Equal(t, "1-500", first["lines"])
+	assert.NotEmpty(t, first["digest"])
+	a.request()
+
+	// Second unranged read answers unchanged (lines 1-500 already shown).
+	second := a.read(map[string]any{"path": "big.txt"})
+	assert.Equal(t, true, second["unchanged"])
+	assert.Empty(t, second["content"])
+
+	// A ranged read within 1-500 also answers unchanged.
+	inside := a.read(map[string]any{"path": "big.txt", "start_line": 100, "end_line": 200})
+	assert.Equal(t, true, inside["unchanged"])
+	assert.Empty(t, inside["content"])
+
+	// A ranged read of lines 501-600 returns the remaining lines.
+	tail := a.read(map[string]any{"path": "big.txt", "start_line": 501, "end_line": 600})
+	assert.Nil(t, tail["unchanged"])
+	assert.Equal(t, "501-600", tail["lines"])
+	assert.Contains(t, tail["content"], " 501: line 501\n")
+}

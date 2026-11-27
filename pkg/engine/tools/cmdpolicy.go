@@ -260,6 +260,9 @@ func (c simpleCommand) forms() []string {
 	return []string{s}
 }
 
+// parseHint tells the model how to avoid shell syntax errors in inline scripts.
+const parseHint = " (tip: use single quotes or a quoted heredoc <<'EOF' so the shell parser does not interpret script characters)"
+
 // Evaluate checks a shell script against the policy. A nil policy requires approval.
 func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 	cmds, parseErr := extractCommands(script, 0)
@@ -307,11 +310,11 @@ func (p *CommandPolicy) Evaluate(script string) CommandDecision {
 	if parseErr != nil {
 		switch {
 		case allowActive:
-			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the command to check it against the allow-list: " + parseErr.Error(), Commands: rendered}
+			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the command to check it against the allow-list: " + parseErr.Error() + parseHint, Commands: rendered}
 		case len(deny) > 0:
-			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the whole command to check it against the deny rules: " + parseErr.Error(), Commands: rendered}
+			return CommandDecision{Verdict: VerdictDeny, Reason: "could not parse the whole command to check it against the deny rules: " + parseErr.Error() + parseHint, Commands: rendered}
 		}
-		d.Reason = "could not parse command: " + parseErr.Error()
+		d.Reason = "could not parse command: " + parseErr.Error() + parseHint
 		d.MustAsk = true
 		return d
 	}

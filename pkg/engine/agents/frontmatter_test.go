@@ -164,6 +164,7 @@ func TestEmbeddedRegistry(t *testing.T) {
 		"to sound engineering: small, focused changes; DRY, YAGNI and clear names; tests alongside behaviour changes.",
 		"Keep files under about 600 lines",
 		"Read existing files with `read_file` before modifying them",
+		"For large files (>500 lines), use `search_workspace`, `grep`, or `lsp`", // Implements: AG-14c
 		"Prefer `edit` or `replace_in_file` over `create_file` for existing files. Keep diffs targeted",
 		"never with `find`",
 		"cite each ID where it's done", // traced to the specification (spec_057 SDD-30)
@@ -171,6 +172,9 @@ func TestEmbeddedRegistry(t *testing.T) {
 		assert.Contains(t, puppy.SystemPrompt, rule)
 		assert.Contains(t, coder.SystemPrompt, rule)
 	}
+	planner, ok := reg.Get("planning-agent")
+	require.True(t, ok)
+	assert.Contains(t, planner.SystemPrompt, "`search_workspace`")
 }
 
 func contains(s, substr string) bool {

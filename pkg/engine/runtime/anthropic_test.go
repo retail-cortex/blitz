@@ -313,10 +313,33 @@ func TestAnthropicRollingCacheBreakpoint(t *testing.T) {
 		},
 		Config: &genai.GenerateContentConfig{
 			SystemInstruction: genai.NewContentFromText("You are helpful.", genai.RoleUser),
+			Tools: []*genai.Tool{{FunctionDeclarations: []*genai.FunctionDeclaration{
+				{Name: "list_files"},
+				{Name: "read_file"},
+			}}},
 		},
 	}
 	_, err := collectResponses(t, m, req, false)
 	require.NoError(t, err)
+	toolsReq, ok := f.requests[0]["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, toolsReq, 2)
+	t0, _ := json.Marshal(toolsReq[0])
+	assert.NotContains(t, string(t0), `"cache_control"`, "first tool should not carry cache_control: %s", t0)
+	t1, _ := json.Marshal(toolsReq[1])
+	assert.Contains(t, string(t1), `"cache_control":{"type":"ephemeral"}`, "last tool should carry cache_control: %s", t1)
+
+	for _, st := range []anthropic.BetaToolUnionParam{
+		{OfWebSearchTool20250305: &anthropic.BetaWebSearchTool20250305Param{}},
+		{OfWebFetchTool20250910: &anthropic.BetaWebFetchTool20250910Param{}},
+		{OfCodeExecutionTool20250825: &anthropic.BetaCodeExecutionTool20250825Param{}},
+	} {
+		list := []anthropic.BetaToolUnionParam{st}
+		cacheLastTool(list)
+		raw, _ := json.Marshal(list[0])
+		assert.Contains(t, string(raw), `"cache_control":{"type":"ephemeral"}`)
+	}
+
 	msgs, ok := f.requests[0]["messages"].([]any)
 	require.True(t, ok)
 	require.Len(t, msgs, 3)

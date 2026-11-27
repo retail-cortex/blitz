@@ -143,6 +143,10 @@ func TestCommandPolicyAutoApprove(t *testing.T) {
 	// With no auto patterns nothing is auto-approved; nil policy always asks.
 	d := mustPolicy(t, CommandPolicyConfig{}).Evaluate("ls")
 	assert.Equal(t, VerdictNeedsApproval, d.Verdict, "empty policy should need approval, got %v", d.Verdict)
+	d = mustPolicy(t, CommandPolicyConfig{}).Evaluate("python3 -c \"print((1)\" &&")
+	assert.Equal(t, VerdictNeedsApproval, d.Verdict)
+	assert.True(t, d.MustAsk)
+	assert.Contains(t, d.Reason, "quoted heredoc <<'EOF'")
 	var nilPolicy *CommandPolicy
 	d = nilPolicy.Evaluate("ls")
 	assert.Equal(t, VerdictNeedsApproval, d.Verdict, "nil policy should need approval, got %v", d.Verdict)
