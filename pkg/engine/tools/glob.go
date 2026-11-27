@@ -15,6 +15,8 @@
 package tools
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -41,6 +43,7 @@ type GlobInput struct {
 	Pattern    string `json:"pattern" jsonschema:"Glob relative to path, e.g. **/*.go or src/**/*.{ts,tsx}. * and ? stay within one path segment; ** crosses segments"`
 	Path       string `json:"path,omitempty" jsonschema:"Directory to search from (default: the workspace)"`
 	MaxResults int    `json:"max_results,omitempty" jsonschema:"Maximum files to return (default 200, max 1000)"`
+	Force      bool   `json:"force,omitempty" jsonschema:"Return the matching files even when this conversation already shows them unchanged"`
 }
 
 // GlobOutput holds the matching files, newest first.
@@ -48,10 +51,13 @@ type GlobOutput struct {
 	Files     []string `json:"files"`
 	Count     int      `json:"count"`
 	Truncated bool     `json:"truncated,omitempty"`
+	Digest    string   `json:"digest,omitempty"` // the glob's version (FS-83a)
+	Unchanged bool     `json:"unchanged,omitempty"`
+	Note      string   `json:"note,omitempty"`
 	Error     string   `json:"error,omitempty"`
 }
 
-// NewGlobTool creates glob: find files by name pattern.
+// NewGlobTool creates glob: find files by name pattern (Implements: FS-83a).
 func NewGlobTool(ws *Workspace) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
@@ -62,6 +68,18 @@ func NewGlobTool(ws *Workspace) (tool.Tool, error) {
 			out, err := globWorkspace(ctx, ws, input)
 			if err != nil {
 				return GlobOutput{Files: []string{}, Error: err.Error()}, nil
+			}
+			if out.Truncated {
+				return out, nil
+			}
+			if key, ok := ReadKey(ctx); ok && !input.Force && out.Digest != "" {
+				if _, ok := ws.reads.covering(key, out.Digest, 0, 0); ok {
+					return GlobOutput{
+						Count:     out.Count,
+						Unchanged: true,
+						Note:      "Unchanged since your earlier glob with this pattern in this conversation: use that result, it's still there. Pass force: true only if you can't find it.",
+					}, nil
+				}
 			}
 			return out, nil
 		},
@@ -163,14 +181,20 @@ func globWorkspace(ctx interface{ Err() error }, ws *Workspace, in GlobInput) (G
 		return hits[i].path < hits[j].path
 	})
 	out := GlobOutput{Files: []string{}}
-	for i, h := range hits {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%s\x00", base, pattern)
+	for i, hit := range hits {
 		if i == max {
 			out.Truncated = true
 			break
 		}
-		out.Files = append(out.Files, h.path)
+		out.Files = append(out.Files, hit.path)
+		fmt.Fprintf(h, "%s\x00%d\n", hit.path, hit.mod.UnixNano())
 	}
 	out.Count = len(out.Files)
+	if !out.Truncated {
+		out.Digest = "glob:" + hex.EncodeToString(h.Sum(nil)[:8])
+	}
 	return out, nil
 }
 

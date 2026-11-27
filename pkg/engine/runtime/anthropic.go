@@ -395,6 +395,7 @@ func (m *anthropicModel) buildParams(req *model.LLMRequest, effort string) (anth
 	if len(msgs) == 0 {
 		return p, errors.New("anthropic: request has no messages")
 	}
+	cacheLastStableTurn(msgs)
 	p.Messages = msgs
 
 	switch fb := m.fallbacks; {
@@ -510,6 +511,38 @@ func convertContents(contents []*genai.Content) ([]anthropic.BetaMessageParam, e
 		return nil, errors.New("anthropic: conversation must start with a user message")
 	}
 	return out, nil
+}
+
+// cacheLastStableTurn places an ephemeral cache_control breakpoint on the
+// last cacheable block of the conversation's last stable turn (the
+// second-to-last message, when len(msgs) >= 2), so earlier turns and tool
+// results are read from the prompt cache as the conversation grows
+// (Implements: MDL-21a, CA-28).
+func cacheLastStableTurn(msgs []anthropic.BetaMessageParam) {
+	if len(msgs) < 2 {
+		return
+	}
+	content := msgs[len(msgs)-2].Content
+	for i := len(content) - 1; i >= 0; i-- {
+		b := &content[i]
+		switch {
+		case b.OfText != nil:
+			b.OfText.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+			return
+		case b.OfToolUse != nil:
+			b.OfToolUse.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+			return
+		case b.OfToolResult != nil:
+			b.OfToolResult.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+			return
+		case b.OfImage != nil:
+			b.OfImage.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+			return
+		case b.OfDocument != nil:
+			b.OfDocument.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+			return
+		}
+	}
 }
 
 // imageSource converts inline image bytes; other media types aren't

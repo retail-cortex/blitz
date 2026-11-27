@@ -330,19 +330,23 @@ type ListFilesInput struct {
 	Directory  string `json:"directory,omitempty" jsonschema:"Directory path relative to workspace or absolute"`
 	Recursive  bool   `json:"recursive,omitempty" jsonschema:"Whether to list files recursively"`
 	MaxEntries int    `json:"max_entries,omitempty" jsonschema:"Maximum number of file entries to return"`
+	Force      bool   `json:"force,omitempty" jsonschema:"Return the listing even when this conversation already shows it unchanged"`
 }
 
 // ListFilesOutput holds listed files.
 type ListFilesOutput struct {
 	Directory  string      `json:"directory"`
-	Files      []FileEntry `json:"files"`
+	Files      []FileEntry `json:"files,omitempty"`
 	TotalCount int         `json:"total_count"`
 	// Truncated says the listing stopped at max_entries: there may be more.
 	Truncated bool   `json:"truncated,omitempty"`
+	Digest    string `json:"digest,omitempty"` // the directory listing's version (FS-83a)
+	Unchanged bool   `json:"unchanged,omitempty"`
+	Note      string `json:"note,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
 
-// NewListFilesTool creates an ADK tool for listing directory files.
+// NewListFilesTool creates an ADK tool for listing directory files (Implements: FS-83a).
 func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
@@ -361,6 +365,8 @@ func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 			max = min(max, 500)
 			truncated := false
 
+			h := sha256.New()
+			fmt.Fprintf(h, "%s\x00%v\x00", dirPath, input.Recursive)
 			files := make([]FileEntry, 0, 32)
 			walkErr := ws.Walk(dirPath, func(e WalkEntry) error {
 				if e.IsRoot {
@@ -383,6 +389,7 @@ func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 					size = info.Size()
 				}
 				files = append(files, FileEntry{Path: e.Path, IsDir: d.IsDir(), Size: size})
+				fmt.Fprintf(h, "%s\x00%v\x00%d\n", e.Path, d.IsDir(), size)
 
 				if len(files) >= max {
 					truncated = true
@@ -397,12 +404,30 @@ func NewListFilesTool(ws *Workspace) (tool.Tool, error) {
 			if walkErr != nil {
 				return ListFilesOutput{Directory: dirPath, Error: fmt.Sprintf("failed to list directory: %v", walkErr)}, nil
 			}
-
+			if truncated {
+				return ListFilesOutput{
+					Directory:  dirPath,
+					Files:      files,
+					TotalCount: len(files),
+					Truncated:  true,
+				}, nil
+			}
+			digest := "list:" + hex.EncodeToString(h.Sum(nil)[:8])
+			if key, ok := ReadKey(ctx); ok && !input.Force {
+				if _, ok := ws.reads.covering(key, digest, 0, 0); ok {
+					return ListFilesOutput{
+						Directory:  dirPath,
+						TotalCount: len(files),
+						Unchanged:  true,
+						Note:       "Unchanged since your earlier list_files of this directory in this conversation: use that result, it's still there. Pass force: true only if you can't find it.",
+					}, nil
+				}
+			}
 			return ListFilesOutput{
 				Directory:  dirPath,
 				Files:      files,
 				TotalCount: len(files),
-				Truncated:  truncated,
+				Digest:     digest,
 			}, nil
 		},
 	)

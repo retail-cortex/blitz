@@ -265,8 +265,12 @@ func (e *Engine) imageInstruction(spec *agents.AgentSpec) string {
 // and the docs render, instead of ASCII boxes and arrows, which they can't.
 const diagramInstruction = "\n\n## Diagrams\nWhen Markdown you write (files, plans, docs, replies) needs a diagram, draw it as a fenced ```mermaid block in valid Mermaid syntax (flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt). Never draw boxes and arrows in ASCII. Quote node labels that hold punctuation, such as A[\"parse (v2)\"]. Directory trees and tables stay as plain text and Markdown tables."
 
+// subagentSummaryInstruction asks delegated sub-agents to end with a concise
+// summary so the calling agent's context stays lean (Implements: AG-31b).
+const subagentSummaryInstruction = "\n\nEnd with a concise summary: what changed or was found, how it was verified, and any open issues."
+
 func (e *Engine) subInstruction(spec *agents.AgentSpec) string {
-	text := spec.InterpolatePrompt(spec.AgencyLevel)
+	text := spec.InterpolatePrompt(spec.AgencyLevel) + subagentSummaryInstruction
 	if slices.Contains(spec.Tools, "activate_skill") { // a specialist that loads skills sees them
 		text += e.skillIndex(spec.Name)
 	}

@@ -221,3 +221,60 @@ func TestListAndGrepLimits(t *testing.T) {
 	assert.EqualValues(t, 0, out["total_matches"])
 	assert.Contains(t, out["note"], "1 file(s) over 5 MiB weren't searched")
 }
+
+// Implements: FS-84.
+func TestGrepModesAndDefaultLimit(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	for i := range 25 {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("f%02d.txt", i)), "hit one\nhit two\n")
+	}
+	grep := toolOf(t)(NewGrepTool(ws))
+
+	t.Run("default content mode caps at 20 with total count note", func(t *testing.T) {
+		out := runTool(t, grep, map[string]any{"query": "hit"})
+		require.Empty(t, errOf(out))
+		assert.EqualValues(t, 20, out["total_matches"])
+		assert.EqualValues(t, 25, out["total_files"])
+		assert.Equal(t, true, out["truncated"])
+		assert.Contains(t, out["note"], "Found 50 matches across 25 files; showing first 20")
+	})
+
+	t.Run("files_only mode", func(t *testing.T) {
+		out := runTool(t, grep, map[string]any{"query": "hit", "mode": "files_only"})
+		require.Empty(t, errOf(out))
+		files, _ := out["files"].([]any)
+		assert.Len(t, files, 25)
+		assert.EqualValues(t, 25, out["total_files"])
+		assert.Nil(t, out["matches"])
+		assert.Nil(t, out["truncated"])
+
+		// With max_matches truncation in files_only mode.
+		trunc := runTool(t, grep, map[string]any{"query": "hit", "mode": "files_only", "max_matches": 5})
+		require.Empty(t, errOf(trunc))
+		tFiles, _ := trunc["files"].([]any)
+		assert.Len(t, tFiles, 5)
+		assert.Equal(t, true, trunc["truncated"])
+	})
+
+	t.Run("count mode", func(t *testing.T) {
+		out := runTool(t, grep, map[string]any{"query": "hit", "mode": "count"})
+		require.Empty(t, errOf(out))
+		counts, _ := out["counts"].([]any)
+		assert.Len(t, counts, 25)
+		assert.EqualValues(t, 50, out["total_matches"])
+		assert.EqualValues(t, 25, out["total_files"])
+		assert.Nil(t, out["matches"])
+
+		// With max_matches truncation in count mode.
+		trunc := runTool(t, grep, map[string]any{"query": "hit", "mode": "count", "max_matches": 5})
+		require.Empty(t, errOf(trunc))
+		tCounts, _ := trunc["counts"].([]any)
+		assert.Len(t, tCounts, 5)
+		assert.Equal(t, true, trunc["truncated"])
+	})
+
+	t.Run("unknown mode returns error", func(t *testing.T) {
+		out := runTool(t, grep, map[string]any{"query": "hit", "mode": "invalid"})
+		assert.Contains(t, errOf(out), "unknown mode")
+	})
+}

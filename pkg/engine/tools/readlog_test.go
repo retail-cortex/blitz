@@ -249,6 +249,8 @@ func TestShownRead(t *testing.T) {
 		ok   bool
 	}{
 		{"a read", map[string]any{"digest": "d", "lines": "3-9"}, fileRead{digest: "d", start: 3, end: 9}, true},
+		{"a list_files result", map[string]any{"digest": "list:abc"}, fileRead{digest: "list:abc"}, true},
+		{"a glob result", map[string]any{"digest": "glob:def"}, fileRead{digest: "glob:def"}, true},
 		{"an unchanged answer", map[string]any{"unchanged": true, "note": "Unchanged"}, fileRead{}, false},
 		{"no lines", map[string]any{"digest": "d"}, fileRead{}, false},
 		{"no digest", map[string]any{"lines": "1-2"}, fileRead{}, false},
@@ -268,7 +270,9 @@ func TestHandedRead(t *testing.T) {
 		want       map[string]any
 	}{
 		{"a read handed over", "[coder] `read_file` tool returned result: {\"digest\":\"d\",\"lines\":\"1-2\"}", map[string]any{"digest": "d", "lines": "1-2"}},
-		{"another tool", "[coder] `list_files` tool returned result: {\"digest\":\"d\"}", nil},
+		{"a list_files handed over", "[coder] `list_files` tool returned result: {\"digest\":\"list:d\"}", map[string]any{"digest": "list:d"}},
+		{"a glob handed over", "[coder] `glob` tool returned result: {\"digest\":\"glob:d\"}", map[string]any{"digest": "glob:d"}},
+		{"another tool", "[coder] `grep` tool returned result: {\"digest\":\"d\"}", nil},
 		{"words that only quote it", "I saw `read_file` tool returned result: {}", nil},
 		{"a result that isn't JSON", "[coder] `read_file` tool returned result: {cut", nil},
 		{"plain text", "For context:", nil},
@@ -278,6 +282,70 @@ func TestHandedRead(t *testing.T) {
 			assert.Equal(t, tc.want, handedRead(tc.text))
 		})
 	}
+}
+
+// Implements: FS-83a.
+func TestListFilesAndGlobRepeats(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	writeFile(t, filepath.Join(dir, "a.go"), "package a\n")
+	writeFile(t, filepath.Join(dir, "b.go"), "package b\n")
+
+	listTool := toolOf(t)(NewListFilesTool(ws))
+	globTool := toolOf(t)(NewGlobTool(ws))
+	ic := conversationIC{mockIC: &mockIC{ctx: context.Background()}, sess: stubSession{id: "s/list"}, agent: namedAgent{name: "coder"}}
+
+	var sent []*genai.Content
+	call := func(name string, rt runnerTool, args map[string]any) map[string]any {
+		t.Helper()
+		out, err := rt.Run(agent.NewToolContext(ic, "c", &session.EventActions{}, nil), args)
+		require.NoError(t, err)
+		sent = append(sent, &genai.Content{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{ID: "c", Name: name, Response: out}}}})
+		return out
+	}
+	show := func() {
+		ws.Reads().Shown(agent.NewCallbackContext(ic, &session.EventActions{}), sent)
+	}
+
+	// First list_files returns files and digest.
+	firstList := call("list_files", listTool, map[string]any{"directory": "."})
+	assert.Nil(t, firstList["unchanged"])
+	assert.NotEmpty(t, firstList["files"])
+	assert.NotEmpty(t, firstList["digest"])
+	show()
+
+	// Second list_files on unchanged directory answers unchanged.
+	secondList := call("list_files", listTool, map[string]any{"directory": "."})
+	assert.Equal(t, true, secondList["unchanged"])
+	assert.Nil(t, secondList["files"])
+	assert.EqualValues(t, 2, secondList["total_count"])
+
+	// Force returns the listing anyway.
+	forcedList := call("list_files", listTool, map[string]any{"directory": ".", "force": true})
+	assert.Nil(t, forcedList["unchanged"])
+	assert.NotEmpty(t, forcedList["files"])
+
+	// First glob returns files and digest.
+	firstGlob := call("glob", globTool, map[string]any{"pattern": "*.go"})
+	assert.Nil(t, firstGlob["unchanged"])
+	assert.NotEmpty(t, firstGlob["files"])
+	assert.NotEmpty(t, firstGlob["digest"])
+	show()
+
+	// Second glob with the same pattern answers unchanged.
+	secondGlob := call("glob", globTool, map[string]any{"pattern": "*.go"})
+	assert.Equal(t, true, secondGlob["unchanged"])
+	assert.Empty(t, secondGlob["files"])
+	assert.EqualValues(t, 2, secondGlob["count"])
+
+	// Adding a file changes the digest, so both return full results again.
+	writeFile(t, filepath.Join(dir, "c.go"), "package c\n")
+	thirdList := call("list_files", listTool, map[string]any{"directory": "."})
+	assert.Nil(t, thirdList["unchanged"])
+	assert.EqualValues(t, 3, thirdList["total_count"])
+
+	thirdGlob := call("glob", globTool, map[string]any{"pattern": "*.go"})
+	assert.Nil(t, thirdGlob["unchanged"])
+	assert.EqualValues(t, 3, thirdGlob["count"])
 }
 
 func TestReadFileSuggestsPaths(t *testing.T) {

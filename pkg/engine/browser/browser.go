@@ -154,7 +154,10 @@ func (t *tailBuffer) tail() string {
 	return strings.Join(lines, " | ")
 }
 
-const maxConsole = 200
+const (
+	maxConsole     = 50  // Implements: WEB-36a
+	maxConsoleLine = 500 // bytes per console line (WEB-36a)
+)
 
 // Launch starts a browser with a new, empty profile, or opts.ProfileDir.
 func Launch(ctx context.Context, opts Options) (*Browser, error) {
@@ -500,7 +503,7 @@ func (b *Browser) addConsole(level, text string) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.console = append(b.console, ConsoleLine{Level: level, Text: truncate(text, 2000)})
+	b.console = append(b.console, ConsoleLine{Level: level, Text: truncate(text, maxConsoleLine)})
 	if len(b.console) > maxConsole {
 		b.console = b.console[len(b.console)-maxConsole:]
 	}

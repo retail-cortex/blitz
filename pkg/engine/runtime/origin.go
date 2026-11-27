@@ -20,6 +20,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -28,6 +30,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/retail-cortex/blitz/pkg/textutil"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/genai"
 )
@@ -145,7 +148,7 @@ func adaptRequest(o Origin, req *model.LLMRequest) *model.LLMRequest {
 	// ADK names the agent's model on every request, which for a fallback
 	// chain is its primary: each member asks for itself (MDL-60).
 	cp.Model = o.Model
-	contents, called := asClientCalls(o, req.Contents) // another model's provider tools (CA-82)
+	contents, called := asClientCalls(o, pruneRequestContents(req.Contents)) // another model's provider tools (CA-82), pruned (CA-28a)
 	cp.Config = declareCalled(wireTools(req.Config), called)
 	cp.Contents = make([]*genai.Content, 0, len(contents))
 	var pending []*genai.FunctionCall // calls of the previous content without an ID
@@ -448,4 +451,182 @@ func summaryAsUser(c *genai.Content) *genai.Content {
 		out.Parts = []*genai.Part{{Text: "[Earlier in this conversation]"}}
 	}
 	return out
+}
+
+const (
+	prunedShellMinBytes  = 4096
+	prunedShellTurns     = 4
+	prunedShellKeepBytes = 512
+	prunedScreenshotTurn = 3
+)
+
+// isUserPromptTurn reports whether c is a user prompt message (not a pure
+// tool-result content).
+func isUserPromptTurn(c *genai.Content) bool {
+	if c == nil || c.Role != genai.RoleUser {
+		return false
+	}
+	for _, p := range c.Parts {
+		if p != nil && p.Text != "" && p.FunctionResponse == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// editedPathsOf returns the clean paths a successful file-mutation tool
+// result modified.
+func editedPathsOf(fr *genai.FunctionResponse) []string {
+	if fr == nil || fr.Response == nil {
+		return nil
+	}
+	if errMsg, _ := fr.Response["error"].(string); errMsg != "" {
+		return nil
+	}
+	switch fr.Name {
+	case "create_file", "replace_in_file", "edit", "delete_snippet", "delete_file", "notebook_edit":
+		if p, _ := fr.Response["path"].(string); p != "" {
+			return []string{filepath.Clean(p)}
+		}
+	case "apply_patch":
+		var out []string
+		switch files := fr.Response["files"].(type) {
+		case []any:
+			for _, f := range files {
+				if m, ok := f.(map[string]any); ok {
+					if p, _ := m["path"].(string); p != "" {
+						out = append(out, filepath.Clean(p))
+					}
+					if mv, _ := m["moved_to"].(string); mv != "" {
+						out = append(out, filepath.Clean(mv))
+					}
+				}
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// pruneRequestContents returns a copy of contents with superseded read_file
+// results, aged voluminous run_shell_command outputs, and aged browser
+// screenshots stubbed out for the outgoing request (Implements: CA-28a, WEB-36a).
+// Stored session events are never mutated in place.
+func pruneRequestContents(contents []*genai.Content) []*genai.Content {
+	if len(contents) == 0 {
+		return contents
+	}
+	turnsAfter := make([]int, len(contents))
+	turns := 0
+	for i := len(contents) - 1; i >= 0; i-- {
+		turnsAfter[i] = turns
+		if isUserPromptTurn(contents[i]) {
+			turns++
+		}
+	}
+	lastEdit := map[string]int{}
+	for i, c := range contents {
+		if c == nil {
+			continue
+		}
+		for _, p := range c.Parts {
+			if p != nil && p.FunctionResponse != nil {
+				for _, path := range editedPathsOf(p.FunctionResponse) {
+					lastEdit[path] = i
+				}
+			}
+		}
+	}
+
+	var out []*genai.Content
+	copyFrom := func(idx int) {
+		if out == nil {
+			out = make([]*genai.Content, len(contents))
+			copy(out, contents[:idx])
+		}
+	}
+
+	for i, c := range contents {
+		if c == nil {
+			if out != nil {
+				out[i] = nil
+			}
+			continue
+		}
+		var parts []*genai.Part
+		copyPartsFrom := func(pIdx int) {
+			if parts == nil {
+				parts = make([]*genai.Part, len(c.Parts))
+				copy(parts, c.Parts[:pIdx])
+			}
+		}
+		for j, p := range c.Parts {
+			if p == nil || p.FunctionResponse == nil || p.FunctionResponse.Response == nil {
+				if parts != nil {
+					parts[j] = p
+				}
+				continue
+			}
+			fr := p.FunctionResponse
+			resp := fr.Response
+			var newResp map[string]any
+			switch fr.Name {
+			case "read_file":
+				path, _ := resp["path"].(string)
+				content, _ := resp["content"].(string)
+				if path != "" && content != "" {
+					if editIdx, ok := lastEdit[filepath.Clean(path)]; ok && editIdx > i {
+						newResp = map[string]any{
+							"path":        path,
+							"total_lines": resp["total_lines"],
+							"status":      "superseded by a later edit in this conversation; read_file again if you need the current content",
+						}
+					}
+				}
+			case "run_shell_command":
+				output, _ := resp["output"].(string)
+				if turnsAfter[i] > prunedShellTurns && len(output) > prunedShellMinBytes && resp["status"] == nil {
+					head := textutil.TruncateUTF8(output, prunedShellKeepBytes)
+					tail := output[len(output)-prunedShellKeepBytes:]
+					for len(tail) > 0 && (tail[0]&0xC0) == 0x80 {
+						tail = tail[1:]
+					}
+					newResp = maps.Clone(resp)
+					newResp["status"] = "output pruned from earlier turn (first and last lines below)"
+					newResp["output"] = head + "\n… [pruned] …\n" + tail
+				}
+			case "browser":
+				uri, _ := resp["image_uri"].(string)
+				if turnsAfter[i] > prunedScreenshotTurn && uri != "" {
+					newResp = maps.Clone(resp)
+					delete(newResp, "image_uri")
+					note, _ := newResp["note"].(string)
+					note = strings.TrimSpace(strings.ReplaceAll(note, "The screenshot follows this result.", "") + " [earlier browser screenshot omitted]")
+					newResp["note"] = note
+				}
+			}
+			if newResp != nil {
+				copyPartsFrom(j)
+				nfr := *fr
+				nfr.Response = newResp
+				np := *p
+				np.FunctionResponse = &nfr
+				parts[j] = &np
+			} else if parts != nil {
+				parts[j] = p
+			}
+		}
+		if parts != nil {
+			copyFrom(i)
+			nc := *c
+			nc.Parts = parts
+			out[i] = &nc
+		} else if out != nil {
+			out[i] = c
+		}
+	}
+	if out != nil {
+		return out
+	}
+	return contents
 }

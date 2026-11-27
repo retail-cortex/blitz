@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"github.com/retail-cortex/blitz/pkg/api"
+	"google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
 )
 
 // planReadOnlyTools may run in plan mode: they read, search or ask, and
@@ -167,4 +169,57 @@ func allowedRefusal(st *runState, toolName string) map[string]any {
 		return map[string]any{"error": fmt.Sprintf("%s isn't allowed: this command allows no tools", toolName)}
 	}
 	return map[string]any{"error": fmt.Sprintf("%s isn't among the tools this command allows (%s)", toolName, strings.Join(names, ", "))}
+}
+
+// filterRequestTools removes disallowed tool declarations from req when a run
+// starts in plan-only/read-only mode or with an explicit WithAllowedTools
+// list (Implements: ENG-30a, MCP-23). In an ordinary turn where the agent
+// enters plan mode mid-turn via enter_plan_mode, st.planOnly is false, so
+// declared tools stay unchanged and the prompt cache prefix is preserved.
+func filterRequestTools(st *runState, req *model.LLMRequest) {
+	if st == nil || (!st.planOnly && st.allowed == nil) || req == nil || req.Config == nil || len(req.Config.Tools) == 0 {
+		return
+	}
+	permits := func(name string) bool {
+		if name == "transfer_to_agent" {
+			return true
+		}
+		if st.planOnly && !planReadOnlyTools[name] && name != "blitz" {
+			return false
+		}
+		if st.allowed != nil && !st.allowed[name] {
+			return false
+		}
+		return true
+	}
+	var kept []*genai.Tool
+	changed := false
+	for _, t := range req.Config.Tools {
+		if t == nil {
+			continue
+		}
+		if len(t.FunctionDeclarations) == 0 {
+			kept = append(kept, t)
+			continue
+		}
+		var decls []*genai.FunctionDeclaration
+		for _, fd := range t.FunctionDeclarations {
+			if fd != nil && permits(fd.Name) {
+				decls = append(decls, fd)
+			} else {
+				changed = true
+			}
+		}
+		if len(decls) > 0 {
+			nt := *t
+			nt.FunctionDeclarations = decls
+			kept = append(kept, &nt)
+		}
+	}
+	if !changed {
+		return
+	}
+	gc := *req.Config
+	gc.Tools = kept
+	req.Config = &gc
 }

@@ -51,27 +51,37 @@ type GrepMatch struct {
 	Content    string `json:"content"`
 }
 
+// GrepFileCount holds the match count for a single file in count mode (FS-84).
+type GrepFileCount struct {
+	File  string `json:"file"`
+	Count int    `json:"count"`
+}
+
 // GrepInput defines arguments for grep search.
 type GrepInput struct {
 	Query           string `json:"query" jsonschema:"The search term or regex pattern"`
 	Path            string `json:"path,omitempty" jsonschema:"Optional directory or file path to search in"`
 	IsRegex         bool   `json:"is_regex,omitempty" jsonschema:"Whether query is a regex pattern"`
 	CaseInsensitive bool   `json:"case_insensitive,omitempty" jsonschema:"Whether search is case insensitive"`
-	MaxMatches      int    `json:"max_matches,omitempty" jsonschema:"Max results to return"`
+	Mode            string `json:"mode,omitempty" jsonschema:"Output mode: content (default: matching lines), files_only (unique matching file paths), or count (per-file and total match counts)"`
+	MaxMatches      int    `json:"max_matches,omitempty" jsonschema:"Max results to return (default 20 in content mode, max 500)"`
 }
 
 // GrepOutput holds grep search results.
 type GrepOutput struct {
-	Matches      []GrepMatch `json:"matches"`
-	TotalMatches int         `json:"total_matches"`
+	Matches      []GrepMatch     `json:"matches,omitempty"`
+	Files        []string        `json:"files,omitempty"`
+	Counts       []GrepFileCount `json:"counts,omitempty"`
+	TotalMatches int             `json:"total_matches"`
+	TotalFiles   int             `json:"total_files,omitempty"`
 	// Truncated says the search stopped at max_matches: there may be more.
 	Truncated bool `json:"truncated,omitempty"`
-	// Note says what wasn't searched (files over grep's size limit).
+	// Note says what wasn't searched (files over grep's size limit) or total matches when truncated.
 	Note  string `json:"note,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 
-// NewGrepTool creates an ADK tool for workspace grep searching.
+// NewGrepTool creates an ADK tool for workspace grep searching (Implements: FS-84).
 func NewGrepTool(ws *Workspace) (tool.Tool, error) {
 	return functiontool.New(
 		functiontool.Config{
@@ -83,10 +93,22 @@ func NewGrepTool(ws *Workspace) (tool.Tool, error) {
 			if err != nil {
 				return GrepOutput{Error: err.Error()}, nil
 			}
-			out := GrepOutput{Matches: res.matches, TotalMatches: len(res.matches), Truncated: res.truncated}
-			if res.tooBig > 0 {
-				out.Note = fmt.Sprintf("%d file(s) over %d MiB weren't searched; use run_shell_command with grep or rg for them", res.tooBig, grepMaxFileSize>>20)
+			out := GrepOutput{
+				Matches:      res.matches,
+				Files:        res.files,
+				Counts:       res.counts,
+				TotalMatches: res.totalMatches,
+				TotalFiles:   res.totalFiles,
+				Truncated:    res.truncated,
 			}
+			var notes []string
+			if res.truncated && len(res.matches) > 0 {
+				notes = append(notes, fmt.Sprintf("Found %d matches across %d files; showing first %d. Narrow path/query or use mode: \"files_only\" or \"count\".", res.foundMatches, res.foundFiles, len(res.matches)))
+			}
+			if res.tooBig > 0 {
+				notes = append(notes, fmt.Sprintf("%d file(s) over %d MiB weren't searched; use run_shell_command with grep or rg for them", res.tooBig, grepMaxFileSize>>20))
+			}
+			out.Note = strings.Join(notes, "; ")
 			return out, nil
 		},
 	)
@@ -127,16 +149,24 @@ func newLineMatcher(input GrepInput) (*lineMatcher, error) {
 }
 
 type grepFileResult struct {
+	file    string
 	matches []GrepMatch
+	count   int  // total matching lines in this file
 	tooBig  bool // over grepMaxFileSize: not searched
 }
 
 // grepResult is a search's matches, whether it stopped at its maximum,
-// and how many files were too big to search.
+// and how many files were too big to search (Implements: FS-84).
 type grepResult struct {
-	matches   []GrepMatch
-	truncated bool
-	tooBig    int
+	matches      []GrepMatch
+	files        []string
+	counts       []GrepFileCount
+	totalMatches int
+	totalFiles   int
+	foundMatches int
+	foundFiles   int
+	truncated    bool
+	tooBig       int
 }
 
 // grepWorkspace is grepSearch's matches.
@@ -149,13 +179,25 @@ func grepSearch(ctx context.Context, ws *Workspace, input GrepInput) (grepResult
 	if input.Query == "" {
 		return grepResult{}, fmt.Errorf("query must not be empty")
 	}
+	mode := strings.ToLower(strings.TrimSpace(input.Mode))
+	switch mode {
+	case "", "content":
+		mode = "content"
+	case "files_only", "count":
+	default:
+		return grepResult{}, fmt.Errorf("unknown mode %q (want content, files_only, or count)", input.Mode)
+	}
 	searchPath := input.Path
 	if searchPath == "" {
 		searchPath = "."
 	}
 	max := input.MaxMatches
 	if max <= 0 {
-		max = 100
+		if mode == "content" {
+			max = 20
+		} else {
+			max = 100
+		}
 	}
 	max = min(max, 500)
 	matcher, err := newLineMatcher(input)
@@ -200,6 +242,13 @@ func grepSearch(ctx context.Context, ws *Workspace, input GrepInput) (grepResult
 	sem := make(chan struct{}, workers)
 	order := make(chan chan grepFileResult, workers*2)
 
+	fileMax := max
+	if mode == "files_only" {
+		fileMax = 1
+	} else if mode == "count" {
+		fileMax = 0
+	}
+
 	go func() {
 		defer close(order)
 		for _, entry := range files {
@@ -221,8 +270,8 @@ func grepSearch(ctx context.Context, ws *Workspace, input GrepInput) (grepResult
 				if scanCtx.Err() != nil {
 					return
 				}
-				matches, tooBig := grepFile(scanCtx, entry, matcher, max)
-				ch <- grepFileResult{matches: matches, tooBig: tooBig}
+				matches, count, tooBig := grepFileCount(scanCtx, entry, matcher, fileMax, mode == "files_only")
+				ch <- grepFileResult{file: entry.Path, matches: matches, count: count, tooBig: tooBig}
 			}(entry)
 		}
 	}()
@@ -239,13 +288,49 @@ func grepSearch(ctx context.Context, ws *Workspace, input GrepInput) (grepResult
 		if res.tooBig {
 			out.tooBig++
 		}
-		for _, m := range res.matches {
-			out.matches = append(out.matches, m)
-			if len(out.matches) >= max {
+		if res.count == 0 {
+			continue
+		}
+		out.foundFiles++
+		out.foundMatches += res.count
+		switch mode {
+		case "files_only":
+			if len(out.files) < max {
+				out.files = append(out.files, res.file)
+			} else {
 				out.truncated = true
-				return out, nil
+			}
+		case "count":
+			if len(out.counts) < max {
+				out.counts = append(out.counts, GrepFileCount{File: res.file, Count: res.count})
+			} else {
+				out.truncated = true
+			}
+		default:
+			for _, m := range res.matches {
+				if len(out.matches) < max {
+					out.matches = append(out.matches, m)
+				} else {
+					out.truncated = true
+				}
+			}
+			if res.count > len(res.matches) {
+				out.truncated = true
 			}
 		}
+	}
+	switch mode {
+	case "files_only":
+		out.matches = nil
+		out.totalFiles = len(out.files)
+		out.totalMatches = len(out.files)
+	case "count":
+		out.matches = nil
+		out.totalFiles = out.foundFiles
+		out.totalMatches = out.foundMatches
+	default:
+		out.totalMatches = len(out.matches)
+		out.totalFiles = out.foundFiles
 	}
 	return out, nil
 }
@@ -254,37 +339,43 @@ func grepSearch(ctx context.Context, ws *Workspace, input GrepInput) (grepResult
 // was too big to search. Unreadable, oversized, and binary files yield no
 // matches.
 func grepFile(ctx context.Context, entry WalkEntry, m *lineMatcher, max int) ([]GrepMatch, bool) {
+	matches, _, tooBig := grepFileCount(ctx, entry, m, max, false)
+	return matches, tooBig
+}
+
+func grepFileCount(ctx context.Context, entry WalkEntry, m *lineMatcher, max int, stopFirst bool) ([]GrepMatch, int, bool) {
 	f, err := entry.Open()
 	if err != nil {
-		return nil, false
+		return nil, 0, false
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return nil, false
+		return nil, 0, false
 	}
 	if info.Size() > grepMaxFileSize {
-		return nil, true
+		return nil, 0, true
 	}
 	// Reading the whole (bounded) file avoids bufio.Scanner's line-length limit.
 	data, err := io.ReadAll(io.LimitReader(f, grepMaxFileSize))
 	if err != nil {
-		return nil, false
+		return nil, 0, false
 	}
 	if bytes.IndexByte(data[:min(len(data), grepBinarySniffLen)], 0) >= 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	if m.prefilter != nil && !m.prefilter(data) {
-		return nil, false
+		return nil, 0, false
 	}
 
 	var out []GrepMatch
+	count := 0
 	lineNum := 0
 	for len(data) > 0 {
 		lineNum++
 		if lineNum%4096 == 0 && ctx.Err() != nil {
-			return out, false
+			return out, count, false
 		}
 		var line []byte
 		if i := bytes.IndexByte(data, '\n'); i >= 0 {
@@ -294,15 +385,18 @@ func grepFile(ctx context.Context, entry WalkEntry, m *lineMatcher, max int) ([]
 		}
 		line = bytes.TrimSuffix(line, []byte("\r"))
 		if m.match(line) {
-			out = append(out, GrepMatch{
-				File:       entry.Path,
-				LineNumber: lineNum,
-				Content:    textutil.Ellipsize(strings.TrimSpace(string(line)), grepMaxLineContent),
-			})
-			if len(out) >= max {
-				return out, false
+			count++
+			if max > 0 && len(out) < max {
+				out = append(out, GrepMatch{
+					File:       entry.Path,
+					LineNumber: lineNum,
+					Content:    textutil.Ellipsize(strings.TrimSpace(string(line)), grepMaxLineContent),
+				})
+			}
+			if stopFirst {
+				return out, count, false
 			}
 		}
 	}
-	return out, false
+	return out, count, false
 }

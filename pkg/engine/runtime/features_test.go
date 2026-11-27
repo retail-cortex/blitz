@@ -315,16 +315,19 @@ func TestEngineAuditsWhatFailed(t *testing.T) {
 }
 
 // The third time the same call fails the same way in a turn, the agent is
-// told to stop repeating it (spec_048_harness_learning HE-07); another
-// call, or the next turn, counts afresh.
+// told to stop repeating it (spec_048_harness_learning HE-07), and on the
+// fourth identical call it is refused outright before running (Implements: HE-07, HE-07a).
 func TestEngineSaysWhenAFailureRepeats(t *testing.T) {
 	missing := map[string]any{"path": "missing.txt"}
 	f := newEngineWith(t, fixtureOpts{},
 		toolCall("read_file", missing), toolCall("read_file", missing),
 		toolCall("read_file", map[string]any{"path": "other.txt"}),
-		toolCall("read_file", missing), textContent("giving up"),
+		toolCall("read_file", missing),
+		toolCall("read_file", missing), // 4th identical call -> refused by churn circuit-breaker
+		textContent("giving up"),
 		toolCall("read_file", missing), textContent("again"))
 	var notes []bool
+	var errs []string
 	collectNotes := func(prompt string) {
 		t.Helper()
 		require.NoError(t, f.eng.Execute(context.Background(), "s", prompt, func(ev *session.Event) error {
@@ -333,6 +336,8 @@ func TestEngineSaysWhenAFailureRepeats(t *testing.T) {
 					if r := p.FunctionResponse; r != nil {
 						_, warned := r.Response["repeated_failure"]
 						notes = append(notes, warned)
+						msg, _ := r.Response["error"].(string)
+						errs = append(errs, msg)
 					}
 				}
 			}
@@ -340,10 +345,36 @@ func TestEngineSaysWhenAFailureRepeats(t *testing.T) {
 		}))
 	}
 	collectNotes("read it")
-	assert.Equal(t, []bool{false, false, false, true}, notes, "only the third identical failure; other.txt is another call")
-	notes = nil
+	assert.Equal(t, []bool{false, false, false, true, false}, notes, "only the third identical failure warns")
+	assert.Contains(t, errs[4], "refused: this exact call has already failed 3 times in this turn", "4th identical call must be refused by circuit-breaker")
+	notes, errs = nil, nil
 	collectNotes("once more")
 	assert.Equal(t, []bool{false}, notes, "a new turn counts afresh")
+}
+
+// Implements: ENG-70c, AG-31b.
+func TestInvokeSubagentDistillsFinalReplyAndCapsLength(t *testing.T) {
+	longFinal := strings.Repeat("A", 5000) + strings.Repeat("B", 5000)
+	f := newEngineWith(t, fixtureOpts{},
+		// Root calls invoke_agent("qa")
+		toolCall("invoke_agent", map[string]any{"agent_name": "qa", "prompt": "check tests"}),
+		// Sub-agent first turn emits intermediate prose + a tool call
+		&genai.Content{Role: genai.RoleModel, Parts: []*genai.Part{
+			{Text: "INTERMEDIATE NARRATION THAT SHOULD BE DROPPED"},
+			{FunctionCall: &genai.FunctionCall{Name: "list_files", Args: map[string]any{"directory": "."}}},
+		}},
+		// Sub-agent final turn emits the summary
+		textContent(longFinal),
+		// Root finishes
+		textContent("root done"),
+	)
+	resps, err := functionResponses(t, f.eng, "s", "run qa")
+	require.NoError(t, err)
+	got, _ := resps["invoke_agent"]["response"].(string)
+	assert.NotContains(t, got, "INTERMEDIATE NARRATION", "intermediate prose before tool calls must be omitted")
+	assert.Contains(t, got, "sub-agent reply truncated", "replies over 8000 chars must be capped with a head/tail truncation notice")
+	assert.True(t, strings.HasPrefix(got, "AAAA"))
+	assert.True(t, strings.HasSuffix(got, "BBBB"))
 }
 
 func TestExitCode(t *testing.T) {

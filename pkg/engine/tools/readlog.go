@@ -70,9 +70,10 @@ func ReadKey(ctx agent.Context) (key string, ok bool) {
 	return session + "\x00" + ctx.Branch() + "\x00" + ctx.AgentName(), session != ""
 }
 
-// Shown records the read_file results a request to the model carries for
-// the agent ctx runs, in place of those the last one carried: its own, and
-// those of the agents before a handoff, which come as text.
+// Shown records the read_file, list_files, and glob results a request to the
+// model carries for the agent ctx runs, in place of those the last one
+// carried: its own, and those of the agents before a handoff, which come as
+// text (Implements: FS-83, FS-83a).
 func (l *ReadLog) Shown(ctx agent.Context, contents []*genai.Content) {
 	key, ok := ReadKey(ctx)
 	if l == nil || !ok {
@@ -88,7 +89,7 @@ func (l *ReadLog) Shown(ctx agent.Context, contents []*genai.Content) {
 			switch {
 			case p == nil:
 				continue
-			case p.FunctionResponse != nil && p.FunctionResponse.Name == "read_file":
+			case p.FunctionResponse != nil && isReadLogTool(p.FunctionResponse.Name):
 				resp = p.FunctionResponse.Response
 			case c.Role == genai.RoleUser:
 				resp = handedRead(p.Text)
@@ -116,33 +117,56 @@ func (l *ReadLog) Shown(ctx agent.Context, contents []*genai.Content) {
 	l.agents[key] = reads
 }
 
-// handedResult is how ADK shows another agent's read_file result to the
-// agent handed to: "[agent] `read_file` tool returned result: {...}", the
-// result as JSON.
-const handedResult = "`read_file` tool returned result: "
-
-// handedRead is the read_file result in text, as handedResult shows it, or
-// nil for any other text.
-func handedRead(text string) map[string]any {
-	_, result, ok := strings.Cut(text, handedResult)
-	if !ok || !strings.HasPrefix(text, "[") {
-		return nil
-	}
-	var resp map[string]any
-	if json.Unmarshal([]byte(result), &resp) != nil {
-		return nil
-	}
-	return resp
+func isReadLogTool(name string) bool {
+	return name == "read_file" || name == "list_files" || name == "glob"
 }
 
-// shownRead is the read a read_file result names: its digest and lines.
-// A result without them (an error, an "unchanged" answer, a truncated
-// read, a PDF's text) names none.
+// handedResult is how ADK shows another agent's tool result to the
+// agent handed to: "[agent] `<tool>` tool returned result: {...}", the
+// result as JSON.
+var handedPrefixes = []string{
+	"`read_file` tool returned result: ",
+	"`list_files` tool returned result: ",
+	"`glob` tool returned result: ",
+}
+
+// handedRead is the read_file, list_files or glob result in text, as
+// handedPrefixes shows it, or nil for any other text.
+func handedRead(text string) map[string]any {
+	if !strings.HasPrefix(text, "[") {
+		return nil
+	}
+	for _, prefix := range handedPrefixes {
+		if _, result, ok := strings.Cut(text, prefix); ok {
+			var resp map[string]any
+			if json.Unmarshal([]byte(result), &resp) == nil {
+				return resp
+			}
+		}
+	}
+	return nil
+}
+
+// shownRead is the read a read_file, list_files or glob result names: its
+// digest and lines (0-0 for a directory listing or glob, FS-83a). A result
+// without a digest (an error, an "unchanged" answer, a truncated read, a
+// PDF's text) names none.
 func shownRead(resp map[string]any) (fileRead, bool) {
 	digest, _ := resp["digest"].(string)
-	lines, _ := resp["lines"].(string)
+	if digest == "" {
+		return fileRead{}, false
+	}
+	lines, hasLines := resp["lines"].(string)
+	if !hasLines {
+		// A list_files or glob result has a digest (with a "list:" or "glob:"
+		// prefix) and no line range (Implements: FS-83a).
+		if strings.HasPrefix(digest, "list:") || strings.HasPrefix(digest, "glob:") {
+			return fileRead{digest: digest}, true
+		}
+		return fileRead{}, false
+	}
 	var r fileRead
-	if _, err := fmt.Sscanf(lines, "%d-%d", &r.start, &r.end); digest == "" || err != nil {
+	if _, err := fmt.Sscanf(lines, "%d-%d", &r.start, &r.end); err != nil {
 		return fileRead{}, false
 	}
 	r.digest = digest
