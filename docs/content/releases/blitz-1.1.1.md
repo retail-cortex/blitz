@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.1.1
-weight: 8
+weight: 10
 ---
 
 Your agents browse signed in, and your settings take effect. Sign in to a site in one of your browser profiles, and the agent can now actually use it: ask it to check your inbox, pull a report from a dashboard behind single sign-on, or file a ticket, and it browses with your sign-ins.

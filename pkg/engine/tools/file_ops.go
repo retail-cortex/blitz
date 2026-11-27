@@ -46,8 +46,12 @@ const maxReadOutputBytes = 512 * 1024
 // (153 of 207 ranged reads were of files under 400 lines, 2026-11-10).
 const wholeFileLines = 400
 
+// defaultReadMaxLines caps an unranged read_file call so large files don't
+// flood context; pass start_line/end_line to read further (Implements: FS-83, FS-83b).
+const defaultReadMaxLines = 500
+
 // readFileDescription tells the model how to read without reading again.
-const readFileDescription = "Read a text file with line numbers. Read the whole file: a file of up to 400 lines comes whole even when you ask for a range, so give start_line/end_line only to page a longer one. Don't read a file again when its contents are already in this conversation: a read of a file that hasn't changed since you were shown it answers unchanged (pass force to have it again)."
+const readFileDescription = "Read a text file with line numbers. A file of up to 500 lines comes whole (and a ranged read of a file of up to 400 lines also comes whole); an unranged read of a file over 500 lines returns lines 1-500 with total_lines so you can page or pass start_line/end_line around a search_workspace or grep match. Don't read a file again when its contents are already in this conversation: a read of lines that haven't changed since you were shown them answers unchanged (pass force to have them again)."
 
 // ReadFileInput defines arguments for reading a file.
 type ReadFileInput struct {
@@ -92,7 +96,7 @@ func NewReadFileTool(ws *Workspace) (tool.Tool, error) {
 			if err != nil {
 				return ReadFileOutput{Path: input.Path, Error: fmt.Sprintf("failed to read file: %v", err)}, nil
 			}
-			if out.Truncated {
+			if read.end == 0 {
 				return out, nil
 			}
 			if key, ok := ReadKey(ctx); ok && !input.Force {
@@ -224,7 +228,8 @@ func binaryHint(path string, head []byte) string {
 
 // pageLines numbers r's lines, keeping the requested range, and returns
 // the first and last line it gave. A range of a file of up to
-// wholeFileLines lines gives the whole file.
+// wholeFileLines lines gives the whole file; an unranged read of a file
+// over defaultReadMaxLines returns lines 1..defaultReadMaxLines (Implements: FS-83, FS-83b).
 func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, int, int, error) {
 	start := 1
 	if input.StartLine > 1 {
@@ -235,14 +240,15 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, int, int, er
 		end = start
 	}
 	ranged := start > 1 || end > 0
+	unranged := input.StartLine == 0 && input.EndLine == 0
 	var whole strings.Builder // a ranged read's lines while the file may be short
 
 	var (
-		sb        strings.Builder
-		lineNo    int
-		truncated bool
-		numBuf    []byte
-		lastLine  string
+		sb            strings.Builder
+		lineNo        int
+		byteTruncated bool
+		numBuf        []byte
+		lastLine      string
 	)
 	writeLine := func(n int, text string) bool {
 		if sb.Len()+len(text)+8 > maxReadOutputBytes {
@@ -260,9 +266,9 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, int, int, er
 		// A trailing "\n" yields a final empty line, matching strings.Split semantics.
 		lineNo++
 		text := strings.TrimSuffix(line, "\n")
-		inRange := lineNo >= start && (end <= 0 || lineNo <= end)
-		if inRange && !truncated && !writeLine(lineNo, text) {
-			truncated = true
+		inRange := lineNo >= start && (end <= 0 || lineNo <= end) && (!unranged || lineNo <= defaultReadMaxLines)
+		if inRange && !byteTruncated && !writeLine(lineNo, text) {
+			byteTruncated = true
 		}
 		if ranged && lineNo <= wholeFileLines && whole.Len()+len(text)+8 <= maxReadOutputBytes {
 			numberLine(&whole, &numBuf, lineNo, text)
@@ -274,7 +280,7 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, int, int, er
 	}
 	totalLines := lineNo
 
-	if ranged && totalLines <= wholeFileLines && whole.Len() > 0 && !truncated {
+	if ranged && totalLines <= wholeFileLines && whole.Len() > 0 && !byteTruncated {
 		return ReadFileOutput{
 			Path:       input.Path,
 			Content:    whole.String(),
@@ -287,22 +293,31 @@ func pageLines(src io.Reader, input ReadFileInput) (ReadFileOutput, int, int, er
 	if start > totalLines {
 		start = totalLines
 		if !writeLine(totalLines, lastLine) {
-			truncated = true
+			byteTruncated = true
 		}
 	}
 	if end <= 0 || end > totalLines {
 		end = totalLines
 	}
 
+	lineCapped := unranged && totalLines > defaultReadMaxLines && !byteTruncated
+	var note string
+	if lineCapped {
+		end = defaultReadMaxLines
+		note = fmt.Sprintf("Showing lines 1-%d of %d; pass start_line and end_line (or use search_workspace / grep to locate the section) to read further.", defaultReadMaxLines, totalLines)
+	}
+
 	content := sb.String()
-	if truncated {
+	if byteTruncated {
 		content += fmt.Sprintf("\n... [output truncated at %d bytes; use start_line/end_line to page]\n", maxReadOutputBytes)
+		start, end = 0, 0
 	}
 	return ReadFileOutput{
 		Path:       input.Path,
 		Content:    content,
 		TotalLines: totalLines,
-		Truncated:  truncated,
+		Truncated:  byteTruncated || lineCapped,
+		Note:       note,
 	}, start, end, nil
 }
 

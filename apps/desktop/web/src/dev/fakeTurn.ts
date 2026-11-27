@@ -154,6 +154,7 @@ export async function* runTurn(dir: string, text: string, plan: boolean): AsyncG
     yield ev({ case: "finished", value: { before, after: s.usage } });
     return;
   }
+  s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 1, input: s.usage.input + 2280n, output: s.usage.output + 203n, lastPrompt: 13210n, costUsd: s.usage.costUsd + 0.0015 });
   yield call("1", "read_file", { path: "internal/cart/discount.go" });
   await sleep(250);
   yield result("1", "read_file", { content: "package cart\n…", lines: 84 });
@@ -189,6 +190,7 @@ export async function* runTurn(dir: string, text: string, plan: boolean): AsyncG
 
   const id = `a${++nextRequest}`;
   const decision = new Promise<string>((r) => s.pending.set(id, r));
+  s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 1, input: s.usage.input + 2280n, output: s.usage.output + 203n, lastPrompt: 13640n, costUsd: s.usage.costUsd + 0.0015 });
   yield call("3", "create_file", { path: "internal/cart/discount_test.go" });
   yield ev({
     case: "approvalRequest",
@@ -227,7 +229,7 @@ export async function* runTurn(dir: string, text: string, plan: boolean): AsyncG
     if (new URLSearchParams(location.search).has("citations"))
       yield ev({ case: "citations", value: { items: [{ title: "Blitz docs", url: "https://retail-cortex.github.io/blitz/", text: "" }] } });
   }
-  s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 4, input: s.usage.input + 9120n, output: s.usage.output + 812n, lastPrompt: 14210n, costUsd: s.usage.costUsd + 0.0061 });
+  s.usage = create(UsageSchema, { ...s.usage, calls: s.usage.calls + 2, input: s.usage.input + 4560n, output: s.usage.output + 406n, lastPrompt: 14210n, costUsd: s.usage.costUsd + 0.0031 });
   sess.messageCount = sess.messages.length;
   // ?reflectdue: the turn says it's time to /reflect (HE-63).
   if (new URLSearchParams(location.search).has("reflectdue")) yield ev({ case: "reflectDue", value: { patterns: 6, score: 8 } });

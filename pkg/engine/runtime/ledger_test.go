@@ -149,6 +149,33 @@ func TestChargeWithoutUsage(t *testing.T) {
 	assert.Equal(t, api.PurposeTurn, tr.Charge(context.Background(), Charge{Session: "s", Model: "m"}).Purpose, "a turn's, by default")
 }
 
+// Non-conversational charges (review, background tasks) must not overwrite
+// the session's LastPrompt context size, while turn and compaction charges
+// update it (Implements: CA-120).
+func TestChargePreservesLastPromptForNonTurnPurposes(t *testing.T) {
+	tr := NewUsageTracker(map[string]config.ModelPrice{"m": {InputPerMTok: 1, OutputPerMTok: 2}})
+	ctx := context.Background()
+	meta := func(prompt int32) *genai.GenerateContentResponseUsageMetadata {
+		return &genai.GenerateContentResponseUsageMetadata{PromptTokenCount: prompt, CandidatesTokenCount: 100}
+	}
+
+	turnCall := tr.Charge(ctx, Charge{Session: "s", Purpose: api.PurposeTurn, Model: "m", Usage: meta(42000)})
+	assert.Equal(t, int64(42000), turnCall.Usage.LastPrompt)
+	assert.Equal(t, int64(42000), tr.Session("s").LastPrompt)
+
+	reviewCall := tr.Charge(ctx, Charge{Session: "s", Purpose: api.PurposeReview, Model: "m", Usage: meta(1500)})
+	assert.Zero(t, reviewCall.Usage.LastPrompt)
+	assert.Equal(t, int64(42000), tr.Session("s").LastPrompt, "review call must not overwrite session LastPrompt")
+
+	taskCall := tr.Charge(ctx, Charge{Session: "s", Task: "t1", Purpose: api.PurposeTask, Model: "m", Usage: meta(8000)})
+	assert.Zero(t, taskCall.Usage.LastPrompt)
+	assert.Equal(t, int64(42000), tr.Session("s").LastPrompt, "background task call must not overwrite session LastPrompt")
+
+	compactCall := tr.Charge(ctx, Charge{Session: "s", Purpose: api.PurposeCompaction, Model: "m", Usage: meta(12000)})
+	assert.Equal(t, int64(12000), compactCall.Usage.LastPrompt)
+	assert.Equal(t, int64(12000), tr.Session("s").LastPrompt, "compaction updates session LastPrompt")
+}
+
 // The organization's catalog prices its models the price table doesn't.
 func TestCatalogPrices(t *testing.T) {
 	tr := NewUsageTracker(map[string]config.ModelPrice{"gemini-3-pro": {InputPerMTok: 2}})

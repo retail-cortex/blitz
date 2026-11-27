@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.3.2
-weight: 2
+weight: 4
 ---
 
 Your organization's models stay on, week after week. Until now, a company policy that nobody had edited for seven days quietly ran out on your computer, and its models stopped mid-week, even though Blitz had checked in with your organization all along. Blitz 1.3.2 keeps the policy fresh, and smooths out the forms you use to set it up.

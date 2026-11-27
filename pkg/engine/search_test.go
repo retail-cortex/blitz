@@ -206,7 +206,8 @@ func TestSearchErrors(t *testing.T) {
 	assert.False(t, off.SearchStatus().Enabled)
 }
 
-// The agent's search_workspace finds files with where they are.
+// The agent's search_workspace finds files with where they are and a
+// recommended read_file line range (Implements: SRCH-41a).
 func TestSearchWorkspaceTool(t *testing.T) {
 	call := toolCall("search_workspace", map[string]any{"query": "turnEnded"})
 	w := searchWorkspace(t, call, text("found it"))
@@ -223,6 +224,7 @@ func TestSearchWorkspaceTool(t *testing.T) {
 	b, err := json.Marshal(result)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"where":"engine/rewind.go:3"`)
+	assert.Contains(t, string(b), `"lines":"1-38"`)
 
 	// A folder the hit isn't under finds nothing (SRCH-18).
 	scoped := toolCall("search_workspace", map[string]any{"query": "turnEnded", "folder": "docs"})

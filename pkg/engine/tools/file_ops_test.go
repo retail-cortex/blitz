@@ -67,6 +67,32 @@ func TestReadFileToolPastTheEndOfALongLine(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "one.txt"), strings.Repeat("x", maxReadOutputBytes+1))
 	out := runTool(t, toolOf(t)(NewReadFileTool(ws)), map[string]any{"path": "one.txt", "start_line": 5})
 	assert.Equal(t, true, out["truncated"])
+	out = runTool(t, toolOf(t)(NewReadFileTool(ws)), map[string]any{"path": "one.txt"})
+	assert.Equal(t, true, out["truncated"])
+	assert.Contains(t, out["content"], "output truncated at")
+	assert.Nil(t, out["digest"])
+}
+
+// Implements: FS-83, FS-83b.
+func TestReadFileDefaultMaxLines(t *testing.T) {
+	ws, dir := newTestWorkspace(t)
+	var big strings.Builder
+	for i := 1; i <= 600; i++ {
+		fmt.Fprintf(&big, "line %d\n", i)
+	}
+	writeFile(t, filepath.Join(dir, "big.txt"), big.String())
+	rt := toolOf(t)(NewReadFileTool(ws))
+
+	out := runTool(t, rt, map[string]any{"path": "big.txt"})
+	assert.Equal(t, true, out["truncated"])
+	assert.Equal(t, "1-500", out["lines"])
+	assert.NotEmpty(t, out["digest"])
+	assert.EqualValues(t, 601, out["total_lines"])
+	assert.Contains(t, out["note"], "Showing lines 1-500 of 601")
+	content := out["content"].(string)
+	assert.Contains(t, content, " 500: line 500\n")
+	assert.NotContains(t, content, " 501: line 501\n")
+	assert.NotContains(t, content, "output truncated at")
 }
 
 // TestListFilesToolSkipsHiddenFilesAndStopsWhenCancelled leaves out dot

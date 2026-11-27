@@ -261,13 +261,15 @@ func TestWireNames(t *testing.T) {
 // Implements: CA-28a, WEB-36a.
 func TestPruneRequestContents(t *testing.T) {
 	bigShell := strings.Repeat("S", 2000) + strings.Repeat("M", 2000) + strings.Repeat("E", 2000)
+	bigFetch := strings.Repeat("W", 2000) + strings.Repeat("B", 2000) + strings.Repeat("F", 2000)
 	history := []*genai.Content{
-		// Turn 1 (5 user turns behind the latest)
+		// Turn 1 (4 user turns behind the latest)
 		genai.NewContentFromText("turn 1", genai.RoleUser),
 		{Role: genai.RoleModel, Parts: []*genai.Part{
 			{FunctionCall: &genai.FunctionCall{ID: "c1", Name: "read_file", Args: map[string]any{"path": "a.go"}}},
 			{FunctionCall: &genai.FunctionCall{ID: "c2", Name: "run_shell_command"}},
 			{FunctionCall: &genai.FunctionCall{ID: "c3", Name: "browser"}},
+			{FunctionCall: &genai.FunctionCall{ID: "c6", Name: "web_fetch"}},
 		}},
 		{Role: genai.RoleUser, Parts: []*genai.Part{
 			{FunctionResponse: &genai.FunctionResponse{ID: "c1", Name: "read_file", Response: map[string]any{
@@ -279,8 +281,11 @@ func TestPruneRequestContents(t *testing.T) {
 			{FunctionResponse: &genai.FunctionResponse{ID: "c3", Name: "browser", Response: map[string]any{
 				"url": "https://example.com", "image_uri": "blitz-image:abc123", "note": "The screenshot follows this result.",
 			}}},
+			{FunctionResponse: &genai.FunctionResponse{ID: "c6", Name: "web_fetch", Response: map[string]any{
+				"url": "https://example.com/doc", "content": bigFetch,
+			}}},
 		}},
-		// Turn 2: edits a.go and patches b.go
+		// Turn 2: edits a.go and patches b.go (3 user turns behind the latest)
 		genai.NewContentFromText("turn 2", genai.RoleUser),
 		{Role: genai.RoleModel, Parts: []*genai.Part{
 			{FunctionCall: &genai.FunctionCall{ID: "c4", Name: "replace_in_file"}},
@@ -294,11 +299,10 @@ func TestPruneRequestContents(t *testing.T) {
 				"success": true, "files": []any{map[string]any{"path": "b.go", "moved_to": "c.go"}},
 			}}},
 		}},
-		// Turns 3, 4, 5, 6 (to push Turn 1 past 4 user turns)
+		// Turns 3, 4, 5 (to push Turn 1 past 3 user turns for screenshots and >2 user turns for shell/fetch)
 		genai.NewContentFromText("turn 3", genai.RoleUser),
 		genai.NewContentFromText("turn 4", genai.RoleUser),
 		genai.NewContentFromText("turn 5", genai.RoleUser),
-		genai.NewContentFromText("turn 6", genai.RoleUser),
 	}
 
 	pruned := pruneRequestContents(history)
@@ -309,8 +313,9 @@ func TestPruneRequestContents(t *testing.T) {
 	assert.Equal(t, "old file content", origResps[0].FunctionResponse.Response["content"])
 	assert.Equal(t, bigShell, origResps[1].FunctionResponse.Response["output"])
 	assert.Equal(t, "blitz-image:abc123", origResps[2].FunctionResponse.Response["image_uri"])
+	assert.Equal(t, bigFetch, origResps[3].FunctionResponse.Response["content"])
 
-	// Pruned copy has stubbed read_file, pruned shell output, and omitted browser screenshot.
+	// Pruned copy has stubbed read_file, pruned shell output, omitted browser screenshot, and pruned web_fetch content.
 	pResps := pruned[2].Parts
 	readResp := pResps[0].FunctionResponse.Response
 	assert.Nil(t, readResp["content"], "stale read_file content must be omitted")
@@ -326,4 +331,10 @@ func TestPruneRequestContents(t *testing.T) {
 	browserResp := pResps[2].FunctionResponse.Response
 	assert.Nil(t, browserResp["image_uri"], "aged browser screenshot must drop image_uri")
 	assert.Contains(t, browserResp["note"], "[earlier browser screenshot omitted]")
+
+	fetchResp := pResps[3].FunctionResponse.Response
+	assert.Contains(t, fetchResp["status"], "content pruned from earlier turn")
+	fetchOut, _ := fetchResp["content"].(string)
+	assert.Contains(t, fetchOut, "… [pruned] …")
+	assert.Less(t, len(fetchOut), len(bigFetch))
 }

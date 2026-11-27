@@ -290,6 +290,24 @@ export function tasksOf(ev: TurnEvent): Task[] | undefined {
   return ev.kind.case === "tasks" ? ev.kind.value.items : undefined;
 }
 
+/**
+ * Whether a turn event marks a completed model step during a running turn, so
+ * the status bar's session cost and context meter can refresh live (DSK-39a, DSK-78).
+ */
+export function shouldRefreshUsage(ev: TurnEvent): boolean {
+  switch (ev.kind.case) {
+    case "toolCall":
+    case "text":
+      return !ev.kind.value.partial;
+    case "toolResult":
+    case "approvalRequest":
+    case "question":
+      return true;
+    default:
+      return false;
+  }
+}
+
 /** Whether a tool result reports failure (the tools return an "error" field). */
 export function failed(result: JsonObject | undefined): boolean {
   return !!result && typeof result.error === "string" && result.error !== "";

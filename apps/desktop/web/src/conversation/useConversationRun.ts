@@ -24,7 +24,7 @@ import type { SessionInfo } from "../gen/blitz/v1/session_pb";
 import type { Task, Usage } from "../gen/blitz/v1/turn_pb";
 import { t } from "../i18n";
 import type { NotifyKind } from "../notify";
-import { applyEvent, assignPromptIndices, tasksOf, type Entry } from "../turns";
+import { applyEvent, assignPromptIndices, shouldRefreshUsage, tasksOf, type Entry } from "../turns";
 import { newTurnId, resumableTurn } from "../turnStream";
 import { addWait, type Pending } from "../waits";
 
@@ -109,6 +109,36 @@ export function useConversationRun({
       let done!: () => void;
       finished.current = new Promise((r) => (done = r));
       let leftover: string[] = [];
+      // Live status-bar cost and context meter updates during the turn (Implements: DSK-39a, DSK-78).
+      let usageInFlight = false;
+      let usageQueued = false;
+      let lastUsageAt = 0;
+      let usageTimer: ReturnType<typeof setTimeout> | undefined;
+      const scheduleUsageRefresh = () => {
+        if (usageInFlight) {
+          usageQueued = true;
+          return;
+        }
+        const elapsed = Date.now() - lastUsageAt;
+        if (elapsed < 500) {
+          if (!usageTimer) {
+            usageTimer = setTimeout(() => {
+              usageTimer = undefined;
+              scheduleUsageRefresh();
+            }, 500 - elapsed);
+          }
+          return;
+        }
+        usageInFlight = true;
+        lastUsageAt = Date.now();
+        void refreshTotal().finally(() => {
+          usageInFlight = false;
+          if (usageQueued && !ctl.signal.aborted && latestRunning.current) {
+            usageQueued = false;
+            scheduleUsageRefresh();
+          }
+        });
+      };
       try {
         const stream = opts.follow
           ? sessions.watchBackground({ id: opts.follow, follow: true }, { signal: ctl.signal })
@@ -151,7 +181,11 @@ export function useConversationRun({
           } else if (ev.kind.case === "notice" && ev.kind.value.transient) snack(ev.kind.value.text);
           else setEntries((e) => applyEvent(e, ev));
           if (ev.kind.case === "toolResult" || ev.kind.case === "finished") filesTouched({ dir });
+          if (shouldRefreshUsage(ev)) scheduleUsageRefresh();
           if (ev.kind.case === "finished") {
+            clearTimeout(usageTimer);
+            usageTimer = undefined;
+            usageQueued = false;
             setTurnUsage(usageLine(ev.kind.value.before, ev.kind.value.after));
             setTotal(ev.kind.value.after);
             void refreshTotal();
@@ -167,6 +201,9 @@ export function useConversationRun({
           if (id) void sessions.stopTurn({ workspace: dir, turnId: id }).catch(() => undefined);
         } else setEntries((e) => [...e, { kind: "notice", text: t("desktop.stopped"), tone: "info" }]);
       } finally {
+        clearTimeout(usageTimer);
+        usageTimer = undefined;
+        usageQueued = false;
         setRunning(false);
         setWaits([]);
         abort.current = null;

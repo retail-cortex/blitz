@@ -1,6 +1,6 @@
 ---
 title: Blitz 1.3.3
-weight: 1
+weight: 3
 ---
 
 Your chat no longer stops when the network blinks. On Linux, starting a container, toggling a VPN or roaming between Wi-Fi access points used to end a running turn with "network error", even though nothing was wrong with Blitz or the model. Blitz 1.3.3 keeps the turn running and picks it up where it left off. It also gives your personalities a voice of their own: a locale, a speed and a pitch, on sliders.

@@ -455,10 +455,19 @@ func summaryAsUser(c *genai.Content) *genai.Content {
 
 const (
 	prunedShellMinBytes  = 4096
-	prunedShellTurns     = 4
+	prunedShellTurns     = 2
 	prunedShellKeepBytes = 512
 	prunedScreenshotTurn = 3
 )
+
+func pruneLargeText(s string) string {
+	head := textutil.TruncateUTF8(s, prunedShellKeepBytes)
+	tail := s[len(s)-prunedShellKeepBytes:]
+	for len(tail) > 0 && (tail[0]&0xC0) == 0x80 {
+		tail = tail[1:]
+	}
+	return head + "\n… [pruned] …\n" + tail
+}
 
 // isUserPromptTurn reports whether c is a user prompt message (not a pure
 // tool-result content).
@@ -586,14 +595,16 @@ func pruneRequestContents(contents []*genai.Content) []*genai.Content {
 			case "run_shell_command":
 				output, _ := resp["output"].(string)
 				if turnsAfter[i] > prunedShellTurns && len(output) > prunedShellMinBytes && resp["status"] == nil {
-					head := textutil.TruncateUTF8(output, prunedShellKeepBytes)
-					tail := output[len(output)-prunedShellKeepBytes:]
-					for len(tail) > 0 && (tail[0]&0xC0) == 0x80 {
-						tail = tail[1:]
-					}
 					newResp = maps.Clone(resp)
 					newResp["status"] = "output pruned from earlier turn (first and last lines below)"
-					newResp["output"] = head + "\n… [pruned] …\n" + tail
+					newResp["output"] = pruneLargeText(output)
+				}
+			case "web_fetch":
+				content, _ := resp["content"].(string)
+				if turnsAfter[i] > prunedShellTurns && len(content) > prunedShellMinBytes && resp["status"] == nil {
+					newResp = maps.Clone(resp)
+					newResp["status"] = "content pruned from earlier turn (first and last lines below)"
+					newResp["content"] = pruneLargeText(content)
 				}
 			case "browser":
 				uri, _ := resp["image_uri"].(string)

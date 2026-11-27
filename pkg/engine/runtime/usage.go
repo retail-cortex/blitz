@@ -119,12 +119,18 @@ func (t *UsageTracker) Charge(ctx context.Context, c Charge) api.Call {
 }
 
 // bill prices c as a ledger entry, without adding it to any total.
+// Only conversational turns and compactions update LastPrompt so out-of-band
+// calls (review, background tasks, speech, images) never overwrite the
+// session's context window meter (Implements: CA-120).
 func (t *UsageTracker) bill(ctx context.Context, c Charge) api.Call {
 	u := t.Estimate(c.Model, c.Usage, c.CacheWrites)
 	observability.RecordTokens(ctx, c.Model, u.Input, u.Output, u.Cached, u.CostUSD, u.Priced)
 	call := api.Call{
 		Time: t.now().UTC(), API: c.Origin.API, Provider: c.Origin.Provider,
 		Model: cmp.Or(c.Model, c.Origin.Model), Purpose: cmp.Or(c.Purpose, api.PurposeTurn), Task: c.Task, Usage: u,
+	}
+	if call.Purpose != api.PurposeTurn && call.Purpose != api.PurposeCompaction {
+		call.Usage.LastPrompt = 0
 	}
 	if p, ok := t.priceFor(c.Model); ok && c.Usage != nil {
 		call.Price = &api.Price{Input: p.InputPerMTok, CachedInput: p.CachedInputPerMTok, CacheWrite: cmp.Or(p.CacheWritePerMTok, p.InputPerMTok), Output: p.OutputPerMTok}
@@ -215,7 +221,6 @@ func (t *UsageTracker) RecordSpeech(ctx context.Context, session, model string, 
 // (speech, pictures) to session, as RecordSpeech describes.
 func (t *UsageTracker) RecordMedia(ctx context.Context, session, purpose, model string, m *genai.GenerateContentResponseUsageMetadata) api.Call {
 	c := t.bill(ctx, Charge{Session: session, Purpose: purpose, Model: model, Usage: m})
-	c.Usage.LastPrompt = 0
 	t.add(session, c.Usage)
 	return c
 }

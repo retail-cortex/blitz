@@ -69,8 +69,9 @@ func declaring(names ...string) *model.LLMRequest {
 	return &model.LLMRequest{Config: &genai.GenerateContentConfig{Tools: []*genai.Tool{t}}}
 }
 
-// Provider tools go only where Blitz's rules would let the client tool
-// (CA-81).
+// Provider tools go only where Blitz's rules would let the client tool,
+// and remote code_execution is opt-in and never alongside run_shell_command
+// (Implements: CA-81, CA-81b).
 func TestProviderToolsToUse(t *testing.T) {
 	claudeO := Origin{"anthropic", "anthropic", "claude-opus-5-5"}
 	planning := context.WithValue(context.Background(), runStateKey{}, &runState{planOnly: true})
@@ -81,11 +82,13 @@ func TestProviderToolsToUse(t *testing.T) {
 		agent *ProviderToolPolicy
 		want  []string
 	}{
-		{"every client tool offered", context.Background(), declaring("web_search", "web_fetch", "run_shell_command"), nil, []string{ptWebSearch, ptWebFetch, ptCodeExecution}},
+		{"every client tool offered", context.Background(), declaring("web_search", "web_fetch", "run_shell_command"), nil, []string{ptWebSearch, ptWebFetch}},
+		{"code execution opt-in without local shell", context.Background(), declaring("web_search", "web_fetch"), &ProviderToolPolicy{Wants: map[string]bool{"provider:code_execution": true}}, []string{ptWebSearch, ptWebFetch, ptCodeExecution}},
+		{"code execution suppressed alongside local shell", context.Background(), declaring("web_search", "run_shell_command"), &ProviderToolPolicy{Wants: map[string]bool{"provider:code_execution": true}}, []string{ptWebSearch}},
 		{"nothing offered", context.Background(), declaring("read_file"), nil, nil},
 		{"search the agent lists, with no search provider", context.Background(), declaring("read_file"), &ProviderToolPolicy{Wants: map[string]bool{"web_search": true}}, []string{ptWebSearch}},
 		{"fetch the agent lists, but off in the settings", context.Background(), declaring("read_file"), &ProviderToolPolicy{Wants: map[string]bool{"web_fetch": true}}, nil},
-		{"plan mode", planning, declaring("web_search", "web_fetch", "run_shell_command"), nil, []string{ptWebSearch, ptWebFetch}},
+		{"plan mode", planning, declaring("web_search", "web_fetch"), &ProviderToolPolicy{Wants: map[string]bool{"provider:code_execution": true}}, []string{ptWebSearch, ptWebFetch}},
 		{"all off", WithProviderToolPolicy(context.Background(), ProviderToolPolicy{Off: true}), declaring("web_search"), nil, nil},
 		{"one off by the settings", WithProviderToolPolicy(context.Background(), ProviderToolPolicy{Disabled: map[string]bool{ptWebFetch: true}}), declaring("web_search", "web_fetch"), nil, []string{ptWebSearch}},
 		{"one off by the agent", context.Background(), declaring("web_search", "web_fetch"), &ProviderToolPolicy{Disabled: map[string]bool{ptWebSearch: true}}, []string{ptWebFetch}},
@@ -106,8 +109,9 @@ func TestProviderToolsToUse(t *testing.T) {
 // call with one goes without it (and Claude's isn't touched).
 func TestProviderToolsToUseGeminiFiles(t *testing.T) {
 	geminiO := Origin{"gemini", "gemini", "gemini-3.8-flash"}
+	ctx := context.WithValue(context.Background(), agentProviderToolsKey{}, ProviderToolPolicy{Wants: map[string]bool{"provider:code_execution": true}})
 	with := func(parts ...*genai.Part) *model.LLMRequest {
-		req := declaring("web_search", "run_shell_command")
+		req := declaring("web_search")
 		req.Contents = []*genai.Content{nil, {Role: genai.RoleUser, Parts: append([]*genai.Part{nil, {Text: "read this"}}, parts...)}}
 		return req
 	}
@@ -129,11 +133,11 @@ func TestProviderToolsToUseGeminiFiles(t *testing.T) {
 		), all},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, providerToolsToUse(context.Background(), geminiO, tc.req))
+			assert.Equal(t, tc.want, providerToolsToUse(ctx, geminiO, tc.req))
 		})
 	}
 	claudeO := Origin{"anthropic", "anthropic", "claude-opus-5-5"}
-	assert.Equal(t, all, providerToolsToUse(context.Background(), claudeO, with(&genai.Part{InlineData: &genai.Blob{MIMEType: "application/pdf"}})))
+	assert.Equal(t, all, providerToolsToUse(ctx, claudeO, with(&genai.Part{InlineData: &genai.Blob{MIMEType: "application/pdf"}})))
 }
 
 // The provider's tools take the client tools' places, never beside them;

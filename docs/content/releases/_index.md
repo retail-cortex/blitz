@@ -5,6 +5,8 @@ weight: 55
 
 What each release of Blitz brings, beyond the change list on [GitHub's releases page](https://github.com/retail-cortex/blitz/releases).
 
+- [Blitz 1.3.5](blitz-1.3.5.md): agents search first with ready-to-read line windows and 500-line file reads, local commands stay on your computer instead of a cloud container, Claude caches tool schemas, and the status bar's cost and context meter update live as a turn runs and stay accurate when the auto reviewer runs.
+- [Blitz 1.3.4](blitz-1.3.4.md): folder listings and file searches aren't repeated, `grep` gets `files_only` and `count` modes, Claude caches conversation turns, stale reads and old screenshots are pruned automatically, and a circuit breaker stops repeated failing tool calls.
 - [Blitz 1.3.3](blitz-1.3.3.md): a turn survives a dropped connection (no more "network error" on Linux); a personality's voice gets a locale, a speed and a pitch; pages on your own computer open in Blitz's browser.
 - [Blitz 1.3.2](blitz-1.3.2.md): your organization's models stay on week after week; drop-downs get their arrow back; room to write a permission rule in Studio.
 - [Blitz 1.3.1](blitz-1.3.1.md): Gemini replies through a gateway or proxy no longer stop with "invalid stream chunk" when the stream pauses.

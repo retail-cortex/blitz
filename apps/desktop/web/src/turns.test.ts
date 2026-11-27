@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { TurnEventSchema, type TurnEvent } from "./gen/blitz/v1/turn_pb";
 import { MessageSchema } from "./gen/blitz/v1/session_pb";
-import { applyEvent, assignPromptIndices, failed, fromMessages, splitAttachments, withTools, groupTools, latestTurn, parseDiff, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
+import { applyEvent, assignPromptIndices, failed, fromMessages, splitAttachments, withTools, groupTools, latestTurn, parseDiff, shouldRefreshUsage, summarizeArgs, tasksOf, turnAnswers, type Entry } from "./turns";
 
 const text = (t: string, opts: { partial?: boolean; repeat?: boolean; thought?: boolean } = {}): TurnEvent =>
   create(TurnEventSchema, { author: "blitz", kind: { case: "text", value: { text: t, ...opts } } });
@@ -275,3 +275,20 @@ describe("model files", () => {
     expect(got).toEqual([{ kind: "file", uri: "blitz-image:abc", name: "gemini-3-pro-1a2b3c4d.png", mime: "image/png", size: 42 }]);
   });
 });
+
+describe("shouldRefreshUsage (DSK-39a, DSK-78)", () => {
+  it.each([
+    ["non-partial tool call", call("1", "read_file", {}, false), true],
+    ["partial tool call", call("1", "read_file", {}, true), false],
+    ["tool result", result("1", "read_file"), true],
+    ["approval request", create(TurnEventSchema, { kind: { case: "approvalRequest", value: { requestId: "r1", tool: "create_file" } } }), true],
+    ["question", create(TurnEventSchema, { kind: { case: "question", value: { requestId: "q1", question: "Which?" } } }), true],
+    ["non-partial text", text("Done.", { partial: false }), true],
+    ["partial text", text("Do", { partial: true }), false],
+    ["tasks", create(TurnEventSchema, { kind: { case: "tasks", value: { items: [] } } }), false],
+    ["finished", finished(), false],
+  ] as const)("%s -> %s", (_, ev, want) => {
+    expect(shouldRefreshUsage(ev)).toBe(want);
+  });
+});
+

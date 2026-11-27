@@ -187,10 +187,13 @@ func declared(cfg *genai.GenerateContentConfig, name string) bool {
 }
 
 // providerToolsToUse is the provider tools a call to the model at o
-// sends (CA-81): those it offers whose client tool Blitz's rules allow —
-// offered on the request, or for search, listed in the calling agent's
-// tools (no search provider is needed) — that nothing switched off, and,
-// in plan mode or a read-only run, only those that change nothing.
+// sends (CA-81, CA-81b): those it offers whose client tool Blitz's rules
+// allow — offered on the request, or for search, listed in the calling
+// agent's tools (no search provider is needed) — that nothing switched
+// off, and, in plan mode or a read-only run, only those that change
+// nothing. Remote code_execution is opt-in via provider:code_execution
+// in the agent's tools and is never offered alongside local
+// run_shell_command (Implements: CA-81, CA-81b).
 func providerToolsToUse(ctx context.Context, o Origin, req *model.LLMRequest) []string {
 	if req == nil {
 		return nil
@@ -208,7 +211,10 @@ func providerToolsToUse(ctx context.Context, o Origin, req *model.LLMRequest) []
 		gate := gateTool(kind)
 		switch {
 		case pol.Disabled[kind], planning && !PlanAllows(gate):
-		case kind == ptCodeExecution && o.API == "gemini" && !geminiCodeFiles(req.Contents):
+		case kind == ptCodeExecution:
+			if pol.Wants["provider:"+ptCodeExecution] && !declared(req.Config, gate) && (o.API != "gemini" || geminiCodeFiles(req.Contents)) {
+				use = append(use, kind)
+			}
 		case declared(req.Config, gate), kind == ptWebSearch && pol.Wants[gate]:
 			use = append(use, kind)
 		}
